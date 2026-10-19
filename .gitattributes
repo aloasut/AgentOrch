@@ -1,0 +1,4 @@
+# 本仓库统一使用 LF 行尾：git 在提交与检出时都按 LF 处理，避免检出状态
+# （如 Windows 上的 core.autocrlf=true）把同一提交检出成 CRLF，进而改变发布
+# 构建的包字节与 SHA256。release/README.md 的可复现性主张依赖这一点。
+* text=auto eol=lf

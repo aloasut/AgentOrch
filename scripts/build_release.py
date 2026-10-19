@@ -1,0 +1,385 @@
+#!/usr/bin/env python3
+"""Build the generic distribution zip for the Agent-Orchestration kit.
+
+The set of packaged files is not maintained here: it is *derived* from the
+`REQUIRED` list inside scripts/validate_kit.py, which is the single source of
+truth for both (1) this repository's structurally required files and (2) the
+release package manifest. The packaged `ORCHESTRATION-PROJECT.md` is replaced by
+the per-project template templates/ORCHESTRATION-PROJECT.template.md, so a
+released kit always ships the unfilled FILL_IN template.
+
+Archived bytes are normalized to LF line endings first. A payload is treated as
+text when it contains no NUL byte and decodes as UTF-8; every CRLF in such a
+payload is folded to LF, while binary payloads ship verbatim. This is required
+for byte-level reproducibility: one and the same committed tree can be checked
+out with different line endings (a fresh Windows worktree under
+`core.autocrlf=true` turns LF blobs into CRLF), which would otherwise change the
+packaged bytes and therefore the zip SHA256 between two checkouts of one commit.
+
+A mandatory self-check runs after packaging. There is deliberately no flag to
+skip it. On any failure the script prints `RELEASE SELF-CHECK FAILED`, follows it
+with one line per reason, and exits with a non-zero status.
+
+Self-checks (see release/README.md for the published standard):
+  a. packaged file set == validate_kit.REQUIRED (count and names must match)
+  b. inside the extracted archive: `validate_kit.py` exits 0
+  c. inside the extracted archive: `validate_kit.py --project-ready` is EXPECTED
+     TO FAIL (exit 1, output mentions FILL_IN); a pass means the template was not
+     applied and is reported as an error
+  d. inside the extracted archive: `python -m unittest discover -s tests` exits 0
+  e. inside the extracted archive: `orchestrator.py init` and
+     `orchestrator.py task list` exit 0 (smoke; init creates a throwaway
+     .orchestration/ in the temp extraction, which is expected)
+  f. non-essential information scan: zero hits over every text file in the
+     package (personal paths, credential traces, and forbidden structure), plus
+     any extra literal supplied by this machine (see below). The same pass also
+     asserts that no packaged *text* file contains CRLF: packaged text is folded
+     to LF before archiving (see normalize_line_endings), so a surviving CRLF
+     means normalization missed a file and reproducibility across checkouts is
+     no longer guaranteed.
+  g. final manifest: package file count, zip path, zip size in bytes, SHA256
+
+Scan patterns are layered on purpose. FORBIDDEN_PATTERNS holds only *generic*
+rules that are meaningful for every clone (home-directory paths, credential
+prefixes); it must stay free of anything tied to one machine or one repository
+(a username, an absolute checkout path, this repository's task IDs, repo-only
+document names). Machine- and repository-specific additions live outside the
+repository, in `.local/release-scan.json`, which is git-ignored and never
+shipped. That keeps this file publishable while a local clone can still enforce
+its stricter rules. If the file is absent the build simply runs with the generic
+rules and says so.
+
+Only the standard library is used and every child process is launched with
+sys.executable (never a bare `python`).
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import re
+import subprocess
+import sys
+import tempfile
+import zipfile
+from datetime import date
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+VALIDATOR = ROOT / 'scripts' / 'validate_kit.py'
+TEMPLATE = ROOT / 'templates' / 'ORCHESTRATION-PROJECT.template.md'
+PROJECT_CONFIG = 'ORCHESTRATION-PROJECT.md'
+DEFAULT_OUTPUT_DIR = 'release'
+
+# Generic literal substrings that must never appear in a distributed package.
+# Matching is exact (plain substring, not a broad regex). Everything here has to
+# be meaningful for *any* clone: this file is itself published, so a username, an
+# absolute checkout path or one repository's task IDs would leak exactly what the
+# scan exists to prevent. Machine-specific additions belong in
+# .local/release-scan.json (see load_extra_patterns) and stay out of git.
+FORBIDDEN_PATTERNS = [
+    # personal home directories (generic forms, no usernames)
+    'C:/Users/',
+    'C:\\Users\\',
+    '/Users/',
+    # credential traces (literal prefixes; the bare 'sk-' prefix needs a shape
+    # regex instead, see FORBIDDEN_REGEXES below)
+    'ghp_',
+    'github_pat_',
+    '-----BEGIN',
+    'AKIA',
+]
+
+# Credential prefixes that must NOT be matched as a bare substring. An OpenAI-style
+# key is "sk-" followed by a long run of key characters. Matching the bare
+# substring 'sk-' would also flag ordinary English words such as "task-id",
+# "risk-based", "subtask-level" or "disk-based", which would abort normal releases.
+# Match the key shape instead: a word boundary, then "sk-", then at least 16 key
+# characters. Do NOT revert this to a bare 'sk-' substring.
+FORBIDDEN_REGEXES = [
+    ('sk-<openai-style key>', re.compile(r'\bsk-[A-Za-z0-9_-]{16,}')),
+]
+
+# Path segments that must never exist inside the package (belt and braces on top
+# of check a, which already pins the file set to REQUIRED).
+FORBIDDEN_SEGMENTS = frozenset({'.orchestration', 'release', 'docs', '.worktrees', '.workbuddy', '.git'})
+FORBIDDEN_PATHS = frozenset({'scripts/build_release.py'})
+
+# Optional per-machine / per-repository additions. Git-ignored (.gitignore keeps
+# only .local/README.md) and never packaged, so a strict local rule such as a
+# username or an absolute checkout path never enters the published tree.
+LOCAL_SCAN_FILE = ROOT / '.local' / 'release-scan.json'
+LOCAL_SCAN_LABEL = '.local/release-scan.json'
+
+
+def read_required():
+    """Extract the REQUIRED list from scripts/validate_kit.py (the only manifest)."""
+    source = VALIDATOR.read_text(encoding='utf-8')
+    match = re.search(r'REQUIRED\s*=\s*\[(.*?)\]', source, re.S)
+    if not match:
+        raise SystemExit('build error: could not locate the REQUIRED list in scripts/validate_kit.py')
+    items = re.findall(r"'([^']+)'|\"([^\"]+)\"", match.group(1))
+    required = [single or double for single, double in items]
+    if not required:
+        raise SystemExit('build error: REQUIRED list is empty')
+    if len(set(required)) != len(required):
+        raise SystemExit('build error: REQUIRED list contains duplicate entries')
+    return required
+
+
+def is_text(data):
+    """True when *data* should be treated as a text file.
+
+    The rule is intentionally simple: text contains no NUL byte and decodes as
+    UTF-8. Anything else (NUL bytes, undecodable bytes) is binary payload and is
+    shipped verbatim, never rewritten.
+    """
+    if b'\x00' in data:
+        return False
+    try:
+        data.decode('utf-8')
+    except UnicodeDecodeError:
+        return False
+    return True
+
+
+def normalize_line_endings(data):
+    """Return *data* with CRLF folded to LF when it is a text file.
+
+    Required for byte-level reproducibility: the same committed tree can be
+    checked out with different line endings (a fresh Windows worktree under
+    `core.autocrlf=true` turns LF blobs into CRLF), so archiving raw
+    working-tree bytes would make the package bytes and the zip SHA256 depend on
+    the checkout state. Folding CRLF to LF removes that dependency. Only CRLF is
+    touched: a lone CR (old-Mac style) is left alone and any UTF-8 BOM is
+    preserved, because the bytes are edited directly rather than decoded.
+    """
+    if not is_text(data):
+        return data
+    return data.replace(b'\r\n', b'\n')
+
+
+def collect_sources(required):
+    """Return {relative_path: bytes} for every file that should ship."""
+    files = {}
+    for rel in required:
+        source = TEMPLATE if rel == PROJECT_CONFIG else (ROOT / rel)
+        if not source.is_file():
+            raise SystemExit(f'build error: required source missing: {source}')
+        files[rel] = normalize_line_endings(source.read_bytes())
+    if files[PROJECT_CONFIG] != normalize_line_endings(TEMPLATE.read_bytes()):
+        raise SystemExit('build error: could not substitute the per-project template')
+    return files
+
+
+# Fixed metadata for every archive entry so repeated builds are byte-identical.
+# ZipFile.writestr(name, data) would otherwise stamp the *current* time, making
+# the zip's SHA256 change on every run and defeating the SHA256 recorded in the
+# release list. A fixed timestamp (the classic 1980-01-01 DOS epoch), an explicit
+# regular-file mode and an explicit create_system keep the bytes independent of
+# build time and platform.
+ZIP_ENTRY_TIME = (1980, 1, 1, 0, 0, 0)
+ZIP_ENTRY_ATTR = 0o644 << 16
+ZIP_CREATE_SYSTEM = 3  # 3 == Unix; keeps external_attr semantics stable
+
+
+def write_zip(zip_path, files, top_dir):
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as archive:
+        for rel in sorted(files):
+            info = zipfile.ZipInfo(filename=f'{top_dir}/{rel}', date_time=ZIP_ENTRY_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = ZIP_ENTRY_ATTR
+            info.create_system = ZIP_CREATE_SYSTEM
+            archive.writestr(info, files[rel])
+
+
+def load_extra_patterns():
+    """Return the extra forbidden literals from .local/release-scan.json.
+
+    The file is optional: a clone without it builds with the generic rules only.
+    When present it must be a JSON object of the form
+    {"forbidden_patterns": ["...", "..."]}; a malformed file is a build error
+    rather than a silent downgrade of the scan.
+    """
+    if not LOCAL_SCAN_FILE.is_file():
+        return []
+    try:
+        payload = json.loads(LOCAL_SCAN_FILE.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f'build error: could not read {LOCAL_SCAN_LABEL}: {exc}')
+    patterns = payload.get('forbidden_patterns') if isinstance(payload, dict) else None
+    if not isinstance(patterns, list) or not all(isinstance(item, str) and item for item in patterns):
+        raise SystemExit(f'build error: {LOCAL_SCAN_LABEL} must be '
+                         '{"forbidden_patterns": ["non-empty string", ...]}')
+    return patterns
+
+
+def scan_text(name, text, extra_patterns=()):
+    """Return [(name, lineno, display, line)] for every forbidden hit.
+
+    Literal prefixes (generic plus optional local additions) are matched as plain
+    substrings; shaped credential prefixes (FORBIDDEN_REGEXES) are matched as
+    exact regexes.
+    """
+    literals = list(FORBIDDEN_PATTERNS) + list(extra_patterns)
+    hits = []
+    for lineno, line in enumerate(text.splitlines(), 1):
+        for literal in literals:
+            if literal in line:
+                hits.append((name, lineno, repr(literal), line.strip()))
+        for label, regex in FORBIDDEN_REGEXES:
+            if regex.search(line):
+                hits.append((name, lineno, label, line.strip()))
+    return hits
+
+
+def run(cmd, cwd):
+    """Run a child process with sys.executable; capture merged output."""
+    proc = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    return proc.returncode, proc.stdout or ''
+
+
+def indent(text, prefix='      '):
+    lines = text.strip().splitlines() or ['']
+    return '\n'.join(prefix + line for line in lines)
+
+
+def run_self_check(zip_path, required, top_dir, extra_patterns=()):
+    """Run checks a-f and return a list of human-readable failure strings."""
+    failures = []
+
+    with zipfile.ZipFile(zip_path) as archive:
+        names = [n for n in archive.namelist() if not n.endswith('/')]
+    packaged = [n[len(top_dir) + 1:] for n in names if n.startswith(top_dir + '/')]
+
+    # (a) packaged file set == REQUIRED
+    required_set, packaged_set = set(required), set(packaged)
+    missing = sorted(required_set - packaged_set)
+    extra = sorted(packaged_set - required_set)
+    if missing:
+        failures.append(f'(a) package is missing REQUIRED files: {", ".join(missing)}')
+    if extra:
+        failures.append(f'(a) package contains files not in REQUIRED: {", ".join(extra)}')
+    if len(packaged) != len(required):
+        failures.append(f'(a) package file count {len(packaged)} != REQUIRED count {len(required)}')
+
+    # (f, structural) forbidden path segments / files
+    for rel in sorted(packaged):
+        if FORBIDDEN_SEGMENTS.intersection(rel.split('/')):
+            failures.append(f'(f) forbidden path segment inside package: {rel}')
+        if rel in FORBIDDEN_PATHS:
+            failures.append(f'(f) forbidden file inside package: {rel}')
+
+    with tempfile.TemporaryDirectory() as tmp:
+        pkg_root = Path(tmp) / top_dir
+        with zipfile.ZipFile(zip_path) as archive:
+            archive.extractall(tmp)
+
+        # (b) validate_kit.py passes in the extracted package
+        rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'validate_kit.py')], pkg_root)
+        if rc != 0:
+            failures.append(f'(b) validate_kit.py failed inside package (exit {rc}):\n{indent(out)}')
+
+        # (c) validate_kit.py --project-ready must FAIL with a FILL_IN mention
+        rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'validate_kit.py'), '--project-ready'], pkg_root)
+        if rc == 0:
+            failures.append('(c) validate_kit.py --project-ready unexpectedly PASSED; '
+                            'ORCHESTRATION-PROJECT.md was not released as the FILL_IN template')
+        elif 'FILL_IN' not in out:
+            failures.append('(c) validate_kit.py --project-ready failed but output never mentions '
+                            f'FILL_IN:\n{indent(out)}')
+
+        # (d) unit tests pass in the extracted package
+        rc, out = run([sys.executable, '-m', 'unittest', 'discover', '-s', 'tests'], pkg_root)
+        if rc != 0:
+            failures.append(f'(d) unit tests failed inside package (exit {rc}):\n{indent(out)}')
+
+        # (e) orchestrator smoke: init then task list
+        rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'orchestrator.py'), 'init'], pkg_root)
+        if rc != 0:
+            failures.append(f'(e) orchestrator.py init failed inside package (exit {rc}):\n{indent(out)}')
+        rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'orchestrator.py'), 'task', 'list'], pkg_root)
+        if rc != 0:
+            failures.append(f'(e) orchestrator.py task list failed inside package (exit {rc}):\n{indent(out)}')
+
+        # (f) non-essential information scan over every text file
+        for rel in sorted(packaged):
+            data = (pkg_root / rel).read_bytes()
+            if b'\x00' in data:
+                continue  # skip binary payloads
+            text = data.decode('utf-8', errors='replace')
+            for name, lineno, display, line in scan_text(rel, text, extra_patterns):
+                failures.append(f'(f) {name}:{lineno}: forbidden pattern {display}: {line}')
+
+        # (f) line-ending assertion: no packaged *text* file may contain CRLF.
+        # Text is the same rule normalize_line_endings() uses (no NUL byte and
+        # valid UTF-8); binary payloads ship verbatim and are exempt. A CRLF here
+        # means normalization missed a file, so archives built from different
+        # checkout states would no longer be byte-identical.
+        for rel in sorted(packaged):
+            data = (pkg_root / rel).read_bytes()
+            if not is_text(data):
+                continue
+            if b'\r\n' in data:
+                failures.append(f'(f) line-ending: packaged text file contains CRLF: {rel}')
+
+    return failures
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open('rb') as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def main():
+    parser = argparse.ArgumentParser(description='Build the generic Agent-Orchestration release zip.')
+    parser.add_argument('--date', default=date.today().strftime('%Y%m%d'),
+                        help='release date stamp as YYYYMMDD (default: today)')
+    parser.add_argument('--output-dir', default=DEFAULT_OUTPUT_DIR,
+                        help='directory that receives the zip (default: release/)')
+    args = parser.parse_args()
+
+    if not re.fullmatch(r'\d{8}', args.date):
+        raise SystemExit(f'build error: --date must be YYYYMMDD, got {args.date!r}')
+
+    required = read_required()
+    files = collect_sources(required)
+    extra_patterns = load_extra_patterns()
+    print(f'extra scan patterns: {len(extra_patterns)} (from {LOCAL_SCAN_LABEL})'
+          if extra_patterns else 'extra scan patterns: none')
+
+    top_dir = f'agentorch-{args.date}'
+    zip_path = Path(args.output_dir) / f'{top_dir}.zip'
+
+    write_zip(zip_path, files, top_dir)
+    failures = run_self_check(zip_path, required, top_dir, extra_patterns)
+
+    if failures:
+        print('RELEASE SELF-CHECK FAILED')
+        for reason in failures:
+            print(f'- {reason}')
+        # Never leave an artifact that failed self-check in the output directory:
+        # it would be easy to mistake for a release. Remove it and say so.
+        try:
+            zip_path.unlink()
+            print(f'- deleted the artifact that failed self-check: {zip_path}')
+        except OSError as exc:
+            print(f'- could not delete the failed artifact, still present at: {zip_path} ({exc})')
+        return 1
+
+    size = zip_path.stat().st_size
+    sha256 = sha256_file(zip_path)
+    print('Release self-check passed (checks a-f).')
+    print(f'  package files : {len(files)}')
+    print(f'  zip path      : {zip_path}')
+    print(f'  zip size      : {size} bytes')
+    print(f'  zip sha256    : {sha256}')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

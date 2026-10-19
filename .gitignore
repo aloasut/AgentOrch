@@ -1,0 +1,20 @@
+# 本文件规则源自 templates/gitignore.snippet（保持语义一致）。
+# 仓库分发的忽略规则覆盖 kit 约定目录（.worktrees/、.orchestration/）与本机助手目录（.workbuddy/）；
+# 其余纯本机目录仍由 .git/info/exclude 兜底。
+
+# Worktree 根目录（kit 约定：一个执行实例一个 Worktree，确定性路径）
+.worktrees/
+# Agent-Orchestration 单用户机器本地状态（本地任务库）
+.orchestration/
+# 本地私有文件（永不入库）：.env、机器信息、发布扫描规则等
+.local/*
+!.local/README.md
+# 本机助手工作目录（含本地报告，永不入库）
+.workbuddy/
+# 本地辅助脚本产生的 Python 缓存：静态检查 `python -m py_compile ...` 会生成 __pycache__
+__pycache__/
+*.py[cod]
+# 本仓库分发包（构建产物，不入库）
+agent-orchestration-kit-*.zip
+# 通用分发版本构建产物（不入库；流程与清单见 release/README.md）
+release/*.zip
