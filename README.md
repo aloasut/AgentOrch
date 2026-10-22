@@ -101,6 +101,8 @@ Initialized local task registry: <项目根>\.orchestration\state.sqlite3
 Review-fix retry cap: 3 (edit key "retry_cap" in <项目根>\.orchestration\config.json to change it)
 Local task registry only: the edition is read from <项目根>\ORCHESTRATION-PROJECT.md, not from this config.
 Back up .orchestration/ with your project backups.
+Created PLAN.md from <项目根>\templates\PLAN.md
+下一步：填写 PLAN.md 的目标、范围与任务块
 
 $ python scripts/orchestrator.py config show
 Config file: <项目根>\.orchestration\config.json
@@ -130,13 +132,15 @@ $ python scripts/validate_kit.py
 Kit validation passed (38 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
-Ran 63 tests in 7.936s
+Ran 67 tests in 6.860s
 OK
 ```
 
 说明：
 
 - `init` 创建 `.orchestration/state.sqlite3` 与 `.orchestration/config.json`，并把 `.orchestration/` 写入当前克隆的 `.git/info/exclude`（若存在 Git），不会覆盖项目的 `.gitignore`。
+- `init` 还会在根目录缺少 `PLAN.md` 时从 `templates/PLAN.md` **逐字节复制**一份并提示“下一步：填写 PLAN.md”；根 `PLAN.md` 已存在时保持原样、只打印提示，重复执行不产生差异。模板缺失时给出提示但 `init` 仍以退出码 0 结束（其余初始化照常完成）；写入失败（例如目录只读）会报 `ERROR` 并以退出码 1 结束，不会假装成功。
+- **根目录 `PLAN.md` 是计划权威**：任务登记、派发与阶段收口都以它为准；`templates/PLAN.md` 只用于初始化复制，不要直接把它当项目计划。
 - `dispatch` 只登记状态并占用路径锁，**不会启动 Agent**。拿到锁后，把自包含任务包交给真实执行实例；没有真实 spawn 能力时，由操作者另开会话执行。
 - 单元测试会大量打印临时任务库日志，属正常现象；退出码为 0 即通过。
 - 冒烟完成后可取消这条示例任务并释放锁：`python scripts/orchestrator.py task status TASK-0001 CANCELED --note "快速开始冒烟结束"`。
@@ -148,7 +152,7 @@ OK
 目标：从一句想法走到项目章程、首批任务与第一个可运行切片。
 
 1. 按第 3 节把套件放入空目录，`ORCHESTRATION-PROJECT.md` 填 `edition: local`。
-2. 运行 `python scripts/orchestrator.py init` 与 `python scripts/orchestrator.py task list`，确认任务库可用且为空。
+2. 运行 `python scripts/orchestrator.py init` 与 `python scripts/orchestrator.py task list`：`init` 会从 `templates/PLAN.md` 复制出根目录 `PLAN.md`，先在这份计划权威文件里填好目标、范围与任务块，再确认任务库可用且为空。
 3. 在 Master Agent 会话中加载 [editions/local/START-MASTER-NEW-PROJECT.md](editions/local/START-MASTER-NEW-PROJECT.md)，按提示词澄清目标、产出章程、拆出 1–3 个最小任务。
 4. 若想法本身还很模糊，先走 [prompts/START-CHARTER.md](prompts/START-CHARTER.md) 的章程引导流程，再进入任务拆解。
 
@@ -190,6 +194,7 @@ OK
 ├── AGENT-ORCHESTRATION-ACCEPTANCE.md  # 通用验收程序
 ├── AGENT-BOOTSTRAP.md                 # 会话入口：判定底座、恢复状态、自动路由
 ├── ORCHESTRATION-PROJECT.md           # 每个项目自己的配置（edition 在这里）
+├── PLAN.md                            # 计划权威：任务登记以它为准（init 从模板生成后由所有者填写）
 ├── README.md                          # 本文件：入口与使用说明
 ├── VERSION.txt                        # 套件名与 Format version
 ├── LICENSE.txt

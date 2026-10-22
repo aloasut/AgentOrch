@@ -1,4 +1,4 @@
-import contextlib, io, json, sqlite3, tempfile, unittest
+import contextlib, io, json, sqlite3, sys, tempfile, unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -512,5 +512,65 @@ class ProjectEditionTests(unittest.TestCase):
         self.assertEqual(orch.read_retry_cap(self.root),3)
         self.config(json.dumps({'retry_cap':5,'edition':'local'}))
         self.assertEqual(orch.read_retry_cap(self.root),5)
+
+class PlanDocumentInitTests(unittest.TestCase):
+    """`init` seeds the root PLAN.md once; the root file stays the plan of record."""
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
+        (self.root/'ORCHESTRATION-PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n',encoding='utf-8')
+    def tearDown(self): self.tmp.cleanup()
+    def write_template(self, data):
+        target=self.root/'templates'; target.mkdir(exist_ok=True)
+        (target/'PLAN.md').write_bytes(data)
+    def run_init(self):
+        out,err=io.StringIO(),io.StringIO()
+        with mock.patch.object(sys,'argv',['orchestrator.py','--root',str(self.root),'init']), \
+             contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            rc=orch.main()
+        return rc,out.getvalue(),err.getvalue()
+
+    def test_init_creates_plan_byte_for_byte_from_template(self):
+        # CRLF + non-ASCII bytes prove the copy is a byte copy, not a re-render.
+        data='# 计划\r\n\r\n- **Plan name:** 演示\r\n'.encode('utf-8')
+        self.write_template(data)
+        rc,out,err=self.run_init()
+        self.assertEqual(rc,0,err)
+        self.assertEqual((self.root/'PLAN.md').read_bytes(),data)
+        self.assertEqual((self.root/'templates'/'PLAN.md').read_bytes(),data)
+        self.assertIn('Created PLAN.md',out)
+        self.assertIn('下一步：填写 PLAN.md',out)
+
+    def test_existing_plan_is_kept_and_repeated_init_is_idempotent(self):
+        self.write_template(b'# Implementation Plan\n\ntemplate\n')
+        sentinel=b'# my plan\n\nSENTINEL: owner content, never overwrite\n'
+        (self.root/'PLAN.md').write_bytes(sentinel)
+        config=self.root/'.orchestration'/'config.json'
+        rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
+        self.assertIn('kept unchanged',out)
+        self.assertNotIn('Created PLAN.md',out)
+        first=(self.root/'PLAN.md').read_bytes(), config.read_bytes()
+        rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
+        self.assertEqual((self.root/'PLAN.md').read_bytes(),sentinel)
+        self.assertEqual((self.root/'PLAN.md').read_bytes(),first[0])
+        self.assertEqual(config.read_bytes(),first[1])          # runtime config untouched
+        self.assertTrue(orch.db_path(self.root).is_file())      # task store still initialised
+
+    def test_missing_template_is_reported_and_init_still_succeeds(self):
+        rc,out,err=self.run_init()
+        self.assertEqual(rc,0,err)
+        self.assertFalse((self.root/'PLAN.md').exists())
+        self.assertIn('PLAN.md not created: template missing',out)
+        self.assertTrue(orch.db_path(self.root).is_file())
+
+    def test_unwritable_plan_is_an_error_not_a_silent_success(self):
+        self.write_template(b'# Implementation Plan\n\ntemplate\n')
+        with mock.patch.object(Path,'write_bytes',side_effect=OSError('read-only file system')):
+            with self.assertRaises(OSError):
+                orch.init(self.root)
+            rc,out,err=self.run_init()
+        self.assertEqual(rc,1)
+        self.assertIn('ERROR:',err)
+        self.assertIn('read-only file system',err)
+        self.assertFalse((self.root/'PLAN.md').exists())
 
 if __name__=='__main__': unittest.main()

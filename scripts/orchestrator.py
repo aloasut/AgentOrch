@@ -47,6 +47,11 @@ EDITIONS = ('local','github')
 # file removes the second, silently-defaulting definition that used to exist.
 RUNTIME_DEFAULTS = {'retry_cap': RETRY_CAP_DEFAULT, 'local_dir': '.local'}
 PROJECT_CONFIG = 'ORCHESTRATION-PROJECT.md'
+# The project root PLAN.md is the plan of record (task registration, dispatch and
+# phase close-out read it); templates/PLAN.md is only the seed copy that `init`
+# copies once. Both names are relative to the project root.
+PLAN_DOC = 'PLAN.md'
+PLAN_TEMPLATE = 'templates/PLAN.md'
 EDITION_LINE = re.compile(r'^\s*[-*]\s*`?edition`?\s*[:：]\s*(?P<value>.*)$', re.M)
 
 class EditionError(RuntimeError):
@@ -205,6 +210,30 @@ def event(con, task_id, action, from_status=None, to_status=None, note='', data=
     con.execute('INSERT INTO events(task_id,at,action,from_status,to_status,note,data_json) VALUES(?,?,?,?,?,?,?)',
         (task_id,now(),action,from_status,to_status,note,json.dumps(data or {},ensure_ascii=False)))
 
+def init_plan(root):
+    """Seed <root>/PLAN.md from templates/PLAN.md exactly once.
+
+    The root PLAN.md is the plan of record, so an existing file is never
+    overwritten (that would destroy the project owner's plan). A missing
+    template is reported and skipped: `init` must still finish its task-store
+    work and exit 0. A write failure is raised instead of being reported as
+    success. Returns 'created', 'kept' or 'template-missing'.
+    """
+    target=root/PLAN_DOC
+    if target.exists():
+        print(f'PLAN.md already present, kept unchanged: {target}')
+        print('Next: register tasks from the root PLAN.md; templates/PLAN.md is only the initial copy.')
+        return 'kept'
+    template=root/PLAN_TEMPLATE
+    if not template.is_file():
+        print(f'PLAN.md not created: template missing at {template}')
+        print('Next: copy templates/PLAN.md into the project root (kit installed there), then rerun init.')
+        return 'template-missing'
+    target.write_bytes(template.read_bytes())
+    print(f'Created PLAN.md from {template}')
+    print('下一步：填写 PLAN.md 的目标、范围与任务块')
+    return 'created'
+
 def init(root):
     d=root/'.orchestration'; d.mkdir(parents=True,exist_ok=True)
     (d/'backups').mkdir(exist_ok=True)
@@ -245,6 +274,7 @@ def init(root):
     print(f'Review-fix retry cap: {read_retry_cap(root)} (edit key "retry_cap" in {cfg} to change it)')
     print(f'Local task registry only: the edition is read from {project_config_path(root)}, not from this config.')
     print('Back up .orchestration/ with your project backups.')
+    init_plan(root)
 
 def normalize_path(raw):
     s=raw.replace('\\','/').strip()
@@ -503,7 +533,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',default='.',help='project root (default: current directory)')
     sub=parser.add_subparsers(dest='cmd',required=True)
-    sub.add_parser('init',help='initialize the local task database and .orchestration/config.json (retry_cap, local_dir)')
+    sub.add_parser('init',help='initialize the local task database and .orchestration/config.json (retry_cap, local_dir); seed PLAN.md from templates/PLAN.md when absent')
     sub.add_parser('backup',help='create a consistent SQLite backup')
     cf=sub.add_parser('config',help='inspect runtime configuration'); cs=cf.add_subparsers(dest='configcmd',required=True)
     cs.add_parser('show',help='print effective config values and their source')
