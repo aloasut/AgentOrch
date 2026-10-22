@@ -26,13 +26,17 @@ REQUIRED = [
     'editions/local/MASTER.md', 'editions/local/README.md', 'editions/local/START-EXECUTION.md',
     'editions/local/START-MASTER-EXISTING-PROJECT.md', 'editions/local/START-MASTER-NEW-PROJECT.md',
     'prompts/START-CHARTER.md', 'prompts/START-REVIEWER.md',
-    'scripts/check_drift.py', 'scripts/orchestrator.py', 'scripts/validate_kit.py',
+    'scripts/check_drift.py', 'scripts/orchestrator.py', 'scripts/report_metrics.py',
+    'scripts/validate_kit.py',
     'templates/CONTRACT-DECISION-LOG.md', 'templates/DESIGN.md',
-    'templates/IMPLEMENTATION-PLAN.md', 'templates/MILESTONE-AUDIT.md',
+    'templates/IMPLEMENTATION-PLAN.md', 'templates/METRICS.md',
+    'templates/MILESTONE-AUDIT.md',
     'templates/ORCHESTRATION-PROJECT.template.md', 'templates/PLAN.md',
-    'templates/PROJECT-CHARTER.md', 'templates/REVIEW-CHECKLIST.md', 'templates/TASK-PACKET.md',
+    'templates/PROJECT-CHARTER.md', 'templates/REVIEW-CHECKLIST.md',
+    'templates/RUNTIME-CAPABILITY.md', 'templates/TASK-PACKET.md',
     'templates/gitignore.snippet',
-    'tests/test_orchestrator.py', 'tests/test_release_drift.py', 'tests/test_validate_kit.py',
+    'tests/test_orchestrator.py', 'tests/test_release_drift.py',
+    'tests/test_report_metrics.py', 'tests/test_validate_kit.py',
 ]
 
 # --- Reusable contract templates ---------------------------------------------
@@ -60,6 +64,18 @@ TEMPLATE_SECTIONS = {
     'templates/CONTRACT-DECISION-LOG.md': (
         'When to use', 'Status values', 'Frozen decisions', 'Open decisions',
         'Revisitable items', 'Superseded records', 'Recording rules',
+    ),
+    # A capability record that loses a row silently claims a capability nobody
+    # probed; a metric definition that loses a column leaves the start / end
+    # event, exclusion or missing-data rule undefined. Both are contracts, so
+    # only their structure is checked here, never whether the numbers are true.
+    'templates/RUNTIME-CAPABILITY.md': (
+        'When to use', 'Record identity', 'Capability matrix', 'Extended boundaries',
+        'UNKNOWN and re-probe', 'Permission scope', 'Evidence and limits',
+    ),
+    'templates/METRICS.md': (
+        'When to use', 'Reading rules', 'Common definitions', 'Metric definitions',
+        'Missing data and coverage', 'Report contract', 'Gold sample', 'Limits',
     ),
 }
 HEADING_RE = re.compile(r'^#{2,4}\s+(?P<text>.+?)\s*$', re.M)

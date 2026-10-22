@@ -129,10 +129,10 @@ TASK-0001	DISPATCHED	建立项目骨架
   retries: 0
 
 $ python scripts/validate_kit.py
-Kit validation passed (43 required files checked; editions local/github share 7 files, github adds 3 templates).
+Kit validation passed (47 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
-Ran 165 tests in 24.661s
+Ran 206 tests in 28.594s
 OK
 ```
 
@@ -205,6 +205,7 @@ OK
 ├── templates/                         # 任务包、设计契约与决策日志、阶段收口审计、审查清单等可复制模板
 ├── scripts/
 │   ├── orchestrator.py                # local 任务库与原子路径锁 CLI
+│   ├── report_metrics.py              # 只读指标报告：任务库事件 → 七项指标（人类摘要 / JSON）
 │   ├── validate_kit.py                # 结构 / 概念 / 链接自检，同时是发布清单
 │   ├── check_drift.py                 # 生成 MANIFEST.json + 下游只读漂移诊断
 │   └── build_release.py               # 发布构建（仅仓库内，不随包发布）
@@ -324,13 +325,14 @@ python scripts/orchestrator.py task show TASK-0002 # 本任务的资源锁与最
 python scripts/validate_kit.py
 python scripts/validate_kit.py --project-ready
 python -m unittest discover -s tests
-python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py scripts/build_release.py
+python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/report_metrics.py scripts/check_drift.py scripts/build_release.py
 ```
 
 `validate_kit.py` 检查：
 
-- **43 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **47 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
 - **合约模板是否仍问对问题**：`templates/DESIGN.md`、`templates/MILESTONE-AUDIT.md`、`templates/CONTRACT-DECISION-LOG.md` 的必备章节缺一即失败，模板内的相对链接断链也失败（章节缺失会被静默当成“不需要回答”，因此单列一项检查）。
+- **能力登记与指标模板是否仍问对问题**：`templates/RUNTIME-CAPABILITY.md` 的身份 / 能力矩阵 / 扩展边界 / `UNKNOWN` 与重测 / 权限范围 / 证据与限制，以及 `templates/METRICS.md` 的阅读规则 / 公共定义 / 指标定义 / 缺失与覆盖率 / 报告契约 / 金样本 / 限制，缺章节同样失败。
 - **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析、SHA-256 与大小；仓库根目录没有该文件，检查自动跳过，不误报。
 - **两底座结构是否一致**：`editions/local` 与 `editions/github` 共享 7 个文件，`github` 额外提供 3 个模板；任一侧缺失或出现多余文件都会失败。
 - **治理概念是否真实存在**：核心编排文档必须出现 `PR_OPEN`、合并门 G1–G6、运行时能力契约 C1–C4；文档整体必须出现主要状态名。
@@ -339,7 +341,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/che
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `ORCHESTRATION-PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `ORCHESTRATION-PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）；当前 165 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节，以及指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注）；当前 206 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -363,6 +365,23 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/che
 - Actions 页面（`https://github.com/<owner>/<repo>/actions/workflows/ci.yml`）可查历史运行记录；写证据矩阵时记录运行 URL 与 head SHA。
 
 发布前的完整自检（构建内置、无跳过开关）见 `release/README.md`。
+
+### 7.2 能力登记与交付度量
+
+两件事分开做，互相不能替代：**能力登记**说明“这个运行时被观察到能做什么”，**交付度量**说明“这段时间的流程数字是多少”。详细说明见 `docs/CAPABILITY-AND-METRICS.md`（本仓库文档，不随包发布）。
+
+```bash
+# 固定合成样本：成功 / 失败 / 取消 / 阻塞 / 重试 / 缺事件都覆盖
+python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until 2026-02-01
+
+# 真实 local 任务库（只读打开；不会写状态、不释放锁）
+python scripts/report_metrics.py .orchestration/state.sqlite3 --json
+```
+
+- **能力登记**按 [templates/RUNTIME-CAPABILITY.md](templates/RUNTIME-CAPABILITY.md) 填写：运行时名称与精确版本、底座、执行模式、探测时间（UTC）、C1–C4 逐条结论、更细的边界（spawn 句柄、隔离、wait-collect、终局分类、取消、文件 / 命令 / CI 权限、工具与测试环境、证据、限制）。未探测、证据失效或运行时升级一律写 `UNKNOWN`，先降级再重测。**记录只说明观察到的事实，不授予权限，也不替代 G1–G6。**
+- **指标口径**只在 [templates/METRICS.md](templates/METRICS.md) 定义：七项指标各自写明起止事件、时区（UTC）、排除项与缺失处理；报告只读任务库事件与证据引用，不读凭据、提示词或消息正文。
+- **读数纪律**：任何统计值都要带样本量、窗口与缺失率；空数据输出 `no data`（coverage 0），缺事件记 `missing`，来源未采集记 `unknown` —— 三者都不等于 0。指标不用于没有上下文的 Agent 排名。
+- **未完成的采集项**：`local` 任务库目前只记录状态事件与资源冲突；检查结果、路径冲突、回归与验收行尚未写入，因此对应指标显示 `unknown`。这是原型，不宣称已自动采集。
 
 ## 8. 发布与下游漂移诊断
 
@@ -455,4 +474,6 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 | [prompts/START-CHARTER.md](prompts/START-CHARTER.md) | 想法模糊、涉及新方向 / 多文件 / 新依赖 / 不可逆操作时 | 先澄清并签署项目章程，再拆任务 |
 | [templates/DESIGN.md](templates/DESIGN.md) / [templates/CONTRACT-DECISION-LOG.md](templates/CONTRACT-DECISION-LOG.md) | 冻结或修改跨模块契约之前 | 填冻结契约、登记决策（含影响任务与证据），再让下游任务依赖 |
 | [templates/MILESTONE-AUDIT.md](templates/MILESTONE-AUDIT.md) | 阶段收口、契约变更或交接之前 | 逐类给结论并分类，`BLOCKING` / `NEEDS_HUMAN_DECISION` 未清不得宣布完成 |
+| [templates/RUNTIME-CAPABILITY.md](templates/RUNTIME-CAPABILITY.md) | 换运行时 / 版本 / 底座 / 执行模式后，或要向子代理派发之前 | 一份可追溯的能力记录：C1–C4 与更细边界的逐条结论、探测时间、证据与限制；未探测项为 `UNKNOWN` |
+| [templates/METRICS.md](templates/METRICS.md) / [`scripts/report_metrics.py`](scripts/report_metrics.py) | 解释交付瓶颈、阶段收口要数字、或声明“哪些指标还算不出来”时 | 七项指标的口径与只读报告（带样本量、窗口、缺失率），空数据输出 `no data` |
 | `release/README.md` | 准备发布分发包之前 | 按发布标准构建、自检、登记清单 |
