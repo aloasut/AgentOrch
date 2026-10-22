@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Static validation for the Agent-Orchestration kit (core + local/github editions)."""
 from pathlib import Path
-import argparse, re, sys
+import argparse, importlib.util, json, re, sys
 
 ROOT = Path(__file__).resolve().parents[1]
+# Release package manifest. It exists only in a built package (the repository
+# root has none), so every check below is skipped when the file is absent.
+MANIFEST_DOC = 'MANIFEST.json'
 # Single source of truth for the shippable kit. This list has two jobs at once:
 #   1. the structurally required files of this repository, and
 #   2. the file manifest of the release package built by scripts/build_release.py.
@@ -23,12 +26,12 @@ REQUIRED = [
     'editions/local/MASTER.md', 'editions/local/README.md', 'editions/local/START-EXECUTION.md',
     'editions/local/START-MASTER-EXISTING-PROJECT.md', 'editions/local/START-MASTER-NEW-PROJECT.md',
     'prompts/START-CHARTER.md', 'prompts/START-REVIEWER.md',
-    'scripts/orchestrator.py', 'scripts/validate_kit.py',
+    'scripts/check_drift.py', 'scripts/orchestrator.py', 'scripts/validate_kit.py',
     'templates/DESIGN.md', 'templates/IMPLEMENTATION-PLAN.md',
     'templates/ORCHESTRATION-PROJECT.template.md', 'templates/PLAN.md',
     'templates/PROJECT-CHARTER.md', 'templates/REVIEW-CHECKLIST.md', 'templates/TASK-PACKET.md',
     'templates/gitignore.snippet',
-    'tests/test_orchestrator.py', 'tests/test_validate_kit.py',
+    'tests/test_orchestrator.py', 'tests/test_release_drift.py', 'tests/test_validate_kit.py',
 ]
 
 # --- Evidence matrix contract -------------------------------------------------
@@ -313,6 +316,46 @@ def validate_task_packet(text, canonical_fields, status_values, label='task pack
     return errors
 
 
+def _drift_module():
+    """Load scripts/check_drift.py by path (manifest rules live only there)."""
+    path = Path(__file__).resolve().parent / 'check_drift.py'
+    if not path.is_file():
+        return None
+    spec = importlib.util.spec_from_file_location('check_drift_for_validate_kit', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def check_release_manifest(root):
+    """Validate MANIFEST.json when the tree carries one (a built package does).
+
+    The repository root has no MANIFEST.json, so this returns no errors there and
+    the pre-release workflow keeps working on a raw checkout. A present manifest
+    must be well-formed, list exactly the REQUIRED files with legal categories,
+    and match every hash/size on disk.
+    """
+    manifest_path = Path(root) / MANIFEST_DOC
+    if not manifest_path.is_file():
+        return []
+    drift = _drift_module()
+    if drift is None:
+        return [f'{MANIFEST_DOC} is present but scripts/check_drift.py is missing, '
+                'so the manifest cannot be validated']
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        return [f'{MANIFEST_DOC} is not valid JSON: {exc}']
+    errors = [f'{MANIFEST_DOC}: {reason}' for reason in drift.validate_manifest(Path(root), manifest)]
+    listed = [entry.get('path') for entry in manifest.get('files', [])
+              if isinstance(entry, dict)] if isinstance(manifest, dict) else []
+    for rel in sorted(set(REQUIRED) - set(listed)):
+        errors.append(f'{MANIFEST_DOC} does not list required file: {rel}')
+    for rel in sorted(set(listed) - set(REQUIRED)):
+        errors.append(f'{MANIFEST_DOC} lists a file that is not in REQUIRED: {rel}')
+    return errors
+
+
 def validate_kit(root=ROOT, project_ready=False):
     errors = []
     root = Path(root)
@@ -320,6 +363,9 @@ def validate_kit(root=ROOT, project_ready=False):
     for rel in REQUIRED:
         if not (root / rel).is_file():
             errors.append(f'missing required file: {rel}')
+
+    # A built package also carries MANIFEST.json; validate it when present.
+    errors.extend(check_release_manifest(root))
 
     # The two editions must expose the same public file set; github additionally
     # ships three templates. Comparing the *intersection* catches a file that
