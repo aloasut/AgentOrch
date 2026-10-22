@@ -349,5 +349,106 @@ class PlanLayerSplitTests(unittest.TestCase):
         self.assertEqual(numbers, {str(len(validate.REQUIRED))})
 
 
+class ContractTemplateTests(unittest.TestCase):
+    """The reusable contract templates are structure-checked, not trusted.
+
+    A deleted heading silently removes a question nobody will then answer, so a
+    missing section must fail validation instead of yielding a shorter document.
+    """
+
+    NEW_TEMPLATES = ('templates/MILESTONE-AUDIT.md', 'templates/CONTRACT-DECISION-LOG.md')
+
+    def copy_templates(self, root):
+        """A throwaway root holding the real contract templates."""
+        (root / 'templates').mkdir()
+        for rel in validate.TEMPLATE_SECTIONS:
+            (root / rel).write_text((ROOT / rel).read_text(encoding='utf-8'), encoding='utf-8')
+
+    def test_new_templates_are_required_and_present(self):
+        for rel in self.NEW_TEMPLATES:
+            self.assertIn(rel, validate.REQUIRED)
+            self.assertTrue((ROOT / rel).is_file(), f'{rel} is missing')
+
+    def test_repository_templates_are_structurally_complete(self):
+        self.assertEqual(validate.template_structure_errors(ROOT), [])
+
+    def test_kit_validation_covers_the_templates(self):
+        errors, _ = validate.validate_kit(ROOT)
+        self.assertEqual(errors, [])
+
+    def test_missing_section_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.copy_templates(root)
+            target = root / 'templates' / 'MILESTONE-AUDIT.md'
+            text = target.read_text(encoding='utf-8')
+            self.assertIn('## 7. Recoverability', text)
+            target.write_text(text.replace('## 7. Recoverability', '## Restart notes'),
+                              encoding='utf-8')
+            errors = validate.template_structure_errors(root)
+        self.assertTrue(
+            any('templates/MILESTONE-AUDIT.md is missing required section: Recoverability' in e
+                for e in errors), errors)
+
+    def test_missing_template_file_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'templates').mkdir()
+            errors = validate.template_structure_errors(root)
+            kit_errors, _ = validate.validate_kit(root)
+        for rel in validate.TEMPLATE_SECTIONS:
+            self.assertTrue(any(f'missing required template: {rel}' in e for e in errors), errors)
+        for rel in self.NEW_TEMPLATES:
+            self.assertTrue(any(f'missing required file: {rel}' in e for e in kit_errors), kit_errors)
+
+    def test_broken_relative_link_inside_a_template_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self.copy_templates(root)
+            target = root / 'templates' / 'DESIGN.md'
+            target.write_text(target.read_text(encoding='utf-8')
+                              + '\nSee [missing decision](does-not-exist.md).\n', encoding='utf-8')
+            errors = validate.template_structure_errors(root)
+        self.assertTrue(any('templates/DESIGN.md: broken relative link: does-not-exist.md' in e
+                            for e in errors), errors)
+
+    def test_design_contract_states_freeze_is_not_permanent(self):
+        text = (ROOT / 'templates' / 'DESIGN.md').read_text(encoding='utf-8')
+        self.assertIn('not permanence', text)
+        self.assertIn('CONTRACT-DECISION-LOG.md', text)
+        for needle in ('N/A: <reason>', 'AGENT-ORCHESTRATION.md'):
+            self.assertIn(needle, text)
+
+    def test_templates_reference_instead_of_restating_the_core_contract(self):
+        for rel in ('templates/DESIGN.md', 'templates/MILESTONE-AUDIT.md'):
+            text = (ROOT / rel).read_text(encoding='utf-8')
+            self.assertIn('AGENT-ORCHESTRATION.md', text)
+            for state in ('DISPATCHED', 'MASTER_REVIEW', 'APPROVED', 'VERIFIED'):
+                self.assertNotIn(state, text, f'{rel} must not copy the task lifecycle')
+
+    def test_milestone_audit_keeps_the_verdict_classes_apart(self):
+        text = (ROOT / 'templates' / 'MILESTONE-AUDIT.md').read_text(encoding='utf-8')
+        for needle in ('BLOCKING', 'NON_BLOCKING_HARDENING', 'OPTIONAL',
+                       'NEEDS_HUMAN_DECISION', 'N/A: <reason>'):
+            self.assertIn(needle, text)
+        self.assertIn('must not be marked complete', text)
+
+    def test_decision_log_separates_frozen_open_and_revisitable(self):
+        text = (ROOT / 'templates' / 'CONTRACT-DECISION-LOG.md').read_text(encoding='utf-8')
+        for status in ('`OPEN`', '`FROZEN`', '`REVISITABLE`', '`SUPERSEDED`'):
+            self.assertIn(status, text)
+        for column in ('Decider', 'Affected tasks', 'Before', 'After', 'Rationale', 'Evidence'):
+            self.assertIn(column, text)
+
+    def test_readme_and_acceptance_programme_point_at_the_templates(self):
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        for rel in ('templates/DESIGN.md', 'templates/CONTRACT-DECISION-LOG.md',
+                    'templates/MILESTONE-AUDIT.md'):
+            self.assertIn(f']({rel})', readme)
+        acceptance = (ROOT / 'AGENT-ORCHESTRATION-ACCEPTANCE.md').read_text(encoding='utf-8')
+        for rel in ('templates/MILESTONE-AUDIT.md', 'templates/CONTRACT-DECISION-LOG.md'):
+            self.assertIn(rel, acceptance)
+
+
 if __name__ == '__main__':
     unittest.main()

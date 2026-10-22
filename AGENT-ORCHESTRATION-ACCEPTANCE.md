@@ -74,7 +74,19 @@
 - [ ] `github`：CI 失败或 PR 变为不可合并时，不进入 `MASTER_REVIEW`。
 - [ ] 演练记录含日期、运行时 / 版本、底座、任务 ID、每轮 head SHA、命令 / 退出码、结论和清理结果。
 
-## F. 证据模板
+## F. 阶段收口审计（`templates/MILESTONE-AUDIT.md`）
+
+局部任务审查通过不等于阶段可以收口。阶段收口时必须用 `templates/MILESTONE-AUDIT.md` 逐类给结论，而不是凭记忆宣布完成。
+
+- [ ] 阶段收口使用 `templates/MILESTONE-AUDIT.md`，十类检查逐条有结论；不适用项写 `N/A: <理由>`，不以空白或删除标题代替。
+- [ ] 每条结论都能回到任务、证据与 head SHA；缺其中任一项的结论不算已验证，不得记为通过。
+- [ ] 结论只使用 `BLOCKING` / `NON_BLOCKING_HARDENING` / `OPTIONAL` / `NEEDS_HUMAN_DECISION` 四类（核实无问题记为 `PASS`）；`NOT_RUN` / `BLOCKED` / 未验证项没有被计为通过，也没有进入通过计数。
+- [ ] 存在任一 `BLOCKING` 或 `NEEDS_HUMAN_DECISION` 时，阶段没有被标记为完成，也没有在计划、任务载体或交付报告里宣称已交付。
+- [ ] 冻结契约与阶段审计对同一不变量给出一致结论；契约的任何改动都有 `templates/CONTRACT-DECISION-LOG.md` 记录（ID、日期、决定人、影响任务、变更前后、理由、状态、证据链接）。
+- [ ] 已冻结、未决、后续可变更三类决策分别可查；未决项在收口结论里体现为 `NEEDS_HUMAN_DECISION`，没有被当成默认值。
+- [ ] 审计没有复制 `AGENT-ORCHESTRATION.md` 的状态机或 G1–G6 定义，只引用；局部任务审查清单的结果没有被当作阶段收口证据。
+
+## G. 证据模板
 
 ```text
 日期与运行环境：
@@ -88,6 +100,10 @@
 证据矩阵位置（任务记录 / PR 评论）：
 矩阵声明的 head SHA 与各证据行 commit_sha 是否一致：
 CI 运行 URL 与 head SHA（`github` 底座）：
+阶段收口审计位置（`templates/MILESTONE-AUDIT.md`）与审计 head SHA：
+阶段审计结论计数（BLOCKING / NON_BLOCKING_HARDENING / OPTIONAL / NEEDS_HUMAN_DECISION）：
+是否存在 BLOCKING 或 NEEDS_HUMAN_DECISION（存在时阶段不得标为完成）：
+冻结契约 / 决策日志位置与未决项（`templates/DESIGN.md`、`templates/CONTRACT-DECISION-LOG.md`）：
 未执行项（NOT_RUN / BLOCKED / NOT_APPLICABLE）及其理由：
 失败演练轮次与 head SHA：
 第 3 轮后是否 BLOCKED：
