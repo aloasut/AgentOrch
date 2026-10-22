@@ -46,12 +46,14 @@
 1. 唯一 ID 与单一目标。
 2. 背景和用户可感知的结果。
 3. 可改路径与禁改路径。
-4. 明确的逐条验收标准。
+4. 明确的逐条验收标准，并映射到 `AGENT-ORCHESTRATION.md` 4.1 节定义的验收证据矩阵（每条 AC 至少一条 evidence item）。
 5. 依赖任务及其完成状态。
 6. 要运行的检查命令；未知命令标为待探测，不可伪造。
 7. 风险、产品决策和回退要求。
 
 任务包字段在两个底座必须一一对应：`local` 写入任务库，`github` 写入 Issue（见 `editions/github/ISSUE-TEMPLATE.md`）。缺任一字段不得进入 `READY`。
+
+证据矩阵与五个结构化场景字段（`invariants`、`negative_cases`、`migration_cases`、`integration_paths`、`unverified_assumptions`）的字段名、取值与判定规则只在 `AGENT-ORCHESTRATION.md` 4.1 节定义，本文件与模板只引用不重述。小任务的场景字段填 `N/A: <理由>`，不得只写 `N/A`。该要求是增量补充：既有任务的验收语义与状态流转不变，兼容策略见 4.1 节。
 
 ## 4. Git 和实现纪律
 

@@ -23,6 +23,11 @@
 ## C. 合并门 G1–G6
 
 - [ ] G1 每条验收标准都有独立依据；没有“部分通过即通过”。
+- [ ] G1 的依据以 `AGENT-ORCHESTRATION.md` 4.1 节的证据矩阵记账：每条 AC 至少一条 evidence item，九个字段齐全，`actual` / `commit_sha` 在 `NOT_APPLICABLE` 之外不为空。
+- [ ] G1 没有把 `NOT_RUN` / `BLOCKED` / `NOT_APPLICABLE` 折算为通过；带这类行的 AC 未被标记为通过。
+- [ ] G1 证据行的 `commit_sha` 与矩阵声明的 head SHA 一致；head 变化后已在新 head 上重新取证。
+- [ ] `python scripts/validate_kit.py` 通过；`--task-packet` 对合法样例判定通过、对缺字段 / 空 AC / 无证据映射 / `NOT_RUN` 冒充通过 / SHA 不一致判定失败。
+- [ ] 旧任务按 4.1 节的兼容策略处理：未回填完整矩阵的既有任务仍按自然语言清单逐条判定，且没有被宣称“已通过矩阵验收”。
 - [ ] G2 变更路径全部属于允许路径；没有未授权文件或夹带重构。
 - [ ] G3 分支基于最新主分支，合并预演无冲突。
 - [ ] G4 必需检查在当前 head SHA 全绿；`local` 为配置中的测试与静态检查，`github` 为 CI 工作流。
@@ -62,6 +67,9 @@
 任务载体备份 / Issue 链接：
 调度能力实际探测（C1–C4）：
 活动任务锁测试命令与结果：
+证据矩阵位置（任务记录 / PR 评论）：
+矩阵声明的 head SHA 与各证据行 commit_sha 是否一致：
+未执行项（NOT_RUN / BLOCKED / NOT_APPLICABLE）及其理由：
 失败演练轮次与 head SHA：
 第 3 轮后是否 BLOCKED：
 合并后验证命令 / 退出码：
