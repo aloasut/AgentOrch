@@ -1,5 +1,8 @@
 # Implementation Plan
 
+> 这是模板：复制到项目根目录后再编辑（`python scripts/orchestrator.py init` 会自动逐字节复制）；不要直接修改本模板，复制后可删除本段说明。
+> 项目根目录的 `PLAN.md` 是计划权威——任务登记、派发与阶段收口都以它为准；本模板只用于初始化复制。
+
 > This plan is the source for task registration. Each Task block below must translate field by field into one `task add` command; split any block that fails the granularity check instead of registering it.
 > Acceptance criterion ids and the structured scenario fields are defined once, in `AGENT-ORCHESTRATION.md` 4.1; the plan only decides numbering and applicability, it does not restate the rules.
 

@@ -13,7 +13,7 @@
 
 ## 从计划到 Issue（Plan to issues）
 
-若已有按 `templates/PLAN.md` 写出的实现计划，把其中每个任务块翻译为一个 Issue：正文按 `editions/github/ISSUE-TEMPLATE.md` 的五节填写，可改路径与计划中的 Allowed paths 完全一致，依赖用 Issue 编号列出。任务块粒度过粗时必须先继续拆解计划，不得创建 Issue；拆解结果先回写计划文档，再逐块创建。
+若项目根目录已有 `PLAN.md` 写出的实现计划（该文件由 `python scripts/orchestrator.py init` 从 `templates/PLAN.md` 复制而来；模板只是初始化种子，不再作为计划读取），把其中每个任务块翻译为一个 Issue：正文按 `editions/github/ISSUE-TEMPLATE.md` 的五节填写，可改路径与计划中的 Allowed paths 完全一致，依赖用 Issue 编号列出。任务块粒度过粗时必须先继续拆解计划，不得创建 Issue；拆解结果先回写计划文档，再逐块创建。
 
 先向用户输出项目状态、活动 Issue / PR、主要风险、本轮计划和需要决策的问题，然后推进最合适的一个或一组不冲突任务。
 
