@@ -102,7 +102,7 @@ Review-fix retry cap: 3 (edit key "retry_cap" in <项目根>\.orchestration\conf
 Local task registry only: the edition is read from <项目根>\ORCHESTRATION-PROJECT.md, not from this config.
 Back up .orchestration/ with your project backups.
 Created PLAN.md from <项目根>\templates\PLAN.md
-下一步：填写 PLAN.md 的目标、范围与任务块
+下一步：填写 PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）
 
 $ python scripts/orchestrator.py config show
 Config file: <项目根>\.orchestration\config.json
@@ -129,10 +129,10 @@ TASK-0001	DISPATCHED	建立项目骨架
   retries: 0
 
 $ python scripts/validate_kit.py
-Kit validation passed (38 required files checked; editions local/github share 7 files, github adds 3 templates).
+Kit validation passed (39 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
-Ran 67 tests in 6.860s
+Ran 71 tests in 6.776s
 OK
 ```
 
@@ -140,7 +140,7 @@ OK
 
 - `init` 创建 `.orchestration/state.sqlite3` 与 `.orchestration/config.json`，并把 `.orchestration/` 写入当前克隆的 `.git/info/exclude`（若存在 Git），不会覆盖项目的 `.gitignore`。
 - `init` 还会在根目录缺少 `PLAN.md` 时从 `templates/PLAN.md` **逐字节复制**一份并提示“下一步：填写 PLAN.md”；根 `PLAN.md` 已存在时保持原样、只打印提示，重复执行不产生差异。模板缺失时给出提示但 `init` 仍以退出码 0 结束（其余初始化照常完成）；写入失败（例如目录只读）会报 `ERROR` 并以退出码 1 结束，不会假装成功。
-- **根目录 `PLAN.md` 是计划权威**：任务登记、派发与阶段收口都以它为准；`templates/PLAN.md` 只用于初始化复制，不要直接把它当项目计划。
+- **计划分两层**：根目录 `PLAN.md` 是**设计目标权威**（为什么做、做到什么程度、原则与边界），任务方向必须与它一致；阶段目标、任务顺序与状态写在 `docs/` 的阶段计划里，需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建它，也不会自动生成 `docs/`）。两者冲突时以 `PLAN.md` 的设计目标为准，停下对齐，不得各写一套。`templates/PLAN.md` 只用于初始化复制，不要直接把它当项目计划。
 - `dispatch` 只登记状态并占用路径锁，**不会启动 Agent**。拿到锁后，把自包含任务包交给真实执行实例；没有真实 spawn 能力时，由操作者另开会话执行。
 - 单元测试会大量打印临时任务库日志，属正常现象；退出码为 0 即通过。
 - 冒烟完成后可取消这条示例任务并释放锁：`python scripts/orchestrator.py task status TASK-0001 CANCELED --note "快速开始冒烟结束"`。
@@ -152,7 +152,7 @@ OK
 目标：从一句想法走到项目章程、首批任务与第一个可运行切片。
 
 1. 按第 3 节把套件放入空目录，`ORCHESTRATION-PROJECT.md` 填 `edition: local`。
-2. 运行 `python scripts/orchestrator.py init` 与 `python scripts/orchestrator.py task list`：`init` 会从 `templates/PLAN.md` 复制出根目录 `PLAN.md`，先在这份计划权威文件里填好目标、范围与任务块，再确认任务库可用且为空。
+2. 运行 `python scripts/orchestrator.py init` 与 `python scripts/orchestrator.py task list`：`init` 会从 `templates/PLAN.md` 复制出根目录 `PLAN.md`，先在这份**设计目标**文件里写清问题、目标、原则、边界与全局验收，再确认任务库可用且为空。需要阶段计划时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`，在那里写阶段目标、任务顺序与状态。
 3. 在 Master Agent 会话中加载 [editions/local/START-MASTER-NEW-PROJECT.md](editions/local/START-MASTER-NEW-PROJECT.md)，按提示词澄清目标、产出章程、拆出 1–3 个最小任务。
 4. 若想法本身还很模糊，先走 [prompts/START-CHARTER.md](prompts/START-CHARTER.md) 的章程引导流程，再进入任务拆解。
 
@@ -194,7 +194,7 @@ OK
 ├── AGENT-ORCHESTRATION-ACCEPTANCE.md  # 通用验收程序
 ├── AGENT-BOOTSTRAP.md                 # 会话入口：判定底座、恢复状态、自动路由
 ├── ORCHESTRATION-PROJECT.md           # 每个项目自己的配置（edition 在这里）
-├── PLAN.md                            # 计划权威：任务登记以它为准（init 从模板生成后由所有者填写）
+├── PLAN.md                            # 设计目标权威：为什么做、做到什么程度、边界（init 从模板生成后由所有者填写）
 ├── README.md                          # 本文件：入口与使用说明
 ├── VERSION.txt                        # 套件名与 Format version
 ├── LICENSE.txt
@@ -202,7 +202,7 @@ OK
 │   ├── local/                         # local 增量：SQLite 命令、路径锁、启动提示词
 │   └── github/                        # github 增量：Issue / PR 模板、登记块、启动提示词
 ├── prompts/                           # 两底座共享提示词（章程、Reviewer）
-├── templates/                         # 任务包、计划、设计、审查清单、项目配置模板
+├── templates/                         # 任务包、设计目标与阶段计划、设计、审查清单、项目配置模板
 ├── scripts/
 │   ├── orchestrator.py                # local 任务库与原子路径锁 CLI
 │   ├── validate_kit.py                # 结构 / 概念 / 链接自检，同时是发布清单
@@ -210,7 +210,7 @@ OK
 ├── tests/                             # orchestrator 的单元测试
 ├── .github/workflows/ci.yml           # PR / main 推送时跑三条登记检查（github 底座 G4 证据；仅本仓库，不随包发布）
 ├── release/README.md                  # 发布标准与发布清单（产物不入库）
-├── docs/                              # 本仓库自己的章程与决策记录（不随包发布）
+├── docs/                              # 本仓库自己的章程、阶段计划与决策记录（不随包发布）
 └── .local/                            # 本机私有文件（除说明文件外不入库）
 ```
 
@@ -305,7 +305,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
 
 `validate_kit.py` 检查：
 
-- **37 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **39 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
 - **两底座结构是否一致**：`editions/local` 与 `editions/github` 共享 7 个文件，`github` 额外提供 3 个模板；任一侧缺失或出现多余文件都会失败。
 - **治理概念是否真实存在**：核心编排文档必须出现 `PR_OPEN`、合并门 G1–G6、运行时能力契约 C1–C4；文档整体必须出现主要状态名。
 - **`edition` 是否合法**：`ORCHESTRATION-PROJECT.md` 必须有该键，且值为 `local` 或 `github`。
@@ -313,7 +313,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `ORCHESTRATION-PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `ORCHESTRATION-PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA，以及 edition 的权威来源与 fail-closed 行为；当前 63 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为，以及计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致）；当前 71 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 

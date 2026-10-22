@@ -19,7 +19,11 @@
 
 ## 从计划到任务（Plan to tasks）
 
-若项目根目录已有 `PLAN.md` 写出的实现计划（该文件由 `python scripts/orchestrator.py init` 从 `templates/PLAN.md` 复制而来；模板只是初始化种子，不再作为计划读取），把其中每个任务块直接翻译为一条 `python scripts/orchestrator.py task add --id <Task ID> --title <标题> --paths <Allowed paths> --depends <Depends on> --acceptance <验收条目>` 命令序列。翻译时逐字段核对：路径锁与计划中的 Allowed paths 完全一致；依赖用 `--depends` 指向必须先 VERIFIED 的任务；验收标准逐条写入 `--acceptance`。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解计划，不得直接注册任务。
+计划分两层。项目根目录的 `PLAN.md` 是**设计目标权威**：只写为什么做、做到什么程度、原则与边界，用来判断任务方向；它由项目所有者维护，任何流程不自动改写它；它也不承载任务块。阶段目标、任务顺序与任务块写在 `docs/` 的阶段计划里——项目需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（例如 `docs/IMPLEMENTATION-PLAN.md`，`init` 不会自动创建）。
+
+若 `docs/` 下已有阶段计划，把其中每个任务块翻译为一条 `python scripts/orchestrator.py task add --id <Task ID> --title <标题> --paths <Allowed paths> --depends <Depends on> --acceptance <验收条目>` 命令序列。翻译时逐字段核对：路径锁与任务块 Allowed paths 完全一致；依赖用 `--depends` 指向必须先 VERIFIED 的任务；`AC-1…AC-n` 逐条写入 `--acceptance`。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解并回写阶段计划，不得直接注册任务。
+
+阶段计划与根 `PLAN.md` 的设计目标冲突时，停下对齐，以设计目标为准，不得各写一套。
 
 ## 首次响应格式
 
