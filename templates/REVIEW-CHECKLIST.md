@@ -8,6 +8,8 @@ Use this checklist when reviewing an execution task's delivery, independently of
 - [ ] Every acceptance criterion checked individually against real evidence (diff, command output, exit codes)
 - [ ] Stated head SHA matches the delivered commit
 - [ ] No self-approval or self-merge happened
+- [ ] Every changed frozen item has a decision record in [CONTRACT-DECISION-LOG.md](CONTRACT-DECISION-LOG.md) (ID, affected tasks, before/after, evidence, status)
+- [ ] A design contract touched by this task fills the headings of [DESIGN.md](DESIGN.md), or says `N/A: <reason>`; no heading was deleted to look finished
 
 If any Stage 1 item fails, stop: do not proceed to Stage 2; return the task with findings.
 
@@ -31,3 +33,10 @@ Output the review verdict in the four-part format defined by AGENTS.md
 The highest unresolved severity determines the verdict: any unresolved
 **critical** → returned or blocked; only **major** → returned with fix guidance;
 **minor** or clean → approved.
+
+## Scope limit
+
+This checklist reviews one task. It is not a milestone audit: passing every
+item here only means the task matched its own acceptance criteria. At milestone
+closeout use [MILESTONE-AUDIT.md](MILESTONE-AUDIT.md), which asks whether the
+integrated system holds together — a clean task review is not a substitute.

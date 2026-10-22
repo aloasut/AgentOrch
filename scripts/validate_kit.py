@@ -27,12 +27,44 @@ REQUIRED = [
     'editions/local/START-MASTER-EXISTING-PROJECT.md', 'editions/local/START-MASTER-NEW-PROJECT.md',
     'prompts/START-CHARTER.md', 'prompts/START-REVIEWER.md',
     'scripts/check_drift.py', 'scripts/orchestrator.py', 'scripts/validate_kit.py',
-    'templates/DESIGN.md', 'templates/IMPLEMENTATION-PLAN.md',
+    'templates/CONTRACT-DECISION-LOG.md', 'templates/DESIGN.md',
+    'templates/IMPLEMENTATION-PLAN.md', 'templates/MILESTONE-AUDIT.md',
     'templates/ORCHESTRATION-PROJECT.template.md', 'templates/PLAN.md',
     'templates/PROJECT-CHARTER.md', 'templates/REVIEW-CHECKLIST.md', 'templates/TASK-PACKET.md',
     'templates/gitignore.snippet',
     'tests/test_orchestrator.py', 'tests/test_release_drift.py', 'tests/test_validate_kit.py',
 ]
+
+# --- Reusable contract templates ---------------------------------------------
+# DESIGN.md, MILESTONE-AUDIT.md and CONTRACT-DECISION-LOG.md are contracts in
+# their own right: a deleted heading silently removes a question nobody will then
+# answer, and a broken relative link makes the cross-reference unusable. Both are
+# checked here, on structure only — whether the filled answers are true is a
+# review decision, not something a static check can prove.
+# Section names are matched case-insensitively as substrings of a heading, so a
+# numbered heading ("### 1. Functional completeness") still matches.
+TEMPLATE_SECTIONS = {
+    'templates/DESIGN.md': (
+        'Scope and non-goals', 'Schema and interfaces', 'State transitions', 'Invariants',
+        'Failure semantics', 'Compatibility and migration', 'Permission and trust boundaries',
+        'Verification strategy', 'Frozen decisions', 'Open decisions',
+        'Versioning and change policy',
+    ),
+    'templates/MILESTONE-AUDIT.md': (
+        'When to use', 'How to fill', 'Verdict classes',
+        'Functional completeness', 'Cross-module invariants', 'Permissions and security',
+        'Legacy data migration', 'Real and synthetic data validation', 'End-to-end path',
+        'Recoverability', 'Performance baseline', 'Public content and privacy',
+        'Residual items', 'Audit conclusion',
+    ),
+    'templates/CONTRACT-DECISION-LOG.md': (
+        'When to use', 'Status values', 'Frozen decisions', 'Open decisions',
+        'Revisitable items', 'Superseded records', 'Recording rules',
+    ),
+}
+HEADING_RE = re.compile(r'^#{2,4}\s+(?P<text>.+?)\s*$', re.M)
+MD_LINK_RE = re.compile(r'\[[^\]]*\]\(([^)]+)\)')
+EXTERNAL_LINK_PREFIXES = ('http://', 'https://', 'mailto:', '#')
 
 # --- Evidence matrix contract -------------------------------------------------
 # The field names, the status enum and the G1 rules are defined once, in
@@ -396,6 +428,34 @@ def check_release_manifest(root):
     return errors
 
 
+def template_structure_errors(root=ROOT):
+    """Missing contract template, missing required heading, or a broken relative link.
+
+    A missing file is reported here as well as by the REQUIRED loop: the two
+    checks answer different questions ("is the artifact shipped?" vs "does it
+    still ask the required questions?"), and a caller that only imports this
+    function should not get a silent pass.
+    """
+    errors, root = [], Path(root)
+    for rel, sections in TEMPLATE_SECTIONS.items():
+        path = root / rel
+        if not path.is_file():
+            errors.append(f'missing required template: {rel}')
+            continue
+        text = path.read_text(encoding='utf-8')
+        headings = [match.group('text').lower() for match in HEADING_RE.finditer(text)]
+        for section in sections:
+            if not any(section.lower() in heading for heading in headings):
+                errors.append(f'{rel} is missing required section: {section}')
+        for target in MD_LINK_RE.findall(text):
+            if target.startswith(EXTERNAL_LINK_PREFIXES):
+                continue
+            target = target.split('#', 1)[0]
+            if target and not (path.parent / target).exists():
+                errors.append(f'{rel}: broken relative link: {target}')
+    return errors
+
+
 def validate_kit(root=ROOT, project_ready=False):
     errors = []
     root = Path(root)
@@ -403,6 +463,8 @@ def validate_kit(root=ROOT, project_ready=False):
     for rel in REQUIRED:
         if not (root / rel).is_file():
             errors.append(f'missing required file: {rel}')
+
+    errors.extend(template_structure_errors(root))
 
     # A built package also carries MANIFEST.json; validate it when present.
     errors.extend(check_release_manifest(root))
@@ -542,7 +604,12 @@ def validate_kit(root=ROOT, project_ready=False):
         if needle not in text_all:
             errors.append(f'missing expected governance concept: {needle}')
     # Relative Markdown links must resolve. Ignore anchors and external URLs.
+    # The contract templates are already link-checked with template-scoped
+    # messages by template_structure_errors(), so skip them here to avoid one
+    # break being reported twice.
     for md in root.rglob('*.md'):
+        if md.relative_to(root).as_posix() in TEMPLATE_SECTIONS:
+            continue
         content = md.read_text(encoding='utf-8')
         for target in re.findall(r'\[[^\]]*\]\(([^)]+)\)', content):
             if target.startswith(('http://', 'https://', 'mailto:', '#')):

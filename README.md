@@ -129,10 +129,10 @@ TASK-0001	DISPATCHED	建立项目骨架
   retries: 0
 
 $ python scripts/validate_kit.py
-Kit validation passed (41 required files checked; editions local/github share 7 files, github adds 3 templates).
+Kit validation passed (43 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
-Ran 112 tests in 22.577s
+Ran 165 tests in 24.661s
 OK
 ```
 
@@ -202,7 +202,7 @@ OK
 │   ├── local/                         # local 增量：SQLite 命令、路径锁、启动提示词
 │   └── github/                        # github 增量：Issue / PR 模板、登记块、启动提示词
 ├── prompts/                           # 两底座共享提示词（章程、Reviewer）
-├── templates/                         # 任务包、设计目标与阶段计划、设计、审查清单、项目配置模板
+├── templates/                         # 任务包、设计契约与决策日志、阶段收口审计、审查清单等可复制模板
 ├── scripts/
 │   ├── orchestrator.py                # local 任务库与原子路径锁 CLI
 │   ├── validate_kit.py                # 结构 / 概念 / 链接自检，同时是发布清单
@@ -329,7 +329,8 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/che
 
 `validate_kit.py` 检查：
 
-- **41 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **43 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **合约模板是否仍问对问题**：`templates/DESIGN.md`、`templates/MILESTONE-AUDIT.md`、`templates/CONTRACT-DECISION-LOG.md` 的必备章节缺一即失败，模板内的相对链接断链也失败（章节缺失会被静默当成“不需要回答”，因此单列一项检查）。
 - **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析、SHA-256 与大小；仓库根目录没有该文件，检查自动跳过，不误报。
 - **两底座结构是否一致**：`editions/local` 与 `editions/github` 共享 7 个文件，`github` 额外提供 3 个模板；任一侧缺失或出现多余文件都会失败。
 - **治理概念是否真实存在**：核心编排文档必须出现 `PR_OPEN`、合并门 G1–G6、运行时能力契约 C1–C4；文档整体必须出现主要状态名。
@@ -338,7 +339,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/che
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `ORCHESTRATION-PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `ORCHESTRATION-PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）；当前 112 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）；当前 165 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -415,7 +416,25 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 - `orchestrator.py` 只管理本地任务状态与路径锁，不启动模型、不写代码、不运行项目测试、不自动合并 Git 分支；这些动作由 Agent 按提示词执行，合并由 Master 决策。
 - 若运行时无法真实完成 spawn / wait / collect（C1–C4 未全部通过），必须降级为多会话人工交接，不得声称已派发。
 
-## 10. 治理文档导航
+## 10. 设计冻结与阶段收口
+
+三个模板解决的都不是“写文档”，而是**让结论可以回到任务、证据与 head SHA**。它们只提供结构与检查口径，不证明结论正确：某个问题是否 `BLOCKING`，仍以项目章程、已冻结契约与真实证据为准。
+
+| 模板 | 什么时候用 | 用完得到什么 |
+| --- | --- | --- |
+| [templates/DESIGN.md](templates/DESIGN.md) | **设计冻结前**：契约要跨模块、要冻结 Schema / API / 事件形状、涉及权限或存量数据、或改动代价高 | 一份冻结契约：范围 / 非目标、Schema 与接口、状态转换、不变量、失败语义、兼容与迁移、权限 / 信任边界、验证策略、冻结项、待决项、版本与变更策略 |
+| [templates/CONTRACT-DECISION-LOG.md](templates/CONTRACT-DECISION-LOG.md) | **每次冻结、解冻、改契约时**（随时追加，不只收口时） | 一条可追溯的决策记录：ID、日期、决定人、影响任务、变更前后、理由、状态（`OPEN` / `FROZEN` / `REVISITABLE` / `SUPERSEDED`）、证据链接 |
+| [templates/MILESTONE-AUDIT.md](templates/MILESTONE-AUDIT.md) | **阶段收口时**：里程碑准备宣布完成、冻结契约发生变更、或需要交接 | 十类检查的逐条结论与分类计数，能回答“这个阶段到底能不能收口” |
+
+要点：
+
+- **冻结不等于永远不可改**。“冻结”只是说下游任务不得自行改写契约；要改就新建一条决策记录，写明受影响任务与理由，再同步更新设计契约。`DESIGN.md` 与决策日志对同一条契约给出不同说法即视为缺陷。
+- **局部验收代替不了阶段审计**。任务级审查按 [templates/REVIEW-CHECKLIST.md](templates/REVIEW-CHECKLIST.md) 逐条判定，只证明该任务自己达标；阶段级是否成立要用 `MILESTONE-AUDIT.md`。审计结论只用四类：`BLOCKING`、`NON_BLOCKING_HARDENING`、`OPTIONAL`、`NEEDS_HUMAN_DECISION`（核实无问题记 `PASS`）。
+- **未验证不算通过**。`NOT_RUN` / `BLOCKED` / 没有证据的项不得计入通过；只要存在 `BLOCKING` 或 `NEEDS_HUMAN_DECISION`，阶段就不得标记完成。
+- **轻量模式**：小项目保留全部标题，不适用项写 `N/A: <理由>`（光写 `N/A` 不算），不强制产出冗长文档；模板也不复制状态机与 G1–G6 定义，需要时引用 [AGENT-ORCHESTRATION.md](AGENT-ORCHESTRATION.md)。
+- `validate_kit.py` 会校验这三个模板的必备章节与相对链接；章节被删除会失败，而不是被当成“这项不需要回答”。
+
+## 11. 治理文档导航
 
 | 文档 | 什么时候读 | 读完后做什么 |
 | --- | --- | --- |
@@ -426,4 +445,6 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 | [editions/local/MASTER.md](editions/local/MASTER.md) / [editions/github/MASTER.md](editions/github/MASTER.md) | 当前底座的日常操作 | 按底座手册创建、派发、审查、合并任务 |
 | [editions/github/ISSUE-TEMPLATE.md](editions/github/ISSUE-TEMPLATE.md) | 在 `github` 底座创建任务单时 | 按五节写 Issue，缺一节不得进入 `READY` |
 | [prompts/START-CHARTER.md](prompts/START-CHARTER.md) | 想法模糊、涉及新方向 / 多文件 / 新依赖 / 不可逆操作时 | 先澄清并签署项目章程，再拆任务 |
+| [templates/DESIGN.md](templates/DESIGN.md) / [templates/CONTRACT-DECISION-LOG.md](templates/CONTRACT-DECISION-LOG.md) | 冻结或修改跨模块契约之前 | 填冻结契约、登记决策（含影响任务与证据），再让下游任务依赖 |
+| [templates/MILESTONE-AUDIT.md](templates/MILESTONE-AUDIT.md) | 阶段收口、契约变更或交接之前 | 逐类给结论并分类，`BLOCKING` / `NEEDS_HUMAN_DECISION` 未清不得宣布完成 |
 | `release/README.md` | 准备发布分发包之前 | 按发布标准构建、自检、登记清单 |
