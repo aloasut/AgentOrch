@@ -443,7 +443,131 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 - `orchestrator.py` 只管理本地任务状态与路径锁，不启动模型、不写代码、不运行项目测试、不自动合并 Git 分支；这些动作由 Agent 按提示词执行，合并由 Master 决策。
 - 若运行时无法真实完成 spawn / wait / collect（C1–C4 未全部通过），必须降级为多会话人工交接，不得声称已派发。
 
-## 10. 设计冻结与阶段收口
+上面每条版本变更对应的**旧项目迁移动作**见第 10 节：`edition` 旧格式行、旧 `PLAN.md` 台账、资源锁 TTL、旧包无 `MANIFEST.json`。
+
+## 10. 从旧版升级（1.1 → 1.3）
+
+已经装了 1.1 / 1.2 的项目升到 1.3 时，有四条会“先撞错、再猜原因”。下面每条按**变了什么 / 怎么改 / 怎么自检**三段写，命令可直接复制；四条互相独立，命中几条改几条。完整分步清单、报错原文、退出码与逐条回退见仓库文档 `docs/UPGRADE-2026-10.md`（`docs/` 不随发行包发布，因此本节不依赖它：包内用户照本节即可完成四条迁移）。
+
+**没有自动迁移**：套件不提供迁移脚本，`init` 也不会替你拆分计划或改写配置。动手前先留证据：
+
+```bash
+python scripts/orchestrator.py backup    # 备份任务库，退出码 0
+git rev-parse HEAD                       # 记录升级前 head，回退时要用
+```
+
+### 10.1 `edition` 旧格式行
+
+- **变了什么**：`edition` 只在 `ORCHESTRATION-PROJECT.md` 里读，且**只认裸取值** `local` / `github`。多取值（`local / github`）、带说明文字（`local（默认）`）、重复声明、没写成列表项（`edition: local` 或放在表格里）都会**阻断调度**，不再回落到 `local`；`.orchestration/config.json` 里的 `edition` 不再生效，只作为历史记录显示。
+- **怎么改**：一行、以 `-` 开头、冒号后只写取值。
+
+  ```diff
+  - `edition`: local（单人本地；需要多人协作时改为 github）
+  + `edition`: local
+  ```
+
+- **怎么自检**：`python scripts/orchestrator.py config show` 中 `edition` 一行应为 `local`（或 `github`）、`source` 为 `ORCHESTRATION-PROJECT.md`，退出码 `0`。旧格式的报错长这样（都以退出码 `1` 结束）：
+
+  ```text
+  ERROR: ORCHESTRATION-PROJECT.md: key `edition` has unsupported value 'local（单人本地；需要多人协作时改为 github）' in <项目根>\ORCHESTRATION-PROJECT.md; allowed values are local, github (write the value alone, with no extra text)
+  ERROR: ORCHESTRATION-PROJECT.md: key `edition` is declared 2 times (lines 2, 4) in <项目根>\ORCHESTRATION-PROJECT.md; keep exactly one declaration
+  ERROR: ORCHESTRATION-PROJECT.md: missing required key `edition` in <项目根>\ORCHESTRATION-PROJECT.md; add one line "- `edition`: local" or "- `edition`: github"
+  ```
+
+  `config show` 的表格打到 stdout、报错打到 stderr，所以别只看屏幕——看退出码。
+
+### 10.2 旧 `PLAN.md` 台账拆成两层
+
+- **变了什么**：根 `PLAN.md` 只承载**设计目标**；阶段目标、任务顺序、任务块与状态搬到 `docs/` 的阶段计划（口径见 [AGENTS.md](AGENTS.md) 第 8 条，本节不重述）。旧项目把两层混在一个文件里，升级后“方向”与“进度”读不出唯一答案。
+- **怎么改**（手工；`init` 发现根 `PLAN.md` 已存在时只打印 `PLAN.md already present, kept unchanged`，**不会**自动改写或拆分）：
+
+  ```bash
+  mkdir -p docs
+  cp templates/IMPLEMENTATION-PLAN.md docs/IMPLEMENTATION-PLAN.md
+  ```
+
+  然后把阶段划分、依赖、任务块与状态表搬进 `docs/IMPLEMENTATION-PLAN.md`（状态变化的唯一落点就是它的「当前状态」表）；根 `PLAN.md` 只留设计目标六类内容（问题与目标用户 / 设计目标 / 设计原则 / 范围与非目标 / 全局约束 / 可度量的全局验收），并在顶部留一句指向阶段计划。
+
+- **怎么自检**：
+
+  ```bash
+  grep -n '^|' PLAN.md || echo "no table rows: PLAN.md carries no task status table"
+  python scripts/validate_kit.py
+  python -m unittest discover -s tests
+  ```
+
+  根 `PLAN.md` 不该再有任务状态表；后两条各以退出码 `0` 结束。
+
+### 10.3 资源锁：先配 `resource_lease_ttl`
+
+- **变了什么**：任务用 `--resources` 声明了具名资源、而声明里没带 `:<ttl>` 时，`task dispatch` 会去 `.orchestration/config.json` 读 `resource_lease_ttl`。这个键**没有内置默认值**，没配就拒绝派发（写锁之前就失败，不会留下半套锁）。`task renew` 总是读它；`task reclaim` 总是读 `resource_reclaim_grace`。
+- **怎么改**：在 `.orchestration/config.json` 加两个**整数**键（字符串 `"900"` 不合法）：
+
+  ```json
+  {
+    "retry_cap": 3,
+    "local_dir": ".local",
+    "resource_lease_ttl": 900,
+    "resource_reclaim_grace": 300
+  }
+  ```
+
+  `resource_lease_ttl` 取值 1–604800 秒（示例 900 = 15 分钟）；`resource_reclaim_grace` 取值 0–86400 秒（示例 300 = 过期后 5 分钟冷却）。**没声明资源的任务完全不读这两项**，不配也不影响它们。
+
+- **怎么自检**：
+
+  ```bash
+  python scripts/orchestrator.py task dispatch TASK-0001 --holder runner:local-01 --evidence "upgrade smoke"
+  python scripts/orchestrator.py task resources
+  ```
+
+  没配时报：
+
+  ```text
+  ERROR: RESOURCE_CONFIG_INVALID: resource lock configuration is missing or illegal: resource_lease_ttl must be an integer between 1 and 604800 in <项目根>\.orchestration\config.json; add it to .orchestration/config.json (a lease without an explicit ttl or cool-down is refused)
+  ```
+
+  配好后派发退出码 `0` 并打印 `resource locks GRANTED`，`task resources` 里该资源为 `ACTIVE`。`github` 底座不需要配：本地 CLI 在 `github` 下拒绝派发，资源占用只以 Issue 登记块协作记录。
+
+### 10.4 旧包没有 `MANIFEST.json`
+
+- **变了什么**：1.2 起发行包内带机器可读的 `MANIFEST.json`。旧包没有它时 `check_drift.py` 报 `status: version-unknown`、**退出码 2**——含义是“版本未知 / 需基线登记”，不是崩溃，也不阻断继续使用项目。
+- **怎么改**：把当初安装时那份发行包里的 `MANIFEST.json` 放到项目根即可。找不到原包时，在与安装版本一致的套件仓库 checkout 里重建一次，再从产物里取清单：
+
+  ```bash
+  python scripts/build_release.py --date <YYYYMMDD> --output-dir <输出目录>
+  python -m zipfile -e <输出目录>/agentorch-<YYYYMMDD>.zip <解压目录>
+  cp <解压目录>/agentorch-<YYYYMMDD>/MANIFEST.json .
+  ```
+
+  只登记基线，**不改、不覆盖**任何项目文件。两个注意点：`build_release.py` 不随发行包发布（包内 `scripts/` 只有 `check_drift.py`、`orchestrator.py`、`report_metrics.py`、`validate_kit.py`），所以只能在仓库 checkout 上重建；也别拿**新版**清单套**旧**树，否则每个上游文件都会被报成 `modified`。
+
+- **怎么自检**：
+
+  ```bash
+  python scripts/check_drift.py .
+  ```
+
+  ```text
+  status: clean (exit 0)
+  manifest: schema 1 (supported: yes), suite 'Agent-Orchestration Starter Kit', format 1.3
+  checked: 47 manifest file(s); missing 0, modified 0, unknown 0, project-profile 2, extensions 0
+  ```
+
+  `project-profile` 条目（`ORCHESTRATION-PROJECT.md`、`PLAN.md`）**正常**，它们本来就该被项目填写。诊断本身只读：没有 `--fix` / `--sync`，不创建、不删除、不覆盖目标项目里的任何文件。
+
+### 10.5 升级后一次性自检
+
+```bash
+python scripts/orchestrator.py config show    # 0：edition 不是 (invalid)
+python scripts/validate_kit.py                # 0
+python -m unittest discover -s tests          # 0
+python scripts/check_drift.py .               # 0：已登记基线
+```
+
+`check_drift.py` 在**未登记基线**的树（包括本仓库的裸 checkout）上按设计返回 `2`，这是“需基线登记”的正确表现，不是失败。
+
+## 11. 设计冻结与阶段收口
 
 三个模板解决的都不是“写文档”，而是**让结论可以回到任务、证据与 head SHA**。它们只提供结构与检查口径，不证明结论正确：某个问题是否 `BLOCKING`，仍以项目章程、已冻结契约与真实证据为准。
 
@@ -461,7 +585,7 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 - **轻量模式**：小项目保留全部标题，不适用项写 `N/A: <理由>`（光写 `N/A` 不算），不强制产出冗长文档；模板也不复制状态机与 G1–G6 定义，需要时引用 [AGENT-ORCHESTRATION.md](AGENT-ORCHESTRATION.md)。
 - `validate_kit.py` 会校验这三个模板的必备章节与相对链接；章节被删除会失败，而不是被当成“这项不需要回答”。
 
-## 11. 治理文档导航
+## 12. 治理文档导航
 
 | 文档 | 什么时候读 | 读完后做什么 |
 | --- | --- | --- |
