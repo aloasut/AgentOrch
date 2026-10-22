@@ -209,7 +209,7 @@ OK
 │   ├── check_drift.py                 # 生成 MANIFEST.json + 下游只读漂移诊断
 │   └── build_release.py               # 发布构建（仅仓库内，不随包发布）
 ├── tests/                             # orchestrator 的单元测试
-├── .github/workflows/ci.yml           # PR / main 推送时跑三条登记检查（github 底座 G4 证据；仅本仓库，不随包发布）
+├── .github/workflows/ci.yml           # PR / main 推送时跑登记检查与发布打包自检（github 底座 G4 证据；仅本仓库，不随包发布）
 ├── release/README.md                  # 发布标准与发布清单（产物不入库）
 ├── docs/                              # 本仓库自己的章程、阶段计划与决策记录（不随包发布）
 └── .local/                            # 本机私有文件（除说明文件外不入库）
@@ -343,14 +343,18 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/che
 
 ### 7.1 CI（`github` 底座）
 
-仓库自带一条 GitHub Actions 工作流 `.github/workflows/ci.yml`（仅本仓库使用，不随发行包发布），把上面三条登记检查放到平台上执行：
+仓库自带一条 GitHub Actions 工作流 `.github/workflows/ci.yml`（仅本仓库使用，不随发行包发布），把登记检查与发布打包自检放到平台上执行：
 
 - **触发**：`pull_request` 目标 `main`、`push` 到 `main`、以及手动 `workflow_dispatch`。
 - **环境**：`ubuntu-latest`，Python 版本矩阵 `3.12` / `3.13`（两个版本都跑，任一失败即整体失败）。
-- **步骤**：只有三条登记检查，按顺序执行且不跳过失败步骤 —— `python scripts/validate_kit.py`、`python -m unittest discover -s tests`、`python -m py_compile scripts/orchestrator.py scripts/validate_kit.py`。
+- **步骤**：按顺序执行且不跳过失败步骤 —— `python scripts/validate_kit.py`、`python -m unittest discover -s tests`、`python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py`、`python scripts/build_release.py`。
+- **打包自检**：最后一步是发布构建本身。它失败即 job 失败 —— 没有 `continue-on-error`、没有 `|| true`、没有跳过开关，因此"少打包一个文件、包里断链、清单哈希对不上、包内出现禁止路径"这类回归会在 PR 上直接变红，而不是等 Master 手工构建才发现。
+  - **两个版本都跑的原因**：自检会在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`（a–f 中的 b、d），即真正检验"这一档 Python 拿到的包是否可用"；两档都证明一次，成本是本机数秒级的重复，换来不依赖版本判断的一致性（无 `if:` 条件，也就不会出现"某档静默跳过打包步骤"）。
+  - **产物处理**：zip 写到 runner 的 `release/`（`.gitignore` 已忽略 `release/*.zip`），不提交、不上传 artifact、不使用任何密钥。
+  - **覆盖边界**：CI 只证明"包能构建且内置自检 a–f 通过"，**不证明发布本身** —— 不校验发布命名日期、不生成 GitHub Release、不核对发布记录。发布仍需按 `release/README.md` 第 4 节由 Master 执行并留证。
 - **边界**：`permissions: contents: read`，不使用 `pull_request_target`，不引入第三方依赖、密钥或 `pip install`。
 
-**证据地位**：`github` 底座下，G4 以**当前 head SHA** 上的 CI 运行全绿为准 —— 本地三条命令仍是可复现的补充证据，不能替代 CI；反过来，CI 绿灯也只覆盖这三条命令，不能代替 G1 的逐条验收。head 变化后旧 head 的绿灯失效，必须在新 head 上重新运行。
+**证据地位**：`github` 底座下，G4 以**当前 head SHA** 上的 CI 运行全绿为准 —— 本地四条命令（含打包自检）仍是可复现的补充证据，不能替代 CI；反过来，CI 绿灯也只覆盖这四条命令，不能代替 G1 的逐条验收，也不能代替对发布标准的逐条审查。head 变化后旧 head 的绿灯失效，必须在新 head 上重新运行。
 
 **查看方式**：
 
@@ -369,7 +373,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/che
 - **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–f 自检，失败会删除未通过自检的产物，没有跳过开关。自检 a 现在校验「包内文件集合 == `REQUIRED` + `MANIFEST.json`」、清单中每条路径可解析、SHA-256 与大小和实际文件一致、分类合法且清单路径与 `REQUIRED` 完全一致。
 - **可复现**：归档时间戳固定、文本文件按 LF 归一后打包，清单哈希同样按归一后的字节计算；同一仓库状态重建应得到同一 SHA256，Windows 上 `core.autocrlf=true` 的检出也不会改变结果。
 
-命名、包内容、自检清单、发布流程与发布清单以 `release/README.md` 为准；该文件对自检 a 的描述尚未跟上本节的 `MANIFEST.json` 变更（`release/` 不在本次任务允许路径内），下一轮发布任务需同步更新。
+命名、包内容、自检清单、发布流程与发布清单以 `release/README.md` 为准；该文件与本节一致（包内容 == `REQUIRED` + `MANIFEST.json`，自检 a 同时校验文件集合与清单条目）。该自检现由 CI 在每个 PR 上执行（见 7.1 节），因此打包回归不再依赖手工构建才发现。
 
 ### 8.2 下游只读诊断：`check_drift.py`
 
@@ -402,7 +406,11 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 
 ## 9. 版本与兼容
 
-- [VERSION.txt](VERSION.txt) 记录套件名、支持底座与 **Format version**（当前 `1.2`）；格式变更时同步更新模板与校验清单。
+- [VERSION.txt](VERSION.txt) 记录套件名、支持底座与 **Format version**（当前 `1.3`）；格式变更时同步更新模板与校验清单。
+- `1.3` 相对 `1.2` 的变更要点：
+  - **资源锁的载体字段**：具名资源锁把"不落在文件上"的独占需求写成任务字段——通用任务包新增可选 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`，逗号分隔）；`github` 登记块新增 `locked_resources` 与 `resource_lease_until`（后者仅为记账值，平台不会因其过期而拒绝写入）；`local` 任务库新增 `resources_json` 列。字段格式属载体契约，故 `Format version` 从 `1.2` 升到 `1.3`；语义仍只在 `docs/design/RESOURCE-LOCKS.md` 定义（该目录不随包发布）。
+  - **发布清单与漂移工具进包**：包内新增 `MANIFEST.json`，分类与清单生成只有一处实现（`scripts/check_drift.py`，构建脚本导入它），`check_drift.py` 同时随包提供下游只读漂移诊断（见 8.1 / 8.2 节）。
+  - **CI 打包自检**：`.github/workflows/ci.yml` 在每个 PR 与 `main` 推送的两个 Python 版本上都执行 `python scripts/build_release.py`，失败即红（见 7.1 节）；`py_compile` 同时覆盖 `scripts/check_drift.py`。
 - `1.2` 相对 `1.1` 的变更要点：
   - **发行包版本清单**：包内新增机器可读的 `MANIFEST.json`（套件版本、清单 schema 版本、逐文件分类与 SHA-256），构建可复现，清单无时间戳（见 8.1 节）。
   - **下游只读漂移诊断**：新增 `scripts/check_drift.py`，报告缺失、被改动的核心文件、上游目录内的未知文件、无清单旧项目与版本跨度，只诊断不覆盖，退出码区分 clean / drift / 工具错误（见 8.2 节）。
@@ -412,7 +420,7 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
   - **按机器余量的并发策略**：不再固定并发数量，派发前按 CPU、内存、磁盘与测试资源余量决定并行度（见 6.4 节）。
   - **配置自省**：`python scripts/orchestrator.py config show` 可查看每个配置键的生效值与来源，便于定位缺省值与项目覆盖。
 - 纯 **Python 3 标准库**，**零第三方依赖**；不需要数据库服务、包管理器或构建步骤。
-- 已在 **Windows + Git Bash** 环境用 Python 3 验证；三条登记检查另由 CI 在 `ubuntu-latest` + Python 3.12/3.13 上运行（见 7.1）。其他操作系统、其他 shell 与其余命令**未验证**，命令中的引号与路径写法可能需要调整。
+- 已在 **Windows + Git Bash** 环境用 Python 3 验证；四条检查（三条登记检查 + 发布打包自检）另由 CI 在 `ubuntu-latest` + Python 3.12/3.13 上运行（见 7.1）。其他操作系统、其他 shell 与其余命令**未验证**，命令中的引号与路径写法可能需要调整。
 - `orchestrator.py` 只管理本地任务状态与路径锁，不启动模型、不写代码、不运行项目测试、不自动合并 Git 分支；这些动作由 Agent 按提示词执行，合并由 Master 决策。
 - 若运行时无法真实完成 spawn / wait / collect（C1–C4 未全部通过），必须降级为多会话人工交接，不得声称已派发。
 
