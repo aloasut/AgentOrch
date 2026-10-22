@@ -542,5 +542,98 @@ class CapabilityAndMetricsTemplateTests(unittest.TestCase):
             (root / rel).write_text((ROOT / rel).read_text(encoding='utf-8'), encoding='utf-8')
 
 
+class AuditConclusionTests(unittest.TestCase):
+    """A filled audit may only be read as a closeout when no verdict forbids it.
+
+    The four verdict classes come from templates/MILESTONE-AUDIT.md; this check
+    only reads the classification back, it never judges whether a verdict is
+    justified.
+    """
+
+    HEADER = '| 检查项 | verdict | 依据 |\n|---|---|---|\n'
+
+    def audit(self, rows):
+        return validate.audit_conclusion_errors('## 阶段审计结论\n\n' + self.HEADER + rows)
+
+    def test_clean_closeout_passes(self):
+        rows = ('| functional completeness | PASS | task 1, head aaaa |\n'
+                '| residual items | NON_BLOCKING_HARDENING | tracked |\n'
+                '| performance baseline | OPTIONAL | not measured |\n'
+                '| legacy data migration | NOT_APPLICABLE | N/A: no legacy data |\n')
+        self.assertEqual(self.audit(rows), [])
+
+    def test_blocking_forbids_the_closeout_claim(self):
+        errors = self.audit('| permissions and security | BLOCKING | probe missing |\n')
+        self.assertTrue(any('BLOCKING' in e and 'must not be' in e for e in errors), errors)
+
+    def test_needs_human_decision_forbids_the_closeout_claim(self):
+        errors = self.audit('| legacy data migration | NEEDS_HUMAN_DECISION | owner undecided |\n')
+        self.assertTrue(any('NEEDS_HUMAN_DECISION' in e and 'must not be' in e for e in errors), errors)
+
+    def test_not_run_is_not_counted_as_passing(self):
+        errors = self.audit('| end-to-end path | NOT_RUN | environment missing |\n')
+        self.assertTrue(any('not counted as passing' in e for e in errors), errors)
+
+    def test_unknown_verdict_is_rejected(self):
+        errors = self.audit('| recoverability | LOOKS_FINE | trust me |\n')
+        self.assertTrue(any('unknown verdict' in e for e in errors), errors)
+
+    def test_table_without_verdict_rows_is_rejected(self):
+        errors = validate.audit_conclusion_errors('## 阶段审计结论\n\n全部通过。\n')
+        self.assertTrue(any('no readable verdict rows' in e for e in errors), errors)
+
+
+class DeliveryScenarioIntegrationTests(unittest.TestCase):
+    """The scenario runner and its catalogue must be part of the kit's own checks."""
+
+    RUNNER = 'scripts/run_delivery_scenarios.py'
+    RUNNER_TEST = 'tests/test_run_delivery_scenarios.py'
+    SCENARIO_DOC = 'docs/testing/DELIVERY-REGRESSION-SCENARIOS.md'
+
+    def test_runner_and_its_test_ship_with_the_kit(self):
+        self.assertIn(self.RUNNER, validate.REQUIRED)
+        self.assertIn(self.RUNNER_TEST, validate.REQUIRED)
+        for rel in (self.RUNNER, self.RUNNER_TEST):
+            self.assertTrue((ROOT / rel).is_file(), f'{rel} is missing')
+
+    def test_scenario_document_is_a_repository_only_requirement(self):
+        # It cannot be in REQUIRED: build_release.py refuses any path with a
+        # `docs` segment, so shipping it would fail the release self-check.
+        self.assertIn(self.SCENARIO_DOC, validate.REQUIRED_DOCS)
+        self.assertNotIn(self.SCENARIO_DOC, validate.REQUIRED)
+
+    @unittest.skipUnless((ROOT / 'docs').is_dir(), 'repository-only document is not shipped')
+    def test_scenario_document_is_structurally_complete(self):
+        self.assertEqual(validate.required_doc_errors(ROOT), [])
+
+    def test_missing_scenario_document_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'docs').mkdir()
+            errors = validate.required_doc_errors(root)
+        self.assertTrue(any(f'missing required document: {self.SCENARIO_DOC}' in e
+                            for e in errors), errors)
+
+    def test_document_without_a_required_section_is_reported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            target = root / self.SCENARIO_DOC
+            target.parent.mkdir(parents=True)
+            target.write_text('# Scenarios\n\n## 场景矩阵\n\nno other section\n', encoding='utf-8')
+            errors = validate.required_doc_errors(root)
+        self.assertTrue(any('is missing required section' in e for e in errors), errors)
+
+    def test_document_check_is_skipped_inside_a_release_package(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(validate.required_doc_errors(Path(tmp)), [])
+
+    def test_readme_and_acceptance_point_at_the_scenario_runner(self):
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        acceptance = (ROOT / 'AGENT-ORCHESTRATION-ACCEPTANCE.md').read_text(encoding='utf-8')
+        self.assertIn(self.RUNNER, readme)
+        self.assertIn(self.RUNNER, acceptance)
+        self.assertIn(self.SCENARIO_DOC, readme)
+
+
 if __name__ == '__main__':
     unittest.main()
