@@ -13,7 +13,13 @@
 ## 2. 包内容规范
 
 - 只含通用可复用产出；不得包含本仓库特有的演进决策、任务记录或个人环境信息。
-- 包内文件集合 == `scripts/validate_kit.py` 中的 `REQUIRED` 列表（数量与名称都一致）。该列表是分发内容的唯一来源，构建脚本直接解析它，不再维护第二份清单。
+- 包内文件集合 == `scripts/validate_kit.py` 中的 `REQUIRED` 列表 **+ 构建时生成的 `MANIFEST.json`**（数量与名称都一致，即 `len(REQUIRED) + 1` 个文件）。`REQUIRED` 是分发内容的唯一来源，构建脚本直接解析它，不再维护第二份清单；`MANIFEST.json` 是唯一不来自 `REQUIRED` 的成员。
+- **`MANIFEST.json`（机器可读清单）**：由 `scripts/check_drift.py` 生成，构建脚本导入该模块而不另写一份规则，因此分类只有一处实现。字段固定为：
+  - 顶层 `schema_version`（清单格式版本）、`suite`（套件名，取自 `VERSION.txt`）、`format_version`（套件格式版本，当前 `1.3`）、`files[]`；
+  - 条目 `path`、`category`、`sha256`、`size`（`sha256` 与 `size` 按包内实际字节计算，文本已按 LF 归一）；
+  - `category` 只允许四种上游分类：`editions/` 前缀 → `edition`，`templates/` 前缀 → `template`，`ORCHESTRATION-PROJECT.md` / `PLAN.md` / `DESIGN.md` → `project-profile`，其余 → `core`；
+  - 清单**不列出自身**（无法嵌入自己的哈希）、**不含时间戳**、条目按路径排序，因此同一仓库状态两次构建得到逐字节相同的清单。
+- **`check_drift.py` 的只读边界**：该脚本随包发布，供下游项目做漂移诊断。它只读取（`read_bytes` / `read_text`）、列目录，**从不创建、重命名、删除或写入项目根下的任何文件**；诊断只报告差异与建议，是否对齐由项目所有者决定。
 - 发布时 `ORCHESTRATION-PROJECT.md` 自动替换为待填模板 `templates/ORCHESTRATION-PROJECT.template.md`，即分发包总是随附 FILL_IN 模板，首次使用时填写。
 - 明确排除（不得出现在包内）：
   - `docs/`：本仓库自有章程与验收记录；
@@ -27,7 +33,7 @@
 
 自检内置在 `scripts/build_release.py`，随构建自动执行，任何一项失败即非零退出并逐条列出原因；**没有跳过自检的开关**。
 
-- a. 包内容文件集合 == `REQUIRED` 集合（数量与名称一致）。
+- a. 包内容文件集合 == `REQUIRED` + `MANIFEST.json`（数量与名称一致）；解压后 `MANIFEST.json` 必须能解析每条 `path`、`sha256` 与 `size` 与实际文件一致、`category` 只用合法分类，且清单列出的路径集合与 `REQUIRED` 完全一致。
 - b. 解压到临时目录后，`scripts/validate_kit.py` 退出码为 0。
 - c. 解压目录内 `scripts/validate_kit.py --project-ready` **预期失败**（退出码 1 且输出含 `FILL_IN`）。这是正确行为而非缺陷：发布的是待填模板；若它"通过"了反而要报错。
 - d. 解压目录内 `python -m unittest discover -s tests` 退出码为 0。
@@ -38,16 +44,32 @@
 
 自检失败时，脚本会**删除刚生成的、未通过自检的 zip**，并在失败信息中说明"已删除未通过自检的产物"（若删除失败则如实打印该产物路径），确保 `release/` 不会留下被误当发布物的半成品。
 
+### 3.1 CI 与本标准的覆盖分工
+
+`.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，于 `ubuntu-latest` 的两个 Python 版本（3.12 / 3.13）上执行同一套自检：`python scripts/build_release.py`。该步骤**失败即 job 失败**，没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
+
+- **两档都跑的理由**：自检 b、d 在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`，即真正检验"该 Python 版本拿到的包是否可用"；两档各证明一次，成本是本机数秒级重复，换来不设 `if:` 条件、不会出现某档静默跳过打包步骤。
+- **CI 证明什么**：包能构建，且内置自检 a–f 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档"这类回归。
+- **CI 不证明什么**：**不证明发布本身**。CI 不校验 `{YYYYMMDD}` 命名、不生成 GitHub Release、不写发布记录，也不替你判断"这一版是否该发"。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
+
 ## 4. 发布流程
 
 1. 在任务库登记发布任务（唯一 ID、单一目标、允许路径与验收）。
 2. 从最新本地主分支创建独立分支 / Worktree；不在共享工作区直接构建。
 3. 构建：运行 `python scripts/build_release.py` 生成 `release/agentorch-{YYYYMMDD}.zip`。
-4. 自检：确认脚本内置 a–f 全部通过并记录退出码；产物路径、字节数与校验和一并留证。
+4. 自检：确认脚本内置 a–f 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
 5. Master 独立审查（逐条对照本文件的自检清单与验收标准）。
 6. 合并到本地主分支；合并后重新运行验证并记录结果。
 7. 发布后清理本任务分支 / Worktree（独立记账，清理由此与"合并成功"分开记录）。
 
-## 5. 声明
+## 5. 版本变更（`VERSION.txt` 的 `Format version`）
+
+- **1.3（当前）** 相对 1.2：
+  - **资源锁的载体字段**：任务载体新增具名资源锁字段——通用任务包 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`）、`github` 登记块 `locked_resources` 与 `resource_lease_until`、`local` 任务库 `resources_json` 列。字段形状属载体契约，故格式版本升级；语义与冲突矩阵仍只在 `docs/design/RESOURCE-LOCKS.md`。
+  - **`MANIFEST.json` 与 `check_drift.py`**：包内新增机器可读清单（自检 a 的校验对象），分类与清单生成下移到 `scripts/check_drift.py` 并由构建脚本导入，同时随包提供下游只读漂移诊断。
+  - **CI 打包自检**：打包自检纳入 CI（见 3.1），并新增 `scripts/check_drift.py` 的 `py_compile` 语法检查；本文件与 README 的发布说明同步改为"包内容 == `REQUIRED` + `MANIFEST.json`"。
+- **1.2**：包内新增 `MANIFEST.json` 与 `scripts/check_drift.py`（本次 1.3 记录将其约束补齐为可执行的清单校验）。
+
+## 6. 声明
 
 以后建 release 就按本文件执行：命名、包内容、自检与流程全部以本文件为准；任何偏离都必须先更新本文件并说明理由。

@@ -34,4 +34,15 @@ jobs:
         run: python -m unittest discover -s tests
 
       - name: Syntax check
-        run: python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
+        run: python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py
+
+      # Release packaging self-check. No `continue-on-error`, no `|| true`: a
+      # packaging regression (missing file, broken link inside the package,
+      # manifest mismatch, forbidden path) must turn this job red, exactly as it
+      # would at release time. The zip is written to the runner's `release/`
+      # directory, which `.gitignore` already excludes; it is never committed or
+      # uploaded. Runs on every matrix entry (3.12 and 3.13) on purpose: the
+      # self-check executes the shipped test suite inside the extracted archive,
+      # so each supported version proves the artifact it would receive.
+      - name: Release self-check (build_release.py)
+        run: python scripts/build_release.py

@@ -45,8 +45,8 @@
 - [ ] 旧任务按 4.1 节的兼容策略处理：未回填完整矩阵的既有任务仍按自然语言清单逐条判定，且没有被宣称“已通过矩阵验收”。
 - [ ] G2 变更路径全部属于允许路径；没有未授权文件或夹带重构。
 - [ ] G3 分支基于最新主分支，合并预演无冲突。
-- [ ] G4 必需检查在当前 head SHA 全绿；`local` 为配置中的测试与静态检查，`github` 为 CI 工作流（`.github/workflows/ci.yml`：`pull_request`→`main`、`push`→`main`、`workflow_dispatch`；Python 3.12 / 3.13 矩阵；`permissions: contents: read`）。
-- [ ] `github`：G4 以**当前 head SHA** 的 CI 运行为主要证据，证据矩阵记录运行 URL 与 head SHA；可在 PR 的 Checks 区域或 `gh pr checks <PR 编号>` 复核。本地三条命令是补充证据，不能替代 CI；CI 绿灯同样不能折算为 G1 的逐条通过。
+- [ ] G4 必需检查在当前 head SHA 全绿；`local` 为配置中的测试与静态检查，`github` 为 CI 工作流（`.github/workflows/ci.yml`：`pull_request`→`main`、`push`→`main`、`workflow_dispatch`；Python 3.12 / 3.13 矩阵；`permissions: contents: read`）。`github` 底座下 CI 含打包自检：两个 Python 版本都执行 `python scripts/build_release.py`，失败即 job 失败（无 `continue-on-error` / `|| true`），因此打包回归在 PR 上即可暴露；`py_compile` 同时覆盖 `scripts/check_drift.py`。
+- [ ] `github`：G4 以**当前 head SHA** 的 CI 运行为主要证据，证据矩阵记录运行 URL 与 head SHA；可在 PR 的 Checks 区域或 `gh pr checks <PR 编号>` 复核。本地四条命令（`validate_kit`、`unittest`、`py_compile`、`build_release`）是补充证据，不能替代 CI；CI 绿灯同样不能折算为 G1 的逐条通过。
 
 - [ ] G5 命令、输出、退出码与 head SHA 一致；失败测试未被删除、跳过或弱化。
 - [ ] G6 新依赖、迁移、权限 / 安全变化与未实现行为已登记；需要决策时已进入 `NEEDS_HUMAN_DECISION`。
