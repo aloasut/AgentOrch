@@ -222,7 +222,7 @@ def init_plan(root):
     target=root/PLAN_DOC
     if target.exists():
         print(f'PLAN.md already present, kept unchanged: {target}')
-        print('Next: register tasks from the root PLAN.md; templates/PLAN.md is only the initial copy.')
+        print('Next: judge task direction from the design goals in the root PLAN.md; templates/PLAN.md is only the initial copy.')
         return 'kept'
     template=root/PLAN_TEMPLATE
     if not template.is_file():
@@ -231,7 +231,7 @@ def init_plan(root):
         return 'template-missing'
     target.write_bytes(template.read_bytes())
     print(f'Created PLAN.md from {template}')
-    print('下一步：填写 PLAN.md 的目标、范围与任务块')
+    print('下一步：填写 PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）')
     return 'created'
 
 def init(root):

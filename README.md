@@ -102,7 +102,7 @@ Review-fix retry cap: 3 (edit key "retry_cap" in <项目根>\.orchestration\conf
 Local task registry only: the edition is read from <项目根>\ORCHESTRATION-PROJECT.md, not from this config.
 Back up .orchestration/ with your project backups.
 Created PLAN.md from <项目根>\templates\PLAN.md
-下一步：填写 PLAN.md 的目标、范围与任务块
+下一步：填写 PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）
 
 $ python scripts/orchestrator.py config show
 Config file: <项目根>\.orchestration\config.json

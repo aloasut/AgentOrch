@@ -538,7 +538,7 @@ class PlanDocumentInitTests(unittest.TestCase):
         self.assertEqual((self.root/'PLAN.md').read_bytes(),data)
         self.assertEqual((self.root/'templates'/'PLAN.md').read_bytes(),data)
         self.assertIn('Created PLAN.md',out)
-        self.assertIn('下一步：填写 PLAN.md',out)
+        self.assertIn('下一步：填写 PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）',out)
 
     def test_existing_plan_is_kept_and_repeated_init_is_idempotent(self):
         self.write_template(b'# Implementation Plan\n\ntemplate\n')
@@ -547,6 +547,7 @@ class PlanDocumentInitTests(unittest.TestCase):
         config=self.root/'.orchestration'/'config.json'
         rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
         self.assertIn('kept unchanged',out)
+        self.assertIn('judge task direction from the design goals',out)
         self.assertNotIn('Created PLAN.md',out)
         first=(self.root/'PLAN.md').read_bytes(), config.read_bytes()
         rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
