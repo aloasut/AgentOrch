@@ -127,7 +127,7 @@ TASK-0001	DISPATCHED	建立项目骨架
   retries: 0
 
 $ python scripts/validate_kit.py
-Kit validation passed (37 required files checked; editions local/github share 7 files, github adds 3 templates).
+Kit validation passed (38 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
 Ran 63 tests in 7.936s
@@ -203,7 +203,7 @@ OK
 │   ├── validate_kit.py                # 结构 / 概念 / 链接自检，同时是发布清单
 │   └── build_release.py               # 发布构建（仅仓库内，不随包发布）
 ├── tests/                             # orchestrator 的单元测试
-├── .github/workflows/ci.yml           # PR / main 推送时跑三条登记检查（github 底座 G4 证据）
+├── .github/workflows/ci.yml           # PR / main 推送时跑三条登记检查（github 底座 G4 证据；仅本仓库，不随包发布）
 ├── release/README.md                  # 发布标准与发布清单（产物不入库）
 ├── docs/                              # 本仓库自己的章程与决策记录（不随包发布）
 └── .local/                            # 本机私有文件（除说明文件外不入库）
@@ -312,7 +312,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
 
 ### 7.1 CI（`github` 底座）
 
-仓库自带一条 GitHub Actions 工作流 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，把上面三条登记检查放到平台上执行：
+仓库自带一条 GitHub Actions 工作流 `.github/workflows/ci.yml`（仅本仓库使用，不随发行包发布），把上面三条登记检查放到平台上执行：
 
 - **触发**：`pull_request` 目标 `main`、`push` 到 `main`、以及手动 `workflow_dispatch`。
 - **环境**：`ubuntu-latest`，Python 版本矩阵 `3.12` / `3.13`（两个版本都跑，任一失败即整体失败）。
