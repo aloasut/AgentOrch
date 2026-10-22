@@ -15,9 +15,10 @@
 
 **底座判定规则**：
 
-- 从 `ORCHESTRATION-PROJECT.md` 的 `edition` 键读取取值，允许值只有 `local`、`github`。
-- 文件缺失、`edition` 键缺失、值为空或不在允许集合内：输出明确错误并**停止**，不得猜测、不得按默认值继续、不得自行切换底座。错误信息必须包含缺失项、实际读到的值和建议修复位置。
+- 从 `ORCHESTRATION-PROJECT.md` 的 `edition` 键读取取值，允许值只有 `local`、`github`；该键是底座选择的唯一权威来源，`.orchestration/config.json` 只描述本地 CLI 运行参数，即使残留 `edition` 键也不参与路由。
+- 文件缺失、`edition` 键缺失、值为空或不在允许集合内（含类型错误，如 `1`、`true`）：输出明确错误并**停止**，不得猜测、不得按默认值继续、不得自行切换底座。错误信息必须包含缺失项、实际读到的值和建议修复位置。
 - 读取成功后，后续所有路由、命令和证据路径都以该底座为准。
+- 本地 CLI 只服务 `local` 底座：声明 `github` 时，`task add` / `task ready` / `task dispatch` / `task status` / `task workspace` / `task amend` / `task unlock` 会拒绝执行并给出 Issue / PR 指引；`init`、`backup`、`config show`、`task list`、`task show` 仍可用。完整矩阵见 `README.md` 6.2。
 
 ### 第二步：恢复状态
 

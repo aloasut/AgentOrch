@@ -1,5 +1,6 @@
 import contextlib, io, json, sqlite3, tempfile, unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 import importlib.util
 
@@ -9,8 +10,15 @@ orch=importlib.util.module_from_spec(spec); spec.loader.exec_module(orch)
 
 class LocalOrchestratorTests(unittest.TestCase):
     def setUp(self):
-        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name); orch.init(self.root)
+        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
+        # The edition is read from ORCHESTRATION-PROJECT.md only, and is required:
+        # every local-CLI test root therefore declares it explicitly.
+        self.write_edition('local')
+        orch.init(self.root)
     def tearDown(self): self.tmp.cleanup()
+    def write_edition(self, value, key='edition'):
+        (self.root/'ORCHESTRATION-PROJECT.md').write_text(
+            f'# Project\n\n## 运行配置\n\n- `{key}`：`{value}`\n',encoding='utf-8')
     def add(self,tid,paths,depends=None):
         class A: pass
         a=A(); a.id=tid; a.title=tid; a.description=''; a.paths=paths; a.depends=depends or []; a.acceptance=['works']
@@ -307,53 +315,202 @@ class LocalOrchestratorTests(unittest.TestCase):
         cfg=self.root/'.orchestration'/'config.json'
         cfg.unlink()
         conf=orch.read_config(self.root)
-        self.assertEqual((conf['retry_cap'],conf['edition'],conf['local_dir']),(3,'local','.local'))
-        for key in ('retry_cap','edition','local_dir'):
+        self.assertEqual((conf['retry_cap'],conf['local_dir']),(3,'.local'))
+        for key in ('retry_cap','local_dir'):
             self.assertEqual(conf['sources'][key],'default',key)
-        # A root that was never initialized has no config file either.
+        # The edition never comes from config.json: it is the project declaration.
+        self.assertEqual(conf['edition'],'local')
+        self.assertEqual(conf['sources']['edition'],'ORCHESTRATION-PROJECT.md')
+        # A root with no project file has no edition at all; it must not default to local.
         with tempfile.TemporaryDirectory() as other:
-            conf=orch.read_config(Path(other))
-            self.assertEqual(conf['retry_cap'],3)
-            self.assertEqual(conf['edition'],'local')
-            self.assertEqual(conf['local_dir'],'.local')
-            self.assertEqual(conf['sources']['retry_cap'],'default')
-        # init writes the same defaults into config.json; overrides remain opt-in.
+            with self.assertRaises(orch.EditionError) as cm: orch.read_config(Path(other))
+            self.assertIn('ORCHESTRATION-PROJECT.md',str(cm.exception))
+        # init writes the runtime defaults only; the edition stays out of this file.
         orch.init(self.root)
         self.assertTrue(cfg.exists())
+        self.assertEqual(json.loads(cfg.read_text(encoding='utf-8')),{'retry_cap':3,'local_dir':'.local'})
         conf=orch.read_config(self.root)
         self.assertEqual((conf['retry_cap'],conf['edition'],conf['local_dir']),(3,'local','.local'))
 
-    def test_config_reads_overrides_from_config_json(self):
+    def test_runtime_keys_come_from_config_json_but_edition_does_not(self):
         (self.root/'.orchestration'/'config.json').write_text(
             json.dumps({'retry_cap':1,'edition':'github','local_dir':'priv'}),encoding='utf-8')
         conf=orch.read_config(self.root)
         self.assertEqual(conf['retry_cap'],1)
-        self.assertEqual(conf['edition'],'github')
         self.assertEqual(conf['local_dir'],'priv')
-        for key in ('retry_cap','edition','local_dir'):
+        for key in ('retry_cap','local_dir'):
             self.assertEqual(conf['sources'][key],'config.json',key)
-        self.assertEqual(orch.read_retry_cap(self.root),1)
-        # Illegal values fall back to their own default, not to the whole file.
-        (self.root/'.orchestration'/'config.json').write_text(
-            json.dumps({'edition':'cloud','local_dir':''}),encoding='utf-8')
-        conf=orch.read_config(self.root)
+        # A leftover `edition` key in config.json is a record, not a routing input:
+        # the project declaration wins and no second definition is honoured.
         self.assertEqual(conf['edition'],'local')
-        self.assertEqual(conf['local_dir'],'.local')
-        self.assertEqual(conf['sources']['edition'],'default')
+        self.assertEqual(conf['sources']['edition'],'ORCHESTRATION-PROJECT.md')
+        self.assertEqual(orch.read_retry_cap(self.root),1)
+        # Illegal runtime values fall back to their own default, not to the whole file.
+        (self.root/'.orchestration'/'config.json').write_text(
+            json.dumps({'retry_cap':0,'local_dir':''}),encoding='utf-8')
+        conf=orch.read_config(self.root)
+        self.assertEqual((conf['retry_cap'],conf['local_dir']),(3,'.local'))
+        self.assertEqual(conf['sources']['retry_cap'],'default')
 
     def test_config_show_runs(self):
         out=io.StringIO()
-        with contextlib.redirect_stdout(out): orch.config_show(self.root)
+        with contextlib.redirect_stdout(out): rc=orch.config_show(self.root)
         text=out.getvalue()
-        for key in ('retry_cap','edition','local_dir','config.json'):
+        self.assertEqual(rc,0)
+        for key in ('retry_cap','local_dir','edition','config.json','ORCHESTRATION-PROJECT.md'):
             self.assertIn(key,text)
         (self.root/'.orchestration'/'config.json').write_text(
             json.dumps({'retry_cap':2,'edition':'github','local_dir':'priv'}),encoding='utf-8')
         out=io.StringIO()
-        with contextlib.redirect_stdout(out): orch.config_show(self.root)
+        with contextlib.redirect_stdout(out): rc=orch.config_show(self.root)
         text=out.getvalue()
+        self.assertEqual(rc,0)
         self.assertIn('retry_cap  = 2',text)
-        self.assertIn('github',text)
+        self.assertIn('local_dir  = priv',text)
         self.assertIn('source: config.json',text)
+        # The printed edition is the project declaration, not the legacy config.json key.
+        self.assertIn('edition    = local',text)
+        self.assertIn('source: ORCHESTRATION-PROJECT.md',text)
+        self.assertIn('legacy key is ignored',text)
+
+class ProjectEditionTests(unittest.TestCase):
+    """The project declaration is the single edition authority and fails closed."""
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
+    def tearDown(self): self.tmp.cleanup()
+    def project(self, body):
+        (self.root/'ORCHESTRATION-PROJECT.md').write_text(f'# Project\n\n## 运行配置\n\n{body}\n',encoding='utf-8')
+    def config(self, payload):
+        target=self.root/'.orchestration'; target.mkdir(exist_ok=True)
+        (target/'config.json').write_text(payload,encoding='utf-8')
+
+    def test_project_file_is_the_only_edition_authority(self):
+        self.project('- `edition`：`local`')
+        self.config(json.dumps({'edition':'github','retry_cap':2}))
+        conf=orch.read_config(self.root)
+        self.assertEqual(conf['edition'],'local')
+        self.assertEqual(conf['sources']['edition'],'ORCHESTRATION-PROJECT.md')
+        self.assertEqual(conf['retry_cap'],2)
+        self.project('- `edition`：`github`')
+        self.assertEqual(orch.read_config(self.root)['edition'],'github')
+
+    def test_missing_project_file_blocks(self):
+        with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
+        msg=str(cm.exception)
+        self.assertIn('ORCHESTRATION-PROJECT.md',msg)
+        self.assertIn('file not found',msg)
+        self.assertIn(str(self.root),msg)
+
+    def test_missing_edition_key_blocks(self):
+        self.project('- `local_dir`：`.local`')
+        with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
+        msg=str(cm.exception)
+        self.assertIn('missing required key `edition`',msg)
+        self.assertIn(str(self.root/'ORCHESTRATION-PROJECT.md'),msg)
+
+    def test_illegal_edition_strings_block(self):
+        for bad in ('GITHUB','cloud','local edition','local|github'):
+            with self.subTest(value=bad):
+                self.project(f'- `edition`：`{bad}`')
+                with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
+                msg=str(cm.exception)
+                self.assertIn(bad,msg)
+                self.assertIn('allowed values are local, github',msg)
+                self.assertIn(str(self.root/'ORCHESTRATION-PROJECT.md'),msg)
+
+    def test_wrong_type_edition_blocks(self):
+        for bad in ('1','true','"local"','[local]'):
+            with self.subTest(value=bad):
+                self.project(f'- `edition`：{bad}')
+                with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
+                msg=str(cm.exception)
+                self.assertIn(bad,msg)
+                self.assertIn('unsupported value',msg)
+
+    def test_empty_edition_value_blocks(self):
+        self.project('- `edition`：   ')
+        with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
+        self.assertIn('is empty',str(cm.exception))
+
+    def test_duplicate_edition_declarations_block(self):
+        self.project('- `edition`：`local`\n- `edition`：`github`')
+        with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
+        self.assertIn('declared 2 times',str(cm.exception))
+
+    def test_unreadable_project_file_blocks(self):
+        (self.root/'ORCHESTRATION-PROJECT.md').write_bytes(b'- `edition`: \xff\xfe local\n')
+        with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
+        self.assertIn('cannot read',str(cm.exception))
+
+    def test_github_declaration_refuses_task_add_with_guidance(self):
+        self.project('- `edition`：`github`')
+        orch.init(self.root)
+        a=SimpleNamespace(id='TASK-0501',title='t',description='',paths=['a.py'],depends=[],acceptance=['works'])
+        with self.assertRaises(orch.EditionError) as cm: orch.task_add(self.root,a)
+        msg=str(cm.exception)
+        self.assertIn("'github'",msg)
+        self.assertIn('read-only archive',msg)
+        self.assertIn('ISSUE-TEMPLATE.md',msg)
+        self.assertIn('START-EXECUTION.md',msg)
+        con=orch.connect(self.root)
+        try: self.assertEqual(con.execute('SELECT COUNT(*) FROM tasks').fetchone()[0],0)
+        finally: con.close()
+
+    def test_every_scheduling_command_is_refused_under_github(self):
+        self.project('- `edition`：`local`'); orch.init(self.root)
+        a=SimpleNamespace(id='TASK-0502',title='t',description='',paths=['a.py'],depends=[],acceptance=['works'])
+        orch.task_add(self.root,a); orch.task_ready(self.root,'TASK-0502'); orch.task_dispatch(self.root,'TASK-0502')
+        self.project('- `edition`：`github`')
+        cases=[
+            ('task ready',lambda: orch.task_ready(self.root,'TASK-0502')),
+            ('task dispatch',lambda: orch.task_dispatch(self.root,'TASK-0502')),
+            ('task status',lambda: orch.task_status(self.root,SimpleNamespace(id='TASK-0502',status='IN_PROGRESS',head_sha=None,merge_sha=None,note=''))),
+            ('task workspace',lambda: orch.set_workspace(self.root,SimpleNamespace(id='TASK-0502',head_sha='',branch='',worktree='',note=''))),
+            ('task amend',lambda: orch.task_amend(self.root,SimpleNamespace(id='TASK-0502',merge_sha='a'*40,note='x'))),
+            ('task unlock',lambda: orch.unlock(self.root,SimpleNamespace(id='TASK-0502',reason='x',force=False))),
+        ]
+        for label,call in cases:
+            with self.subTest(command=label):
+                with self.assertRaises(orch.EditionError) as cm: call()
+                self.assertIn(f'`{label}`',str(cm.exception))
+        # Refusals happen before any write: the archived registry is unchanged.
+        con=orch.connect(self.root)
+        try:
+            self.assertEqual(con.execute('SELECT status FROM tasks WHERE id=?',('TASK-0502',)).fetchone()['status'],'DISPATCHED')
+            self.assertEqual(con.execute('SELECT COUNT(*) FROM locks WHERE task_id=?',('TASK-0502',)).fetchone()[0],1)
+        finally: con.close()
+
+    def test_readonly_and_maintenance_commands_stay_available_under_github(self):
+        self.project('- `edition`：`local`'); orch.init(self.root)
+        a=SimpleNamespace(id='TASK-0503',title='archived',description='',paths=['a.py'],depends=[],acceptance=['works'])
+        orch.task_add(self.root,a)
+        self.project('- `edition`：`github`')
+        out=io.StringIO()
+        with contextlib.redirect_stdout(out): rc=orch.config_show(self.root)
+        self.assertEqual(rc,0)
+        text=out.getvalue()
+        self.assertIn('edition    = github',text)
+        self.assertIn('source: ORCHESTRATION-PROJECT.md',text)
+        with contextlib.redirect_stdout(io.StringIO()): orch.task_list(self.root,SimpleNamespace(active_only=False))
+        with contextlib.redirect_stdout(io.StringIO()): orch.task_show(self.root,'TASK-0503')
+        with contextlib.redirect_stdout(io.StringIO()): orch.backup(self.root)
+        self.assertTrue(list((self.root/'.orchestration'/'backups').glob('*.sqlite3')))
+
+    def test_config_show_reports_invalid_edition_and_returns_nonzero(self):
+        self.project('- `edition`：`cloud`')
+        out,err=io.StringIO(),io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err): rc=orch.config_show(self.root)
+        self.assertEqual(rc,1)
+        self.assertIn('(invalid)',out.getvalue())
+        self.assertIn('retry_cap',out.getvalue())
+        self.assertIn('cloud',err.getvalue())
+        self.assertIn('ORCHESTRATION-PROJECT.md',err.getvalue())
+
+    def test_retry_cap_is_never_blocked_by_an_edition_problem(self):
+        self.project('- `edition`：`cloud`')
+        self.config('{ not json')
+        self.assertEqual(orch.read_retry_cap(self.root),3)
+        self.config(json.dumps({'retry_cap':5,'edition':'local'}))
+        self.assertEqual(orch.read_retry_cap(self.root),5)
 
 if __name__=='__main__': unittest.main()

@@ -41,34 +41,90 @@ def connect(root):
 # the historical hard-coded behaviour (3 rounds) is preserved for existing roots.
 RETRY_CAP_DEFAULT = 3
 EDITIONS = ('local','github')
-CONFIG_DEFAULTS = {'retry_cap': RETRY_CAP_DEFAULT, 'edition': 'local', 'local_dir': '.local'}
+# `.orchestration/config.json` holds local CLI runtime parameters only. It never
+# selects the edition: that key lives in <root>/ORCHESTRATION-PROJECT.md, which is
+# the single authority (see read_project_edition). Keeping the edition out of this
+# file removes the second, silently-defaulting definition that used to exist.
+RUNTIME_DEFAULTS = {'retry_cap': RETRY_CAP_DEFAULT, 'local_dir': '.local'}
+PROJECT_CONFIG = 'ORCHESTRATION-PROJECT.md'
+EDITION_LINE = re.compile(r'^\s*[-*]\s*`?edition`?\s*[:：]\s*(?P<value>.*)$', re.M)
+
+class EditionError(RuntimeError):
+    """The authoritative project edition is missing, unreadable or illegal."""
+
 def config_path(root): return root/'.orchestration'/'config.json'
+def project_config_path(root): return root/PROJECT_CONFIG
 
-def read_config(root):
-    """Return the effective runtime configuration plus per-key provenance.
+def _runtime_config(root):
+    """retry_cap / local_dir from config.json, with the historical silent fallback.
 
-    Keys and defaults: retry_cap (int >= 1, default 3), edition ('local'|'github',
-    default 'local'), local_dir (non-empty string, default '.local'). Any illegal
-    or missing value silently falls back to its default. The returned dict carries
-    a "sources" mapping so callers can tell config.json values from defaults.
+    Unchanged on purpose: a missing file, a missing key, a wrong type, an
+    out-of-range value or malformed JSON yields the built-in default so existing
+    local roots keep working. The edition is deliberately not read here, so an
+    edition problem can never change or block the retry budget.
     """
-    cfg=dict(CONFIG_DEFAULTS)
-    sources={key:'default' for key in CONFIG_DEFAULTS}
+    cfg=dict(RUNTIME_DEFAULTS)
+    sources={key:'default' for key in RUNTIME_DEFAULTS}
+    data=None; state='missing'
     try:
         data=json.loads(config_path(root).read_text(encoding='utf-8'))
+        state='invalid' if not isinstance(data,dict) else 'ok'
+    except FileNotFoundError:
+        pass
     except Exception:
-        data=None
-    if isinstance(data,dict):
+        state='invalid'
+    if state=='ok':
         value=data.get('retry_cap')
         if not isinstance(value,bool) and isinstance(value,int) and value>=1:
             cfg['retry_cap']=value; sources['retry_cap']='config.json'
-        value=data.get('edition')
-        if isinstance(value,str) and value in EDITIONS:
-            cfg['edition']=value; sources['edition']='config.json'
         value=data.get('local_dir')
         if isinstance(value,str) and value.strip():
             cfg['local_dir']=value.strip(); sources['local_dir']='config.json'
     cfg['sources']=sources
+    cfg['config_state']=state
+    cfg['recorded_edition']=data.get('edition') if state=='ok' else None
+    return cfg
+
+def read_project_edition(root):
+    """Return the edition declared by <root>/ORCHESTRATION-PROJECT.md.
+
+    This key is the only authority for edition selection. A missing file, a
+    missing or duplicated key, an empty value, a wrong type or an unsupported
+    value raises EditionError naming the actual content and the file to fix.
+    Nothing falls back to 'local'.
+    """
+    path=project_config_path(root)
+    try:
+        text=path.read_text(encoding='utf-8')
+    except FileNotFoundError:
+        raise EditionError(f'{PROJECT_CONFIG}: file not found at {path}; add the key `edition` with value local or github') from None
+    except (OSError,UnicodeDecodeError) as exc:
+        raise EditionError(f'{PROJECT_CONFIG}: cannot read {path} ({exc}); repair the file so its `edition` key is readable') from None
+    matches=list(EDITION_LINE.finditer(text))
+    if not matches:
+        raise EditionError(f'{PROJECT_CONFIG}: missing required key `edition` in {path}; add one line "- `edition`: local" or "- `edition`: github"')
+    if len(matches)>1:
+        where=', '.join(str(text.count('\n',0,m.start())+1) for m in matches)
+        raise EditionError(f'{PROJECT_CONFIG}: key `edition` is declared {len(matches)} times (lines {where}) in {path}; keep exactly one declaration')
+    raw=matches[0].group('value').strip()
+    value=raw.strip('`').strip()
+    if not value:
+        raise EditionError(f'{PROJECT_CONFIG}: key `edition` is empty in {path}; allowed values are local, github')
+    if value not in EDITIONS:
+        raise EditionError(f"{PROJECT_CONFIG}: key `edition` has unsupported value {raw!r} in {path}; "
+                           f"allowed values are {', '.join(EDITIONS)} (write the value alone, with no extra text)")
+    return value
+
+def read_config(root):
+    """Return the effective runtime configuration, its provenance and the edition.
+
+    Runtime keys keep their historical silent fallback. The edition is read from
+    ORCHESTRATION-PROJECT.md and raises EditionError when missing or illegal, so
+    routing can never silently run on the wrong task carrier.
+    """
+    cfg=_runtime_config(root)
+    cfg['edition']=read_project_edition(root)
+    cfg['sources']['edition']=PROJECT_CONFIG
     return cfg
 
 def read_retry_cap(root):
@@ -76,20 +132,61 @@ def read_retry_cap(root):
 
     Precedence: config.json key "retry_cap" wins when present and valid;
     anything else (missing file/key, non-integer, bool, < 1, malformed JSON)
-    silently yields RETRY_CAP_DEFAULT. Delegates to read_config so both
-    entry points can never disagree.
+    silently yields RETRY_CAP_DEFAULT. Reads the same parser as read_config, so
+    the two entry points can never disagree about the cap, while an edition
+    problem cannot block this value.
     """
-    return read_config(root)['retry_cap']
+    return _runtime_config(root)['retry_cap']
+
+def require_local_scheduler(root, action):
+    """Refuse to write local task state unless the project declares the local edition.
+
+    The CLI implements the local edition only. Under a github (or broken) edition
+    it must fail loudly and name the next step instead of quietly behaving like
+    local: github task state lives in Issues and PRs, and writing the SQLite
+    registry would create a second, conflicting source of truth.
+    """
+    edition=read_project_edition(root)
+    if edition=='local': return
+    raise EditionError(
+        f'edition is {edition!r} ({project_config_path(root)}); this CLI cannot run `{action}` for the {edition} edition: '
+        f'it writes the local SQLite task registry, which is a read-only archive under {edition}. '
+        'Next: create or update the task as a GitHub Issue using editions/github/ISSUE-TEMPLATE.md, record the '
+        'ORCH-TASK-REGISTRY block before starting, and drive the PR per editions/github/START-EXECUTION.md. '
+        'init, backup, config show, task list and task show stay available.'
+    )
 
 def config_show(root):
-    """Print the effective configuration, where each value came from, and the file."""
-    cfg=read_config(root); path=config_path(root); exists=path.exists()
+    """Print the effective configuration, where each value came from, and the edition.
+
+    Returns 0 when the project edition is legal, 1 when it is missing or illegal.
+    The edition is reported from ORCHESTRATION-PROJECT.md only; a leftover
+    `edition` key in config.json is shown as ignored, never applied.
+    """
+    cfg=_runtime_config(root); path=config_path(root); exists=path.exists()
+    edition=None; error=None
+    try: edition=read_project_edition(root)
+    except EditionError as exc: error=exc
     print(f'Config file: {path}' + ('' if exists else ' (not found; using built-in defaults)'))
-    for key in ('retry_cap','edition','local_dir'):
-        print(f'  {key:<10} = {cfg[key]!s:<10} (source: {cfg["sources"][key]})')
-    if not exists:
-        print('No config.json present; every value above is a default.')
-    print('Edit .orchestration/config.json to override; invalid values fall back to defaults.')
+    rows=(('retry_cap',cfg['retry_cap'],cfg['sources']['retry_cap']),
+          ('local_dir',cfg['local_dir'],cfg['sources']['local_dir']),
+          ('edition',edition or '(invalid)',PROJECT_CONFIG))
+    for key,value,source in rows:
+        print(f'  {key:<10} = {value!s:<10} (source: {source})')
+    print(f'Edition is selected only by `edition` in {project_config_path(root)}; '
+          f'{path.name} holds local CLI runtime parameters (retry_cap, local_dir) and never selects an edition.')
+    if cfg['config_state']=='invalid':
+        print(f'Note: {path} is not a readable JSON object; retry_cap and local_dir fall back to the built-in defaults.')
+    if cfg['recorded_edition'] is not None:
+        print(f'Note: {path} also records edition = {cfg["recorded_edition"]!r}; that legacy key is ignored.')
+    print('Edit .orchestration/config.json to change retry_cap or local_dir; invalid values there fall back to defaults.')
+    if error:
+        print(f'ERROR: {error}',file=sys.stderr)
+        return 1
+    if edition!='local':
+        print(f'Scheduling commands (task add/ready/dispatch/status/workspace/amend/unlock) are refused under the '
+              f'{edition} edition; this CLI maintains the local task registry only (matrix: README.md 6.2).')
+    return 0
 
 def safe_rollback(con):
     """Roll back only when a transaction is actually open; never mask the real error.
@@ -113,7 +210,7 @@ def init(root):
     (d/'backups').mkdir(exist_ok=True)
     cfg=config_path(root)
     if not cfg.exists():
-        cfg.write_text(json.dumps(CONFIG_DEFAULTS)+'\n',encoding='utf-8')
+        cfg.write_text(json.dumps(RUNTIME_DEFAULTS)+'\n',encoding='utf-8')
     con=sqlite3.connect(db_path(root))
     con.executescript('''
     PRAGMA journal_mode=WAL;
@@ -146,7 +243,8 @@ def init(root):
             with gi.open('a',encoding='utf-8') as f: f.write('\n# Agent-Orchestration machine-local state\n.orchestration/\n')
     print(f'Initialized local task registry: {db_path(root)}')
     print(f'Review-fix retry cap: {read_retry_cap(root)} (edit key "retry_cap" in {cfg} to change it)')
-    print('No remote platform is used. Back up .orchestration/ with your project backups.')
+    print(f'Local task registry only: the edition is read from {project_config_path(root)}, not from this config.')
+    print('Back up .orchestration/ with your project backups.')
 
 def normalize_path(raw):
     s=raw.replace('\\','/').strip()
@@ -165,6 +263,7 @@ def get_task(con, task_id):
     return row
 
 def task_add(root, args):
+    require_local_scheduler(root,'task add')
     if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{1,63}',args.id): raise ValueError('task ID must be 2-64 chars: letters, digits, dot, underscore, hyphen')
     paths=sorted(set(normalize_path(p) for p in args.paths))
     if not paths: raise ValueError('at least one allowed path is required')
@@ -222,6 +321,7 @@ def dependency_check(con, row):
         if d['status']!='VERIFIED': raise RuntimeError(f'dependency {dep} is {d["status"]}, expected VERIFIED')
 
 def task_ready(root, task_id):
+    require_local_scheduler(root,'task ready')
     con=connect(root)
     try:
         con.execute('BEGIN IMMEDIATE'); r=get_task(con,task_id)
@@ -242,6 +342,7 @@ def task_ready(root, task_id):
     print(f'{task_id}: READY')
 
 def task_dispatch(root, task_id):
+    require_local_scheduler(root,'task dispatch')
     con=connect(root)
     try:
         con.execute('BEGIN IMMEDIATE'); r=get_task(con,task_id)
@@ -268,6 +369,7 @@ def task_dispatch(root, task_id):
     print('Now pass the self-contained task packet to a real Execution Agent. This command does not launch agents.')
 
 def set_workspace(root, args):
+    require_local_scheduler(root,'task workspace')
     con=connect(root)
     try:
         con.execute('BEGIN IMMEDIATE'); r=get_task(con,args.id)
@@ -290,6 +392,7 @@ def set_workspace(root, args):
     print(f'{args.id}: workspace updated')
 
 def task_status(root, args):
+    require_local_scheduler(root,'task status')
     dest=args.status.upper()
     if dest not in TRANSITIONS: raise ValueError(f'unknown status: {dest}')
     con=connect(root)
@@ -349,6 +452,7 @@ def task_amend(root, args):
     full 40-hex SHA and a --note reason, and records a RECORD_AMENDED event with
     the old/new values. No other command mutates merged_sha outside MERGED set-up.
     """
+    require_local_scheduler(root,'task amend')
     sha=(args.merge_sha or '').strip()
     if not re.fullmatch(r'[0-9a-fA-F]{40}', sha):
         raise RuntimeError('amend requires a full 40-character hex --merge-sha')
@@ -370,6 +474,7 @@ def task_amend(root, args):
     print(f'{args.id}: merge SHA amended {old or "(unset)"} -> {new}')
 
 def unlock(root, args):
+    require_local_scheduler(root,'task unlock')
     con=connect(root)
     try:
         con.execute('BEGIN IMMEDIATE'); r=get_task(con,args.id)
@@ -398,7 +503,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',default='.',help='project root (default: current directory)')
     sub=parser.add_subparsers(dest='cmd',required=True)
-    sub.add_parser('init',help='initialize local task database and .orchestration/config.json (retry_cap, edition, local_dir)')
+    sub.add_parser('init',help='initialize the local task database and .orchestration/config.json (retry_cap, local_dir)')
     sub.add_parser('backup',help='create a consistent SQLite backup')
     cf=sub.add_parser('config',help='inspect runtime configuration'); cs=cf.add_subparsers(dest='configcmd',required=True)
     cs.add_parser('show',help='print effective config values and their source')
@@ -416,7 +521,7 @@ def main():
     try:
         if args.cmd=='init': init(root)
         elif args.cmd=='backup': backup(root)
-        elif args.cmd=='config': config_show(root)
+        elif args.cmd=='config': return config_show(root)
         elif args.taskcmd=='add': task_add(root,args)
         elif args.taskcmd=='list': task_list(root,args)
         elif args.taskcmd=='show': task_show(root,args.id)

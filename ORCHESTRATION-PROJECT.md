@@ -34,11 +34,21 @@
 
 ## 运行配置
 
-生效值由 `.orchestration/config.json` 提供，`python scripts/orchestrator.py config show` 可查看每个键的生效值与来源；文件缺失或值非法时回落到内置缺省。
+本文件的 `edition` 键是底座选择的**唯一权威来源**；`.orchestration/config.json` 只描述本地 CLI 运行参数（`retry_cap`、`local_dir`），不参与底座选择，也不存在“缺省底座”。
 
-- `edition`：`local`（当前）| `github`（保留的托管平台形态；当前实现只支持 `local`）。
+- `edition`：`github`
+- 本地 CLI 边界：`scripts/orchestrator.py` 只维护 `local` 任务库。声明 `github` 时，`task add` / `task ready` / `task dispatch` / `task status` / `task workspace` / `task amend` / `task unlock` 会拒绝执行并给出下一步指引；`init`、`backup`、`config show`、`task list`、`task show` 仍可用。`edition` 缺失、为空、非法字符串、类型错误或文件不可读时同样拒绝调度，并报出实际值与修复位置（本文件 + 键名）。完整矩阵见 `README.md` 6.2。
 - 并发策略：**按机器余量动态决定，不设固定上限**。派发前观察 CPU / 内存 / 磁盘 / 测试资源争用，有余量即可并行；同一 worktree 同一时刻只允许一个测试进程。把「本机实测可承载并发」作为参考记录，而不是规则常量。
 - 本地私有目录：`.local/`（`.env`、机器信息、发布扫描规则），永不入库、永不打包。
+
+## 底座切换记录
+
+- 2026-10-22：`local` → `github`（一次性、单向；切换后只写 Issue / PR，不双写）。
+  - 切换点：`main` @ `60252f2805cfd9a7f04e99732711467a79c2ac3f`。
+  - 决定与执行：项目所有者在 Issue #4 决定；Master 执行切换，具体改动由 Issue #4 的任务分支 `task/4-edition-authority` 的 PR 落地。
+  - 本地任务库归档：`.orchestration/state.sqlite3` 转为**只读归档**，不再写入（T-701…T-707 共 7 个任务全部 `VERIFIED`，无活动锁）；切换点之后新建或推进的任务状态只记在 Issue / PR 上。
+  - 归档备份：`.orchestration/backups/state-20261022-173524.sqlite3`；`python scripts/orchestrator.py backup` 仍可用于本地库维护。
+  - 回退：本套件不提供自动回退；如需回退由项目所有者单独立项。
 
 ## 本地工作流
 

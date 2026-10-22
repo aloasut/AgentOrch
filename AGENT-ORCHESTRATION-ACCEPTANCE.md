@@ -6,6 +6,9 @@
 
 - [ ] `ORCHESTRATION-PROJECT.md` 中不再有未处理的 `FILL_IN`。
 - [ ] `edition` 取值为 `local` 或 `github`；缺失或非法时引导流程会停止并报错，而不是猜测。
+- [ ] 底座只由 `ORCHESTRATION-PROJECT.md` 的 `edition` 决定；`.orchestration/config.json` 里即使残留 `edition` 键也不影响路由（`config show` 标注为 ignored）。
+- [ ] `edition` 缺失、为空、非法字符串、类型错误或文件不可读时，调度命令（`task add` / `ready` / `dispatch` / `status` / `workspace` / `amend` / `unlock`）以非零退出并报出实际值与修复位置；`init`、`backup`、`config show`、`task list`、`task show` 仍可用。
+- [ ] 声明 `github` 时本地 CLI 拒绝调度并把下一步指向 Issue / PR，不冒充已支持 `github` 调度；`retry_cap` 的非法回退默认 `3` 语义未被牵连改变。
 - [ ] 当前会话只使用一个底座；没有同时读写任务库与 Issue 的双写路径。
 - [ ] 新 Master 上下文仅根据当前底座载体、Git 状态和证据记录恢复任务、活动锁、修复轮次与阻塞原因。
 - [ ] 载体不可读 / 不可达时停止调度，而非从聊天记忆猜测。
