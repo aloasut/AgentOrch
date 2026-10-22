@@ -129,10 +129,10 @@ TASK-0001	DISPATCHED	建立项目骨架
   retries: 0
 
 $ python scripts/validate_kit.py
-Kit validation passed (39 required files checked; editions local/github share 7 files, github adds 3 templates).
+Kit validation passed (41 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
-Ran 71 tests in 6.776s
+Ran 112 tests in 22.577s
 OK
 ```
 
@@ -206,6 +206,7 @@ OK
 ├── scripts/
 │   ├── orchestrator.py                # local 任务库与原子路径锁 CLI
 │   ├── validate_kit.py                # 结构 / 概念 / 链接自检，同时是发布清单
+│   ├── check_drift.py                 # 生成 MANIFEST.json + 下游只读漂移诊断
 │   └── build_release.py               # 发布构建（仅仓库内，不随包发布）
 ├── tests/                             # orchestrator 的单元测试
 ├── .github/workflows/ci.yml           # PR / main 推送时跑三条登记检查（github 底座 G4 证据；仅本仓库，不随包发布）
@@ -300,12 +301,13 @@ Edit .orchestration/config.json to change retry_cap or local_dir; invalid values
 python scripts/validate_kit.py
 python scripts/validate_kit.py --project-ready
 python -m unittest discover -s tests
-python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
+python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py scripts/build_release.py
 ```
 
 `validate_kit.py` 检查：
 
-- **39 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **41 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析、SHA-256 与大小；仓库根目录没有该文件，检查自动跳过，不误报。
 - **两底座结构是否一致**：`editions/local` 与 `editions/github` 共享 7 个文件，`github` 额外提供 3 个模板；任一侧缺失或出现多余文件都会失败。
 - **治理概念是否真实存在**：核心编排文档必须出现 `PR_OPEN`、合并门 G1–G6、运行时能力契约 C1–C4；文档整体必须出现主要状态名。
 - **`edition` 是否合法**：`ORCHESTRATION-PROJECT.md` 必须有该键，且值为 `local` 或 `github`。
@@ -313,7 +315,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `ORCHESTRATION-PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `ORCHESTRATION-PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为，以及计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致）；当前 71 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）；当前 112 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -334,17 +336,52 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
 
 发布前的完整自检（构建内置、无跳过开关）见 `release/README.md`。
 
-## 8. 发布
+## 8. 发布与下游漂移诊断
 
-- **构建**：`python scripts/build_release.py` 产出 `release/agentorch-{YYYYMMDD}.zip`，包内文件集合直接取自 `validate_kit.py` 的 `REQUIRED` 列表。
-- **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–f 自检，失败会删除未通过自检的产物，没有跳过开关。
-- **可复现**：归档时间戳固定、文本文件按 LF 归一后打包；同一仓库状态重建应得到同一 SHA256。
+### 8.1 构建发行包
 
-命名、包内容、自检清单、发布流程与发布清单以 `release/README.md` 为准，本节只保留三条要点。
+- **构建**：`python scripts/build_release.py` 产出 `release/agentorch-{YYYYMMDD}.zip`；包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`。
+- **机器可读清单**：`MANIFEST.json` 记录 `schema_version`（清单格式版本）、`suite`、`format_version`（套件格式版本）与 `files[]`；每个条目含 `path`、`category`、`sha256`、`size`。清单**不含时间戳**、条目按路径排序，分类规则只有一处实现（`scripts/check_drift.py`，构建脚本导入它），因此同一工作树两次构建得到完全相同的清单与 zip SHA256。
+- **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–f 自检，失败会删除未通过自检的产物，没有跳过开关。自检 a 现在校验「包内文件集合 == `REQUIRED` + `MANIFEST.json`」、清单中每条路径可解析、SHA-256 与大小和实际文件一致、分类合法且清单路径与 `REQUIRED` 完全一致。
+- **可复现**：归档时间戳固定、文本文件按 LF 归一后打包，清单哈希同样按归一后的字节计算；同一仓库状态重建应得到同一 SHA256，Windows 上 `core.autocrlf=true` 的检出也不会改变结果。
+
+命名、包内容、自检清单、发布流程与发布清单以 `release/README.md` 为准；该文件对自检 a 的描述尚未跟上本节的 `MANIFEST.json` 变更（`release/` 不在本次任务允许路径内），下一轮发布任务需同步更新。
+
+### 8.2 下游只读诊断：`check_drift.py`
+
+项目从发行包复制出来后，用下面这条命令判断「我用的哪个版本、核心契约是否被改过」，**只报告、不覆盖**：
+
+```bash
+python scripts/check_drift.py <项目根>          # 人类可读摘要，stdout
+python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要转到 stderr
+```
+
+输出把文件分成五类，同一路径只归一类：
+
+| 类别 | 含义 | 命中时算 drift？ |
+| --- | --- | --- |
+| `core` | 根目录契约与入口（`AGENTS.md`、`AGENT-ORCHESTRATION.md`、`scripts/orchestrator.py` 等） | 缺失或被改动即 drift |
+| `edition` | `editions/<edition>/` 下的底座增量 | 缺失或被改动即 drift |
+| `template` | `templates/` 下的模板 | 缺失或被改动即 drift |
+| `project-profile` | 每项目文件（`ORCHESTRATION-PROJECT.md`、`PLAN.md`、`DESIGN.md`）；安装后本来就该被填写 | 否，单独列出 |
+| `project-extension` | 清单之外的本地文件，且不在上游目录里（项目源码、`docs/`、自建目录……） | 否，单独列出，永不被覆盖 |
+| `unknown` | 清单之外、却落在上游目录（`editions/`、`templates/`、`scripts/`、`prompts/`、`tests/`）内的文件，可能是旧版本残留或本地改写的套件路径 | 是，单独列出 |
+
+`project-extension` 与 `unknown` 的差别是「归属」：前者是项目自己的地盘，后者是套件的地盘出现了清单不认识的文件；两者都会逐条列出，既不误报成应覆盖的通用核心，也不被静默忽略。
+
+- **退出码**：`0` clean；`2` 发现 drift（缺失、改动、`unknown`，或清单 schema 超出本工具支持范围）；`1` 输入无效或工具错误（项目根不存在、`MANIFEST.json` 非法 JSON / 结构不合法）。`--json` 的报告结构带 `report_schema_version`，字段固定，失败时同样输出稳定结构（多一个 `error` 字段）。
+- **只读**：诊断只读取文件与目录、绝不写入 / 重命名 / 删除 / 覆盖目标项目；没有 `--fix`、`--sync` 一类开关，也不做自动合并或迁移。
+- **旧项目（无 `MANIFEST.json`）**：报告 `status: version-unknown`、退出码 `2`，提示「版本未知 / 需基线登记」并说明如何登记基线，**不猜版本**，也不阻止用户继续读取项目。
+- **版本跨度**：报告 manifest 的 `schema_version` 是否在本工具支持范围内，并原样给出 `suite` / `format_version`，便于与上游发布记录对照。
+
+哈希差异只表示文件字节不同，不表示契约冲突；工具只报告差异与建议，是否对齐由项目所有者决定。
 
 ## 9. 版本与兼容
 
-- [VERSION.txt](VERSION.txt) 记录套件名、支持底座与 **Format version**（当前 `1.1`）；格式变更时同步更新模板与校验清单。
+- [VERSION.txt](VERSION.txt) 记录套件名、支持底座与 **Format version**（当前 `1.2`）；格式变更时同步更新模板与校验清单。
+- `1.2` 相对 `1.1` 的变更要点：
+  - **发行包版本清单**：包内新增机器可读的 `MANIFEST.json`（套件版本、清单 schema 版本、逐文件分类与 SHA-256），构建可复现，清单无时间戳（见 8.1 节）。
+  - **下游只读漂移诊断**：新增 `scripts/check_drift.py`，报告缺失、被改动的核心文件、上游目录内的未知文件、无清单旧项目与版本跨度，只诊断不覆盖，退出码区分 clean / drift / 工具错误（见 8.2 节）。
 - `1.1` 相对 `1.0` 的变更要点：
   - **双底座**：`Edition: offline-single-user` 改为 `Editions: local, github`，同一套核心契约下分 `local`（纯本地）与 `github`（多人协作）两种底座，选择判据见第 2 节。
   - **`.local` 隐私层**：机器信息、凭据与发布扫描规则统一放 `.local/`，除目录说明外永不入库、永不打包（见 6.3 节）。
