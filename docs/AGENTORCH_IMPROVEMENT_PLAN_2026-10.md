@@ -4,13 +4,13 @@
 > 设计目标（为什么做、做到什么程度、原则与边界）只在根 [PLAN.md](../PLAN.md)；字段、状态取值与合并门语义只在 [AGENT-ORCHESTRATION.md](../AGENT-ORCHESTRATION.md) 4.1 与第 5 节，本文件只引用不重述。
 > 本文件只经任务分支 + PR 修改。与 `PLAN.md` 的设计目标冲突时，以设计目标为准并停下对齐，不得各写一套。
 
-- 版本：v2.0
-- 日期：2026-10-22
-- 状态：阶段计划；当前处于 Phase A 收尾、Phase B 起步之间
+- 版本：v2.1
+- 日期：2026-10-23
+- 状态：阶段计划；Phase A / B / C 全部交付完毕（2026-10-23）
 - 适用范围：AgentOrch 核心规则、local/github edition、任务模板、验证脚本与发行机制
 - 设计目标来源：[PLAN.md](../PLAN.md)
 
-## 1. 当前状态（2026-10-22）
+## 1. 当前状态（2026-10-23）
 
 状态变化的唯一落点就是这张表；`PLAN.md` 的设计目标不随任务状态变化。
 
@@ -21,16 +21,16 @@
 | [#14](https://github.com/ctrlshiftaltdel/AgentOrch/issues/14) GitHub Actions 接入 | PR 上跑规则包校验、单元测试与语法检查 | Epic #1 | 已完成 | Issue 已关闭；`.github/workflows/ci.yml` |
 | [#15](https://github.com/ctrlshiftaltdel/AgentOrch/issues/15) 根 `PLAN.md` 与 `init` 初始化 | `init` 生成设计目标文件；阶段目标与执行路径由 #19 拆分到本文件 | #2 | 已完成 | PR #18 已合并；`init` 冒烟与单元测试 |
 | [#19](https://github.com/ctrlshiftaltdel/AgentOrch/issues/19) 拆分计划层 | `PLAN.md` 只写设计目标，阶段目标与执行路径移入本文件 | #15 | 已完成 | 本文件 v2.0 与 `templates/IMPLEMENTATION-PLAN.md` |
-| [#13](https://github.com/ctrlshiftaltdel/AgentOrch/issues/13) edition 旧格式升级说明 | 发布前的迁移说明 | #4 | 待办 | Issue #13 |
-| [#17](https://github.com/ctrlshiftaltdel/AgentOrch/issues/17) 发布自检纳入 CI | 把 `build_release` 自检放进流水线 | #14（已满足） | 待办 | Issue #17 |
-| [#5](https://github.com/ctrlshiftaltdel/AgentOrch/issues/5) 共享资源锁契约 | 冻结 shared/exclusive、所有权、租约、恢复语义 | #2（模板字段已就绪） | **下一步** | Issue #5 |
-| [#3](https://github.com/ctrlshiftaltdel/AgentOrch/issues/3) 设计契约与阶段收口审计模板 | 冻结项 / 待决项、跨模块不变量、审计分类 | #2（可先起草）、#5 口径 | 待办 | Issue #3 |
-| [#6](https://github.com/ctrlshiftaltdel/AgentOrch/issues/6) 具名资源锁实现 | 原子获取 / 释放、并发测试、冲突原因、人工恢复 | #5 | 待办 | Issue #6 |
-| [#7](https://github.com/ctrlshiftaltdel/AgentOrch/issues/7) 发行清单与漂移诊断 | 版本、核心 SHA-256、只读差异报告、打包完整性 | Epic #1 | 待办 | Issue #7 |
-| [#8](https://github.com/ctrlshiftaltdel/AgentOrch/issues/8) 运行时能力登记与交付指标 | 能力证据、新鲜度、指标口径、缺失数据 | #2 | 待办 | Issue #8 |
-| [#9](https://github.com/ctrlshiftaltdel/AgentOrch/issues/9) 合成回归与通用验收集成 | 故障注入、集成矩阵、失败演练、发布出口 | #2 / #3 / #4 / #5；最终验收等 #6–#8 | 待办 | Issue #9 |
+| [#5](https://github.com/ctrlshiftaltdel/AgentOrch/issues/5) 共享资源锁契约 | 冻结 shared/exclusive、所有权、租约、恢复语义 | #2（模板字段已就绪） | 已完成 | PR #21 已合并（`d89f1f7`）；`docs/design/RESOURCE-LOCKS.md` v1 |
+| [#3](https://github.com/ctrlshiftaltdel/AgentOrch/issues/3) 设计契约与阶段收口审计模板 | 冻结项 / 待决项、跨模块不变量、审计分类 | #2（可先起草）、#5 口径 | 已完成 | PR #24 已合并（`bea370c`）；三份模板 + 章节校验 |
+| [#6](https://github.com/ctrlshiftaltdel/AgentOrch/issues/6) 具名资源锁实现 | 原子获取 / 释放、并发测试、冲突原因、人工恢复 | #5 | 已完成 | PR #23 已合并（`53a0ca6`）；`task resources/renew` 与并发演练 |
+| [#7](https://github.com/ctrlshiftaltdel/AgentOrch/issues/7) 发行清单与漂移诊断 | 版本、核心 SHA-256、只读差异报告、打包完整性 | Epic #1 | 已完成 | PR #22 已合并（`d085092`）；`MANIFEST.json` + `check_drift.py` |
+| [#8](https://github.com/ctrlshiftaltdel/AgentOrch/issues/8) 运行时能力登记与交付指标 | 能力证据、新鲜度、指标口径、缺失数据 | #2 | 已完成 | PR #26 已合并（`25d1573`）；`report_metrics.py` 七项指标 |
+| [#13](https://github.com/ctrlshiftaltdel/AgentOrch/issues/13) edition 旧格式升级说明 | 发布前的迁移说明 | #4 | 已完成 | PR #27 已合并（`870109a`）；README §10 + `docs/UPGRADE-2026-10.md` |
+| [#17](https://github.com/ctrlshiftaltdel/AgentOrch/issues/17) 发布自检纳入 CI | 把 `build_release` 自检放进流水线 | #14（已满足） | 已完成 | PR #25 已合并（`53a86fc`）；CI 两档跑打包自检，`VERSION.txt` 1.3 |
+| [#9](https://github.com/ctrlshiftaltdel/AgentOrch/issues/9) 合成回归与通用验收集成 | 故障注入、集成矩阵、失败演练、发布出口 | #2 / #3 / #4 / #5；最终验收等 #6–#8 | 已完成（随本 PR 合并生效） | 本 PR：`scripts/run_delivery_scenarios.py` + 场景文档 + 验收程序 I 段 |
 
-已完成只代表交付完成，不代表该阶段已验证；每条交付仍以对应 PR 的逐条验收结果、以及合并后主分支上重跑的结果为准。接下来派发的是 **#5（Phase A 设计冻结）**。
+已完成只代表交付完成，不代表该阶段已验证；每条交付仍以对应 PR 的逐条验收结果、以及合并后主分支上重跑的结果为准。**Phase A / B / C 的全部任务已交付，无剩余待办**；下一次动作是按 `release/README.md` 第 4 节执行发布（登记发布任务 → 构建 → 自检留证 → Master 审查 → 合并 → 发布后清理），发布完成后本计划即可归档。
 
 ## 2. 为什么要分阶段
 

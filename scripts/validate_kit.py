@@ -27,7 +27,7 @@ REQUIRED = [
     'editions/local/START-MASTER-EXISTING-PROJECT.md', 'editions/local/START-MASTER-NEW-PROJECT.md',
     'prompts/START-CHARTER.md', 'prompts/START-REVIEWER.md',
     'scripts/check_drift.py', 'scripts/orchestrator.py', 'scripts/report_metrics.py',
-    'scripts/validate_kit.py',
+    'scripts/run_delivery_scenarios.py', 'scripts/validate_kit.py',
     'templates/CONTRACT-DECISION-LOG.md', 'templates/DESIGN.md',
     'templates/IMPLEMENTATION-PLAN.md', 'templates/METRICS.md',
     'templates/MILESTONE-AUDIT.md',
@@ -36,8 +36,32 @@ REQUIRED = [
     'templates/RUNTIME-CAPABILITY.md', 'templates/TASK-PACKET.md',
     'templates/gitignore.snippet',
     'tests/test_orchestrator.py', 'tests/test_release_drift.py',
-    'tests/test_report_metrics.py', 'tests/test_validate_kit.py',
+    'tests/test_report_metrics.py', 'tests/test_run_delivery_scenarios.py',
+    'tests/test_validate_kit.py',
 ]
+
+# --- Repository-only required documents --------------------------------------
+# These files are required in a checkout but must NOT be added to REQUIRED:
+# scripts/build_release.py refuses to package any path containing a `docs`
+# segment (FORBIDDEN_SEGMENTS), so listing them above would turn every release
+# self-check red. They are still required artifacts — a missing file or a
+# deleted section fails validate_kit on a checkout — and the check is skipped
+# when `docs/` is absent, which is exactly the case inside a release package.
+REQUIRED_DOCS = {
+    'docs/testing/DELIVERY-REGRESSION-SCENARIOS.md': (
+        '场景矩阵', '运行方式', 'Fixture 规则', '正负组', '未验证范围', '清理',
+    ),
+}
+
+# --- Milestone-audit closeout contract ---------------------------------------
+# A filled audit record may only be read as "stage complete" when no verdict
+# forbids it. These values are the four classes from templates/MILESTONE-AUDIT.md
+# plus PASS (verified) and the two non-pass markers; anything else is a typo or a
+# second, invented vocabulary, so it is reported instead of counted.
+AUDIT_VERDICTS = ('PASS', 'NON_BLOCKING_HARDENING', 'OPTIONAL', 'NEEDS_HUMAN_DECISION',
+                  'BLOCKING', 'NOT_RUN', 'BLOCKED', 'NOT_APPLICABLE')
+CLOSEOUT_BLOCKING_VERDICTS = ('BLOCKING', 'NEEDS_HUMAN_DECISION')
+CLOSEOUT_UNVERIFIED_VERDICTS = ('NOT_RUN', 'BLOCKED')
 
 # --- Reusable contract templates ---------------------------------------------
 # DESIGN.md, MILESTONE-AUDIT.md and CONTRACT-DECISION-LOG.md are contracts in
@@ -274,6 +298,87 @@ def parse_matrix(lines):
     return header, rows
 
 
+def _tables(text):
+    """[(header, rows)] for every markdown table in text, in document order."""
+    tables, header, rows = [], None, []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line.startswith('|'):
+            if header is not None:
+                tables.append((header, rows))
+                header, rows = None, []
+            continue
+        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        if all(SEPARATOR_CELL.match(c) for c in cells if c):
+            continue
+        if header is None:
+            header = cells
+        else:
+            rows.append(cells)
+    if header is not None:
+        tables.append((header, rows))
+    return tables
+
+
+def audit_conclusion_errors(text, label='milestone audit'):
+    """Findings that forbid reading a filled audit as a stage closeout.
+
+    Only the *classification* is machine-checkable: a row whose verdict is
+    BLOCKING or NEEDS_HUMAN_DECISION forbids "stage complete", and a NOT_RUN /
+    BLOCKED row is not counted as passing. Whether the verdict is justified stays
+    a review decision and is never claimed by this function.
+    """
+    errors, seen = [], 0
+    for header, rows in _tables(text):
+        labels = [field_label(cell) for cell in header]
+        columns = [index for index, name in enumerate(labels)
+                   if 'verdict' in name or '结论' in name]
+        if not columns:
+            continue
+        column = columns[0]
+        for index, cells in enumerate(rows, 1):
+            if len(cells) <= column:
+                errors.append(f'{label}: row {index} is shorter than its verdict column')
+                continue
+            verdict = _clean(cells[column]).upper()
+            seen += 1
+            if verdict not in AUDIT_VERDICTS:
+                errors.append(f'{label}: row {index} has an unknown verdict '
+                              f'{verdict or "(empty)"}; allowed: {", ".join(AUDIT_VERDICTS)}')
+            elif verdict in CLOSEOUT_BLOCKING_VERDICTS:
+                errors.append(f'{label}: row {index} is {verdict}; the stage must not be '
+                              'claimed complete or passing')
+            elif verdict in CLOSEOUT_UNVERIFIED_VERDICTS:
+                errors.append(f'{label}: row {index} is {verdict}; it is not counted as passing')
+    if not seen:
+        errors.append(f'{label}: no readable verdict rows (expected a table with a '
+                      'verdict / 结论 column)')
+    return errors
+
+
+def required_doc_errors(root=ROOT):
+    """Missing or structurally incomplete repository-only documents.
+
+    Skipped when the tree has no `docs/` directory: a release package never ships
+    one, and these documents are repository artifacts, not release payload.
+    """
+    root = Path(root)
+    if not (root / 'docs').is_dir():
+        return []
+    errors = []
+    for rel, sections in REQUIRED_DOCS.items():
+        path = root / rel
+        if not path.is_file():
+            errors.append(f'missing required document: {rel}')
+            continue
+        text = path.read_text(encoding='utf-8')
+        headings = [match.group('text').lower() for match in HEADING_RE.finditer(text)]
+        for section in sections:
+            if not any(section.lower() in heading for heading in headings):
+                errors.append(f'{rel} is missing required section: {section}')
+    return errors
+
+
 def extract_packet_samples(text):
     """Fenced ```task-packet blocks, used as structural test fixtures."""
     samples, lines, i = [], text.splitlines(), 0
@@ -482,6 +587,10 @@ def validate_kit(root=ROOT, project_ready=False):
 
     errors.extend(template_structure_errors(root))
 
+    # Repository-only documents (scenario catalogue). Skipped inside a package,
+    # which never carries docs/.
+    errors.extend(required_doc_errors(root))
+
     # A built package also carries MANIFEST.json; validate it when present.
     errors.extend(check_release_manifest(root))
 
@@ -672,6 +781,7 @@ def main(argv=None):
         return 1
     print(f'Kit validation passed ({len(REQUIRED)} required files checked; '
           f'editions local/github share 7 files, github adds 3 templates; '
+          f'{len(REQUIRED_DOCS)} repository-only document(s) checked; '
           f'{sample_count} task packet samples validated).')
     return 0
 

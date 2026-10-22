@@ -129,10 +129,10 @@ TASK-0001	DISPATCHED	建立项目骨架
   retries: 0
 
 $ python scripts/validate_kit.py
-Kit validation passed (47 required files checked; editions local/github share 7 files, github adds 3 templates).
+Kit validation passed (49 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
-Ran 206 tests in 28.594s
+Ran 241 tests in 28.594s
 OK
 ```
 
@@ -325,12 +325,12 @@ python scripts/orchestrator.py task show TASK-0002 # 本任务的资源锁与最
 python scripts/validate_kit.py
 python scripts/validate_kit.py --project-ready
 python -m unittest discover -s tests
-python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/report_metrics.py scripts/check_drift.py scripts/build_release.py
+python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/report_metrics.py scripts/check_drift.py scripts/build_release.py scripts/run_delivery_scenarios.py
 ```
 
 `validate_kit.py` 检查：
 
-- **47 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **49 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
 - **合约模板是否仍问对问题**：`templates/DESIGN.md`、`templates/MILESTONE-AUDIT.md`、`templates/CONTRACT-DECISION-LOG.md` 的必备章节缺一即失败，模板内的相对链接断链也失败（章节缺失会被静默当成“不需要回答”，因此单列一项检查）。
 - **能力登记与指标模板是否仍问对问题**：`templates/RUNTIME-CAPABILITY.md` 的身份 / 能力矩阵 / 扩展边界 / `UNKNOWN` 与重测 / 权限范围 / 证据与限制，以及 `templates/METRICS.md` 的阅读规则 / 公共定义 / 指标定义 / 缺失与覆盖率 / 报告契约 / 金样本 / 限制，缺章节同样失败。
 - **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析、SHA-256 与大小；仓库根目录没有该文件，检查自动跳过，不误报。
@@ -341,7 +341,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/rep
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `ORCHESTRATION-PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `ORCHESTRATION-PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节，以及指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注）；当前 206 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）；当前 241 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -382,6 +382,24 @@ python scripts/report_metrics.py .orchestration/state.sqlite3 --json
 - **指标口径**只在 [templates/METRICS.md](templates/METRICS.md) 定义：七项指标各自写明起止事件、时区（UTC）、排除项与缺失处理；报告只读任务库事件与证据引用，不读凭据、提示词或消息正文。
 - **读数纪律**：任何统计值都要带样本量、窗口与缺失率；空数据输出 `no data`（coverage 0），缺事件记 `missing`，来源未采集记 `unknown` —— 三者都不等于 0。指标不用于没有上下文的 Agent 排名。
 - **未完成的采集项**：`local` 任务库目前只记录状态事件与资源冲突；检查结果、路径冲突、回归与验收行尚未写入，因此对应指标显示 `unknown`。这是原型，不宣称已自动采集。
+
+### 7.3 合成回归场景（重大变更必跑）
+
+文档要求“该失败的要失败”，`scripts/run_delivery_scenarios.py` 用合成 fixture 证明这一点：A 治理/授权、B 迁移/版本、C 跨模块闭环、D 底座与证据失效四组，每组都有正向控制组与负向注入组。场景矩阵（前置 / 注入缺陷 / 预期拦截门 / 证据 / 清理）只在 `docs/testing/DELIVERY-REGRESSION-SCENARIOS.md`（本仓库文档，不随包发布）；`AGENT-ORCHESTRATION-ACCEPTANCE.md` I 段把它列为套件重大变更的验收步骤。
+
+```bash
+# 全量运行（人类摘要写到 stdout；--json 时 stdout 只有报告，摘要转 stderr）
+python scripts/run_delivery_scenarios.py
+python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-report.json"
+```
+
+- **退出码三态**：`0` 全部场景通过；`1` 至少一个场景失败或异常（不当作通过）；`2` 运行器自身未能开跑（模块缺失、`--only` 未知 ID、输出不可写）。
+- **正负组口径**：负向场景“通过”表示拦截门真的触发了（缺陷被拦下），不是任务真的成功了；`totals.negative_passed == totals.negative` 且至少一个正向控制组 `PASS` 才算有效证据。
+- **单场景不结束运行**：任何场景抛出非断言异常都会记为 `ERROR` 并保留堆栈，其余场景继续执行；这是运行器自身被测试的行为。
+- **只读仓库**：fixture 在一次性临时目录里生成，运行器不读写仓库文件（`--output` 指定的报告路径除外，建议写到仓库外）；无网络、无凭据、无外部模型。
+- **边界**：场景只覆盖套件自身的门禁语义；`github` 底座的 Issue / PR / 登记块 / CI 端到端无法离线验证，未实际运行即标 `BLOCKED`，不得用 `local` 结果替代；也不得据此宣称对任何外部产品项目做过真实数据或自动化验证。
+
+
 
 ## 8. 发布与下游漂移诊断
 
@@ -551,7 +569,7 @@ git rev-parse HEAD                       # 记录升级前 head，回退时要�
   ```text
   status: clean (exit 0)
   manifest: schema 1 (supported: yes), suite 'Agent-Orchestration Starter Kit', format 1.3
-  checked: 47 manifest file(s); missing 0, modified 0, unknown 0, project-profile 2, extensions 0
+  checked: 49 manifest file(s); missing 0, modified 0, unknown 0, project-profile 2, extensions 0
   ```
 
   `project-profile` 条目（`ORCHESTRATION-PROJECT.md`、`PLAN.md`）**正常**，它们本来就该被项目填写。诊断本身只读：没有 `--fix` / `--sync`，不创建、不删除、不覆盖目标项目里的任何文件。
