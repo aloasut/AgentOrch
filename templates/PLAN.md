@@ -1,49 +1,44 @@
-# Implementation Plan
+# 设计目标（PLAN）
 
-> 这是模板：复制到项目根目录后再编辑（`python scripts/orchestrator.py init` 会自动逐字节复制）；不要直接修改本模板，复制后可删除本段说明。
-> 项目根目录的 `PLAN.md` 是计划权威——任务登记、派发与阶段收口都以它为准；本模板只用于初始化复制。
+> 这是模板：复制到项目根目录后再编辑（`python scripts/orchestrator.py init` 会在根目录缺少该文件时逐字节复制一份；根目录已有 `PLAN.md` 时不会被覆盖）。不要直接修改本模板，复制后可删除本段说明。
+> 本文件只承载**设计目标**：为什么做、做到什么程度、原则与边界。阶段目标、任务顺序与状态不写在这里——需要阶段计划时，把 `templates/IMPLEMENTATION-PLAN.md` 复制到项目的 `docs/`（例如 `docs/IMPLEMENTATION-PLAN.md`），`init` 不会自动创建它。
+> 两者冲突时，以本文件的设计目标为准，停下对齐，不得各写一套。
 
-> This plan is the source for task registration. Each Task block below must translate field by field into one `task add` command; split any block that fails the granularity check instead of registering it.
-> Acceptance criterion ids and the structured scenario fields are defined once, in `AGENT-ORCHESTRATION.md` 4.1; the plan only decides numbering and applicability, it does not restate the rules.
+## 问题与目标用户
 
-## Plan header
+- 要解决的问题：`FILL_IN`
+- 目标用户 / 场景：`FILL_IN`
 
-- **Plan name:**
-- **Source charter / design doc:**
-- **Overall goal:**
+## 设计目标
 
-## Single-goal check (run before registering each block)
+<!-- 写系统应具备的能力与不变量；每条都能判断“做到什么程度”。不要写成任务清单或阶段划分。 -->
 
-- [ ] The block names exactly one independently acceptable goal; if two outcomes can be accepted separately, split the block.
-- [ ] The `Goal` line holds one outcome sentence — no chained deliverables ("and also", "plus", "then").
-- [ ] Every acceptance criterion carries a unique `AC-<n>` id and states one checkable fact.
-- [ ] The AC ids written here are the ones the Execution Agent must reuse in `ac_id` of the task packet evidence matrix; renaming an AC after dispatch is not allowed.
-- [ ] Known scenario fields (`invariants`, `negative_cases`, `migration_cases`, `integration_paths`, `unverified_assumptions`) are either listed below or explicitly deferred to the task packet with a reason; a migration-shaped task must not silently drop `migration_cases`.
+1. `FILL_IN`
 
-## Task blocks
+## 设计原则
 
-<!-- Repeat the block below for every task in the plan. Keep blocks in dependency order. -->
+<!-- 冲突时按什么顺序取舍，例如单一权威、证据先于结论、失败关闭。 -->
 
-### Task: <Task ID>
+- `FILL_IN`
 
-- **Task ID:**
-- **Goal:**
-<!-- Exactly one independently acceptable goal. If the block holds more than one acceptable goal, split it before registration. -->
-- **Allowed paths:**
-<!-- Precise down to concrete files or directories; must match the --paths lock exactly. -->
-- **Validation:**
-<!-- Verification commands with their expected output. -->
-  - Command:
-  - Expected output:
-- **Acceptance criteria:**
-<!-- Every criterion must be individually checkable, numbered AC-1, AC-2, ... -->
-  - [ ] AC-1:
-- **Known scenario fields:**
-<!-- Optional at plan time: name the scenarios already foreseeable (invariants / negative cases / migration cases / integration paths / open assumptions); the task packet fills the five fields and writes "N/A: <reason>" when a field truly does not apply. -->
-  - Invariants:
-  - Negative cases:
-  - Migration cases:
-  - Integration paths:
-  - Unverified assumptions:
-- **Depends on:**
-<!-- Task IDs that must be VERIFIED before this task can start. Write "none" if there are no dependencies. -->
+## 范围与非目标
+
+- 范围：`FILL_IN`
+- 非目标：`FILL_IN`
+
+## 全局约束
+
+- 技术栈 / 运行环境：`FILL_IN`
+- 隐私与数据：`FILL_IN`
+- 兼容与变更纪律：`FILL_IN`
+
+## 可度量的全局验收
+
+<!-- 可在当前 head 上重复执行的检查；不要写“已完成”“已优化”这类不可核验的结论。 -->
+
+- [ ] `FILL_IN`
+
+## 计划文件
+
+- 阶段目标与执行路径：`docs/IMPLEMENTATION-PLAN.md`（项目需要阶段计划时从 `templates/IMPLEMENTATION-PLAN.md` 复制；可选）
+- 项目章程 / 背景：`FILL_IN`（无则写“无”）

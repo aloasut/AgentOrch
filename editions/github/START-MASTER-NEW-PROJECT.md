@@ -19,7 +19,11 @@
 
 ## 从计划到 Issue（Plan to issues）
 
-若项目根目录已有 `PLAN.md` 写出的实现计划（该文件由 `python scripts/orchestrator.py init` 从 `templates/PLAN.md` 复制而来；模板只是初始化种子，不再作为计划读取），把其中每个任务块翻译为一个 Issue：标题对应任务名，正文按五节填写，`可改路径` 与计划中的 Allowed paths 完全一致，`依赖` 用 Issue 编号列出。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解计划，不得创建 Issue。
+计划分两层。项目根目录的 `PLAN.md` 是**设计目标权威**：只写为什么做、做到什么程度、原则与边界，用来判断 Issue 方向；它不承载任务块。阶段目标、任务顺序与任务块写在 `docs/` 的阶段计划里——项目需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（例如 `docs/IMPLEMENTATION-PLAN.md`，`init` 不会自动创建）。
+
+若 `docs/` 下已有阶段计划，把其中每个任务块翻译为一个 Issue：标题对应任务名，正文按 `editions/github/ISSUE-TEMPLATE.md` 的五节填写，`可改路径` 与任务块 Allowed paths 完全一致，`依赖` 用 Issue 编号列出，`AC-1…AC-n` 逐条进入验收标准。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解并回写阶段计划，不得创建 Issue。
+
+阶段计划与根 `PLAN.md` 的设计目标冲突时，停下对齐，以设计目标为准，不得各写一套。
 
 ## 首次响应格式
 

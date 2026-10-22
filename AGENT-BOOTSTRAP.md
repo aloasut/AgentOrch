@@ -47,7 +47,7 @@ gh pr list --state open --limit 100
 
 必要时可补充 `git worktree list`、任务库事件查询、Issue 详情 / PR 时间线与最近提交记录。
 
-**计划权威**：恢复“计划到哪一步”时读项目根目录的 `PLAN.md`——它是计划权威，任务登记、派发与阶段收口都以它为准；`templates/PLAN.md` 只用于初始化复制，不得当作项目计划读取。根 `PLAN.md` 缺失时，提示用户运行 `python scripts/orchestrator.py init` 生成副本，不得凭聊天记忆补计划。
+**计划权威（两层）**：恢复“方向对不对”时读项目根目录 `PLAN.md`——它是**设计目标权威**（为什么做、做到什么程度、原则与边界），任务方向不得与它冲突。恢复“计划到哪一步、下一步做什么”时读 `docs/` 里的阶段计划（项目需要时从 `templates/IMPLEMENTATION-PLAN.md` 复制，`init` 不创建它）；阶段计划承载阶段目标、任务顺序、依赖与状态。`templates/PLAN.md` 只用于初始化复制，不得当作项目计划读取。两者冲突时，以 `PLAN.md` 的设计目标为准，停下对齐并说明差异，不得各写一套。根 `PLAN.md` 缺失时，提示用户运行 `python scripts/orchestrator.py init` 生成副本，不得凭聊天记忆补计划；阶段计划缺失时按项目的实际任务进展汇报，不要凭空补一份。
 
 ### 第三步：按状态自动路由
 

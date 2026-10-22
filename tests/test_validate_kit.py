@@ -3,7 +3,7 @@
 The field names / status enum are read back from AGENT-ORCHESTRATION.md, so these
 tests fail if the authoritative definition and the validator drift apart.
 """
-import importlib.util, subprocess, sys, tempfile, unittest
+import importlib.util, re, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'validate_kit.py'
@@ -249,6 +249,33 @@ class TaskPacketMatrixTests(unittest.TestCase):
         self.assertIn('Task packet validation passed', good.stdout)
         self.assertEqual(fail.returncode, 1, fail.stdout + fail.stderr)
         self.assertIn('does not match the declared evidence head SHA', fail.stdout)
+
+
+class PlanLayerSplitTests(unittest.TestCase):
+    """PLAN.md carries the design goals; phases and task blocks live in a docs plan."""
+
+    def test_implementation_plan_template_is_in_the_release_manifest(self):
+        self.assertIn('templates/IMPLEMENTATION-PLAN.md', validate.REQUIRED)
+        self.assertTrue((ROOT / 'templates' / 'IMPLEMENTATION-PLAN.md').is_file())
+
+    def test_design_template_points_to_the_separate_phase_plan(self):
+        text = (ROOT / 'templates' / 'PLAN.md').read_text(encoding='utf-8')
+        self.assertIn('templates/IMPLEMENTATION-PLAN.md', text)
+        for needle in ('Allowed paths', 'Depends on', 'AC-1'):
+            self.assertNotIn(needle, text,
+                             f'templates/PLAN.md must not carry the task block field {needle!r}')
+
+    def test_phase_plan_template_carries_phases_and_task_blocks(self):
+        text = (ROOT / 'templates' / 'IMPLEMENTATION-PLAN.md').read_text(encoding='utf-8')
+        for needle in ('Phase', 'Goal', 'Allowed paths', 'Depends on', 'AC-1',
+                       '当前状态', '维护规则'):
+            self.assertIn(needle, text)
+
+    def test_documented_required_file_count_matches_the_manifest(self):
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        numbers = set(re.findall(r'(\d+)\s*项必需文件', readme))
+        numbers |= set(re.findall(r'(\d+)\s*required files', readme))
+        self.assertEqual(numbers, {str(len(validate.REQUIRED))})
 
 
 if __name__ == '__main__':
