@@ -70,6 +70,45 @@ CHECKBOX_LINE = re.compile(r'^\s*-\s*\[(?P<mark>[ xX])\]\s*(?P<body>.*)$')
 AC_HEAD = re.compile(r'^(?P<id>AC-\d+)\s*[:：]\s*(?P<text>.*)$')
 SEPARATOR_CELL = re.compile(r'^:?-{2,}:?$')
 
+# --- Named resource declarations (shape only) ---------------------------------
+# Semantics live in docs/design/RESOURCE-LOCKS.md; this file only checks that a
+# filled carrier field can be read back. The field is OPTIONAL: absent or empty
+# means "this task takes no named resource lock" and must never be a failure.
+RESOURCE_FIELD = 'declared_resources'
+LOCKED_RESOURCE_FIELD = 'locked_resources'
+RESOURCE_SPEC_RE = re.compile(
+    r'(?P<type>[a-z][a-z0-9-]{0,15}):(?P<name>[a-z0-9][a-z0-9._/-]{0,127})'
+    r':(?P<mode>shared|exclusive)(?::(?P<ttl>[1-9][0-9]*))?')
+
+
+def resource_declaration_errors(text, label, field=RESOURCE_FIELD):
+    """Errors for a filled resource set; empty/absent values are legal."""
+    fields = parse_task_packet(text)
+    if field_label(field) not in fields:
+        return []
+    value = (field_value(fields, field) or '').strip().strip('`').strip()
+    if not value:
+        return []
+    errors, seen = [], set()
+    for raw in value.split(','):
+        item = raw.strip().strip('`').strip()
+        if not item:
+            errors.append(f'{label}: {field} has an empty entry (remove the stray comma)')
+            continue
+        match = RESOURCE_SPEC_RE.fullmatch(item)
+        if not match:
+            errors.append(f'{label}: {field} entry {item!r} must be '
+                          '<resource_id>:<mode>[:<ttl>] with mode shared or exclusive')
+            continue
+        if any(part in ('', '.', '..') for part in match.group('name').split('/')):
+            errors.append(f'{label}: {field} entry {item!r} has an empty or dots-only path segment')
+            continue
+        resource_id = f'{match.group("type")}:{match.group("name")}'
+        if resource_id in seen:
+            errors.append(f'{label}: {field} declares {resource_id} more than once')
+        seen.add(resource_id)
+    return errors
+
 
 def read_text(path):
     return Path(path).read_text(encoding='utf-8')
@@ -313,6 +352,7 @@ def validate_task_packet(text, canonical_fields, status_values, label='task pack
                           f'{", ".join(bad)} evidence')
         if not any(r.get('status', '').upper() == 'PASS' for r in ac_rows):
             errors.append(f'{label}: acceptance criterion {ac_id} is marked as met without PASS evidence')
+    errors.extend(resource_declaration_errors(text, label))
     return errors
 
 
@@ -438,6 +478,18 @@ def validate_kit(root=ROOT, project_ready=False):
         for name in list(evidence_fields) + list(packet_fields):
             if f'`{name}`' not in text:
                 errors.append(f'{rel} does not carry the field `{name}` declared in {CORE_DOC}')
+
+    # The optional named-resource carrier fields must exist where they are
+    # documented, and their value must be readable when a task fills them in.
+    for rel, names in ((TASK_PACKET_DOC, (RESOURCE_FIELD,)),
+                       (ISSUE_TEMPLATE_DOC, (LOCKED_RESOURCE_FIELD,))):
+        path = root / rel
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding='utf-8')
+        for name in names:
+            if f'`{name}`' not in text:
+                errors.append(f'{rel} does not carry the optional resource field `{name}`')
 
     samples = []
     packet_path = root / TASK_PACKET_DOC

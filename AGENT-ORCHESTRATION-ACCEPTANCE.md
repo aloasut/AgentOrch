@@ -33,7 +33,7 @@
 - [ ] 强制解锁与回收均有理由、授权与审计事件；无事件的锁记录被判为证据缺失并隔离，而非当作有效或空闲。
 - [ ] `local` 只按契约 §7.1 的范围内声明原子互斥；`github` 的登记块与交付报告中没有“原子锁 / 并发已保证”一类表述。
 - [ ] 契约 §9.1 的故障场景（F1–F9）在隔离环境演练过，每个场景有预期行为与证据形式；`FAILED` / 状态未知的自动释放未被演练“修复”为通过。
-- [ ] 锁数据结构新增字段（`declared_resources`、`locked_resources`、租约配置等）已由 Master 决定是否纳入实现任务，未在本阶段擅自改模板。
+- [ ] 锁数据结构新增字段已随实现任务落地：`templates/TASK-PACKET.md` 的 `declared_resources` 与 `editions/github/ISSUE-TEMPLATE.md` 的 `locked_resources` 均为**可选**，留空不判失败，填写时只校验 `<id>:<mode>[:<ttl>]` 格式与逗号分隔。
 
 ## C. 合并门 G1–G6
 

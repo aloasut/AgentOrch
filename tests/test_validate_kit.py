@@ -45,7 +45,7 @@ class TaskPacketMatrixTests(unittest.TestCase):
         }
         return '  | ' + ' | '.join(cells[name] for name in self.evidence_fields) + ' |'
 
-    def packet(self, acs=None, rows=None, structured=None, head=HEAD, omit=()):
+    def packet(self, acs=None, rows=None, structured=None, head=HEAD, omit=(), resources=None):
         acs = acs if acs is not None else [('x', 'AC-1', 'dry run writes nothing'),
                                            ('x', 'AC-2', 'existing behaviour unchanged')]
         rows = rows if rows is not None else [self.row('AC-1'), self.row('AC-2', actual='12 tests passed')]
@@ -65,6 +65,9 @@ class TaskPacketMatrixTests(unittest.TestCase):
         add('Context', 'single command, no persisted state')
         add('Allowed paths', '`src/cli/export.py`')
         add('Forbidden paths', 'every other path in the repository')
+        # `resources=None` means "field absent"; '' means "field present but empty".
+        if resources is not None:
+            add('declared_resources', resources)
         add('Dependencies (must be VERIFIED)', 'none')
         add('Acceptance criteria')
         for mark, ac_id, text in acs:
@@ -249,6 +252,74 @@ class TaskPacketMatrixTests(unittest.TestCase):
         self.assertIn('Task packet validation passed', good.stdout)
         self.assertEqual(fail.returncode, 1, fail.stdout + fail.stderr)
         self.assertIn('does not match the declared evidence head SHA', fail.stdout)
+
+
+class ResourceDeclarationTests(unittest.TestCase):
+    """The optional `declared_resources` field: shape only, empty is never a failure."""
+
+    def setUp(self):
+        self.evidence_fields, self.status_values = canonical()
+        self.structured = validate.canonical_packet_fields(
+            (ROOT / validate.CORE_DOC).read_text(encoding='utf-8'))
+        # Reuse the canonical packet builder instead of duplicating the layout.
+        self.builder = TaskPacketMatrixTests('test_legal_packet_passes')
+        self.builder.evidence_fields = self.evidence_fields
+        self.builder.structured = self.structured
+
+    def errors(self, text):
+        return validate.validate_task_packet(text, self.evidence_fields, self.status_values,
+                                             label='packet', structured_fields=self.structured)
+
+    def test_absent_and_empty_declarations_are_both_legal(self):
+        self.assertEqual(self.errors(self.builder.packet()), [])                 # field absent
+        self.assertEqual(self.errors(self.builder.packet(resources='')), [])     # field present, empty
+        self.assertEqual(self.errors(self.builder.packet(resources='   ')), [])
+
+    def test_well_formed_declaration_passes(self):
+        value = 'db:test/mysql-main:exclusive,svc:build/win-01:shared:600,vol:data.1/0:shared'
+        self.assertEqual(self.errors(self.builder.packet(resources=f'`{value}`')), [])
+
+    def test_malformed_entries_are_reported(self):
+        cases = {
+            'db:test/main': 'mode shared or exclusive',
+            'db:test/main:write': 'mode shared or exclusive',
+            'DB:test/main:shared': 'mode shared or exclusive',
+            'db:test/main:exclusive:0': 'mode shared or exclusive',
+            'db:test main:shared': 'mode shared or exclusive',
+            'db:test/*:shared': 'mode shared or exclusive',
+            'db:test/../main:shared': 'empty or dots-only path segment',
+            'db:test//main:shared': 'empty or dots-only path segment',
+        }
+        for value, needle in cases.items():
+            with self.subTest(value=value):
+                errors = self.errors(self.builder.packet(resources=value))
+                self.assertTrue(any(needle in e for e in errors), errors)
+
+    def test_trailing_comma_and_duplicates_are_reported(self):
+        errors = self.errors(self.builder.packet(resources='db:a:shared,'))
+        self.assertTrue(any('empty entry' in e for e in errors), errors)
+        errors = self.errors(self.builder.packet(resources='db:a:shared,db:a:exclusive'))
+        self.assertTrue(any('declares db:a more than once' in e for e in errors), errors)
+
+    def test_templates_document_the_optional_fields(self):
+        packet = (ROOT / validate.TASK_PACKET_DOC).read_text(encoding='utf-8')
+        issue = (ROOT / validate.ISSUE_TEMPLATE_DOC).read_text(encoding='utf-8')
+        self.assertIn(f'`{validate.RESOURCE_FIELD}`', packet)
+        self.assertIn(f'`{validate.LOCKED_RESOURCE_FIELD}`', issue)
+        self.assertIn('optional', packet.lower())
+        # A filled-in sample must stay readable by the same validator.
+        filled = self.builder.packet(resources='db:test/main:exclusive')
+        self.assertEqual(validate.resource_declaration_errors(filled, 'packet'), [])
+
+    def test_cli_rejects_a_broken_resource_declaration(self):
+        broken = self.builder.packet(resources='db:Test main:write')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'bad.md'
+            path.write_text(broken, encoding='utf-8')
+            result = subprocess.run([sys.executable, str(SCRIPT), '--task-packet', str(path)],
+                                    capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn('declared_resources', result.stdout)
 
 
 class PlanLayerSplitTests(unittest.TestCase):

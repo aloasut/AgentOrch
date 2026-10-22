@@ -39,7 +39,7 @@
 | --- | --- | --- |
 | 形态 | 离线单机，不依赖托管平台 | 托管平台，Issue + Draft PR + CI |
 | 任务载体 | SQLite 任务库 `.orchestration/state.sqlite3` | 每个任务一个 Issue，正文五节 |
-| 锁 / 防冲突 | `task dispatch` 原子路径锁 | Issue 内 `ORCH-TASK-REGISTRY` 登记块 + 开放 PR 同文件检查 |
+| 锁 / 防冲突 | `task dispatch` 原子路径锁；可选具名资源锁（同一数据库文件 + 单机范围内原子） | Issue 内 `ORCH-TASK-REGISTRY` 登记块 + 开放 PR 同文件检查；具名资源只能协作登记，不具原子性 |
 | 主要证据 | 本地命令输出、退出码、head SHA | CI 结果、PR 评论、head SHA |
 | 协作范围 | 一位操作者、一台机器 | 多人、多地点，可异地接手 |
 | 外部依赖 | Python 3 + Git，无需联网 | GitHub 仓库、平台权限、CI 工作流 |
@@ -242,11 +242,14 @@ OK
 | --- | --- | --- |
 | `retry_cap` | 整数 ≥ 1，默认 `3` | 审查—修复往返上限；达到上限仍未通过则转 `BLOCKED` |
 | `local_dir` | 非空字符串，默认 `.local` | 本机私有目录的位置 |
+| `resource_lease_ttl` | 整数 1–604800（秒），**无默认** | 具名资源锁的租约时长；任务声明了资源但此项缺失 / 非法时**拒绝派发** |
+| `resource_reclaim_grace` | 整数 0–86400（秒），**无默认** | 过期锁的回收冷却期；`task reclaim` 在冷却期内一律拒绝 |
 
 **非法值的处理分两类，不要混淆**：
 
 - `retry_cap` / `local_dir`：文件缺失、键缺失、类型错误、取值非法或 JSON 损坏时**静默回落到内置默认**，既有本地库行为不变。
 - `edition`：只在 `ORCHESTRATION-PROJECT.md` 中读取。缺失、为空、非法字符串（如 `GITHUB`、`cloud`）、类型错误（如 `1`、`true`）、重复声明或文件不可读时**阻断调度**，诊断给出实际值与修复位置（文件 + 键名）。`config.json` 里残留的 `edition` 键只作为历史记录，`config show` 会标注 `legacy key is ignored`，不参与路由。
+- `resource_lease_ttl` / `resource_reclaim_grace`：**不回落默认值**。只有声明了资源的任务才读取它们，缺失或非法时派发失败并指名该键；未声明资源的任务完全不读这两项，行为与之前一致。
 
 查看每个键的生效值与来源：
 
@@ -274,8 +277,9 @@ Edit .orchestration/config.json to change retry_cap or local_dir; invalid values
 | `init` | 可用 | 可用（只建本地库，不选底座） | 可用 |
 | `backup` | 可用 | 可用 | 可用 |
 | `config show` | 可用，退出码 0 | 可用，退出码 0 | 打印诊断，退出码 1 |
-| `task list` / `task show` | 可用 | 可用（只读归档） | 可用（只读） |
+| `task list` / `task show` / `task resources` | 可用 | 可用（只读归档；`task resources` 只列出已有记录，不做过期迁移） | 可用（只读） |
 | `task add` / `ready` / `dispatch` / `status` / `workspace` / `amend` / `unlock` | 可用 | 拒绝，并给出 Issue / PR 指引 | 拒绝，并给出实际值与修复位置 |
+| `task renew` / `task reclaim` / `task reconcile` | 可用 | 拒绝，并给出 Issue / PR 指引 | 拒绝，并给出实际值与修复位置 |
 
 `github` 底座的调度由 Issue / PR 承载：新建任务按 [editions/github/ISSUE-TEMPLATE.md](editions/github/ISSUE-TEMPLATE.md) 写 Issue，执行按 [editions/github/START-EXECUTION.md](editions/github/START-EXECUTION.md) 推进。本地 CLI **不**声称支持 github 调度，也不会把状态写进本地库。
 
@@ -292,6 +296,25 @@ Edit .orchestration/config.json to change retry_cap or local_dir; invalid values
 ### 6.4 并发策略
 
 不设固定并发数量。派发前观察 CPU、内存、磁盘与测试资源争用：只要任务之间依赖已满足、路径锁不冲突，且机器仍有余量，就可以并行；资源紧张时串行。同一 Worktree 同一时刻只允许一个测试进程，也不要让两个执行实例共享可写工作区。“本机实测可承载并发”只作为记录，不作为规则常量。
+
+### 6.5 具名资源锁（可选，语义见 `docs/design/RESOURCE-LOCKS.md`）
+
+路径锁只能回答“两个任务是否改同一批文件”。测试数据库、共享构建机、端到端测试槽这类**不落在文件上**的独占需求，用可选具名资源锁表达：任务声明显式资源集合，派发时与路径锁一起判定，两者都通过才可派发。语义（冲突矩阵、原子集合获取、租约与恢复、底座边界、故障场景）**只在仓库中的 `docs/design/RESOURCE-LOCKS.md` 定义**（该目录不随发行包发布），本节只列命令。
+
+```bash
+python scripts/orchestrator.py task add --id TASK-0002 --title "跑集成测试" --paths tests/ --acceptance "集成测试通过" --resources db:test/mysql-main:exclusive svc:build/win-01:shared:600
+python scripts/orchestrator.py task dispatch TASK-0002 --holder "$ORCH_HOLDER" --evidence "issue #12 comment"
+python scripts/orchestrator.py task resources      # 资源 / 模式 / 状态 / 租约 / 持有者 / 阻塞效果
+python scripts/orchestrator.py task show TASK-0002 # 本任务的资源锁与最近阻塞原因
+```
+
+- **不声明就不参与**：不带 `--resources` 的任务与之前完全一致，行为、报错文案、锁表都不变。
+- **声明了就整批取得**：一次派发是一笔事务，任一资源冲突则整批失败，不会留下半套锁；失败返回会给出冲突资源、占用方任务与持有者、占用方模式与租约，以及可执行的下一步。
+- **只有 `VERIFIED` / `CANCELED` 自动释放**：`FAILED`、`BLOCKED`、需人工决策与状态未知都保持占用；租约到期只是转 `EXPIRED`，**仍然参与冲突判定**，不会被当成空闲。
+- **人工动作必须留痕**：`task unlock <ID> --resource <id> --reason <text> --force` 需要理由，非终局任务还需 `--authorized-by`；`task reclaim` 需要过期、冷却期已过和证据引用；两者都会写审计事件。强制解锁后原任务再续租会得到 `LOCK_NOT_HELD`。
+- **恢复不靠记忆**：`task reconcile` 只读锁表与审计事件重建事实，缺事件、持有者不可定位、任务需人工决策的记录进入隔离（`QUARANTINED`），既不当有效持有，也不当空闲。
+- **配置**：声明资源前在 `.orchestration/config.json` 显式写入 `resource_lease_ttl` 与 `resource_reclaim_grace`（见 6.2），没有内置默认值。
+- **底座边界**：`local` 的原子性只覆盖“同一数据库文件 + 单机（或受支持的一致性共享文件系统）”，不覆盖跨主机或网络文件系统；`github` 只有 Issue 登记块里的协作性占用（可选 `locked_resources`），检查与写入之间存在 TOCTOU 窗口，**不得表述为“原子锁”或“并发已保证”**。详见契约第 7 节。
 
 ## 7. 自检
 

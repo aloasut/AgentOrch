@@ -84,6 +84,20 @@ PLANNED → READY → DISPATCHED → IN_PROGRESS → [PR_OPEN] → REVIEW_READY 
 - 只有 `VERIFIED` / `CANCELED` 自动释放；`FAILED`、`BLOCKED` 与状态未知保持占用，过期不等于释放。
 - 契约改动必须另开 Issue 重新冻结，实现任务不得在实现 PR 中顺手修改语义。
 
+操作入口（判定语义只在契约里，本节只列命令与配置键）：
+
+| 目的 | 命令 | 前置条件 |
+|------|------|----------|
+| 声明资源集合 | `task add ... --resources <id:mode>[:<ttl>] ...`（可选） | 资源 ID 已按契约 §2.1 规范化；不声明即不参与 |
+| 派发并取得整批锁 | `task dispatch <ID> --resource <id:mode>[:<ttl>] --holder <ID> --evidence <ref>` | 任务 `READY`；`.orchestration/config.json` 显式配置租约 |
+| 查看锁与阻塞 | `task resources [--resource <id>] [--all]`、`task list`、`task show <ID>` | 只读；`github` 底座只列出已存在记录 |
+| 续租自己的锁 | `task renew <ID> --holder <ID> [--reason ...]` | 只有持有者可续租；已强制解锁的任务得到 `LOCK_NOT_HELD` |
+| 回收过期锁 | `task reclaim <ID> --resource <id> --reason ... --evidence ...` | 已 `EXPIRED`、冷却期已过、附终局证据 |
+| 单资源释放 / 强制解锁 | `task unlock <ID> --resource <id> --reason ... [--force --authorized-by <ID>]` | 强制解锁必须有理由；非终局任务还需授权人 |
+| 跨会话重建事实 | `task reconcile [--reason ...] [--evidence ...]` | 只读锁表与审计事件；缺证据者进入隔离 |
+
+配置键（`.orchestration/config.json`，无内置默认、只在声明了资源的任务上读取）：`resource_lease_ttl`、`resource_reclaim_grace`。缺失或非法时派发被拒绝，并指名要修的键。
+
 ## 4. 合并门 G1–G6
 
 `MASTER_REVIEW` 必须逐门检查。任一门的结论不是“通过”，就退回 `IN_PROGRESS` 或 `BLOCKED`，写明具体缺口；不得用其他门的通过来抵消。
