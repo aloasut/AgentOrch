@@ -31,6 +31,47 @@
 - 希望工具直接启动模型、写代码、跑测试或自动合并——本工具只管理治理状态，不替代 Agent 运行时与 Git 操作。
 - 只需要一个看板或待办清单、不需要证据链与合并门的小项目。
 
+## 快速上手（5 分钟）
+
+前提：Python 3.12+ 与 Git。全部脚本只用标准库，**无需安装任何依赖**；`local` 底座完全离线可用。
+
+```bash
+# 1) 把套件放进你的项目（推荐：下载 Release 里的 agentorch-YYYYMMDD.zip 解压；
+#    也可以 clone 本仓库，但不要把 .git/ 带进项目，见 3.1）
+cp -r /path/to/agentorch-YYYYMMDD/. your-project/ && cd your-project
+
+# 2) 选底座：编辑 ORCHESTRATION-PROJECT.md，把 edition 填成 local（分发包内是 FILL_IN 待填模板）
+
+# 3) 初始化任务库，登记并派发第一条任务
+python scripts/orchestrator.py init
+python scripts/orchestrator.py task add --id TASK-0001 --title "示例任务" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"
+python scripts/orchestrator.py task ready TASK-0001
+python scripts/orchestrator.py task dispatch TASK-0001
+
+# 4) 结构自检
+python scripts/validate_kit.py
+```
+
+两条最需要先知道的规则：**`dispatch` 只登记状态并占用路径锁，不会启动 Agent**——把生成的任务包交给真实的执行会话去干活，完成、审查后用 `python scripts/orchestrator.py task status TASK-0001 VERIFIED --note "依据"` 收口；**执行者不自批、不自合，合并由 Master 决策**（完整规则见 [AGENTS.md](AGENTS.md)）。
+
+以上每条命令的真实输出与逐条解释在第 3 节；冒烟完可取消示例任务释放锁：`python scripts/orchestrator.py task status TASK-0001 CANCELED --note "冒烟结束"`。
+
+**我想…**（按需跳转，不必通读）：
+
+| 我想… | 去哪 |
+| --- | --- |
+| 知道它是什么、解决什么问题、适不适合我 | 第 1 节 |
+| 选 `local` 还是 `github`，什么时候迁移 | 第 2 节 |
+| 看每条命令的完整输出与解释 | 第 3 节 |
+| 空目录从零开始 / 接入已有仓库 / 迁到 GitHub | 第 4 节 |
+| 看目录里每个文件是干什么的 | 第 5 节 |
+| 配置底座、重试上限、资源锁 TTL、私有目录、并发 | 第 6 节 |
+| 跑测试、用 CI、跑合成回归场景 | 第 7 节 |
+| 打包发布、给下游做漂移诊断 | 第 8 节 |
+| 看版本兼容与从旧版升级 | 第 9、10 节 |
+| 冻结设计契约、做阶段收口审计 | 第 11 节 |
+| 找各治理文档入口 | 第 12 节 |
+
 ## 2. 两种底座怎么选
 
 两个底座共用同一份核心契约，角色权限、审查门、禁改路径、证据标准完全一致，**只有任务载体与证据来源不同**。底座由 [ORCHESTRATION-PROJECT.md](ORCHESTRATION-PROJECT.md) 的 `edition` 决定，取值只能是 `local` 或 `github`；缺失或非法时必须停止调度并报告，不得猜测或按默认值继续。本地 CLI 只维护 `local` 任务库：声明 `github` 时调度命令会被明确拒绝并给出下一步指引，而不是静默按 `local` 执行（支持矩阵见 6.2）。
@@ -64,9 +105,9 @@
 
 并发不设固定数量：**按当前机器性能动态判断**，只要任务可并行且 CPU / 内存 / 磁盘 / 测试资源仍有余量，就可以并行；同一 Worktree 同一时刻只允许一个测试进程。
 
-## 3. 快速开始（local）
+## 3. 上手命令详解（local）
 
-以下序列从“空目录 + 一份套件”走到“第一条任务已派发”，并跑完结构自检与单元测试。命令在 Windows + Git Bash 下用 Python 3 实测通过；`python` 指当前环境的 Python 3 解释器。
+这是「快速上手」的完整版：每条命令的真实输出、退出码与逐条解释。
 
 ### 3.1 放入套件
 
