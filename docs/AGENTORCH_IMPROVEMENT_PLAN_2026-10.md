@@ -19,7 +19,7 @@
 | [#2](https://github.com/ctrlshiftaltdel/AgentOrch/issues/2) 结构化验收证据矩阵 | 任务字段、证据映射、负向 / 迁移场景、结构测试 | Epic [#1](https://github.com/ctrlshiftaltdel/AgentOrch/issues/1) | 已完成 | Issue 已关闭；字段契约落在 `AGENT-ORCHESTRATION.md` 4.1 |
 | [#4](https://github.com/ctrlshiftaltdel/AgentOrch/issues/4) edition 权威来源与 fail-closed | 区分项目底座与 CLI 配置、合法 / 非法 / 损坏配置测试 | Epic #1 | 已完成 | Issue 已关闭；`ORCHESTRATION-PROJECT.md` 的 `edition` 为唯一权威 |
 | [#14](https://github.com/ctrlshiftaltdel/AgentOrch/issues/14) GitHub Actions 接入 | PR 上跑规则包校验、单元测试与语法检查 | Epic #1 | 已完成 | Issue 已关闭；`.github/workflows/ci.yml` |
-| [#15](https://github.com/ctrlshiftaltdel/AgentOrch/issues/15) 根 `PLAN.md` 与 `init` 初始化 | `init` 生成计划文件，计划成为唯一登记来源 | #2 | 已完成 | PR #18 已合并；`init` 冒烟与单元测试 |
+| [#15](https://github.com/ctrlshiftaltdel/AgentOrch/issues/15) 根 `PLAN.md` 与 `init` 初始化 | `init` 生成设计目标文件；阶段目标与执行路径由 #19 拆分到本文件 | #2 | 已完成 | PR #18 已合并；`init` 冒烟与单元测试 |
 | [#19](https://github.com/ctrlshiftaltdel/AgentOrch/issues/19) 拆分计划层 | `PLAN.md` 只写设计目标，阶段目标与执行路径移入本文件 | #15 | 已完成 | 本文件 v2.0 与 `templates/IMPLEMENTATION-PLAN.md` |
 | [#13](https://github.com/ctrlshiftaltdel/AgentOrch/issues/13) edition 旧格式升级说明 | 发布前的迁移说明 | #4 | 待办 | Issue #13 |
 | [#17](https://github.com/ctrlshiftaltdel/AgentOrch/issues/17) 发布自检纳入 CI | 把 `build_release` 自检放进流水线 | #14（已满足） | 待办 | Issue #17 |
@@ -117,7 +117,7 @@
 
 并行与路径规则：
 
-- #2 与 #4 已并行完成，是“分别登记不重叠实际路径”的先例。
+- #2 与 #4 的锁定路径在 `scripts/validate_kit.py`、`tests/`、`AGENT-ORCHESTRATION-ACCEPTANCE.md` 上相交，按路径锁规则**串行**完成，并非并行完成的先例。跨文件并行的前提是锁定路径不相交；不得用“计划上允许并行”代替实际的冲突检查。
 - #3 的模板可先起草；与任务模板共用路径时必须协调所有权，不能并行编辑同一 Worktree 或同一文件。
 - #5 是设计冻结任务；#6 不得在 #5 验收前开始实现锁语义。
 - #7 与 #8 可并行，但须分配不重叠路径；变更发行清单 / 校验器的任务独占相关路径。
