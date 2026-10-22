@@ -19,7 +19,7 @@
 
 ## 从计划到 Issue（Plan to issues）
 
-若已有按 `templates/PLAN.md` 写出的实现计划，把其中每个任务块翻译为一个 Issue：标题对应任务名，正文按五节填写，`可改路径` 与计划中的 Allowed paths 完全一致，`依赖` 用 Issue 编号列出。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解计划，不得创建 Issue。
+若项目根目录已有 `PLAN.md` 写出的实现计划（该文件由 `python scripts/orchestrator.py init` 从 `templates/PLAN.md` 复制而来；模板只是初始化种子，不再作为计划读取），把其中每个任务块翻译为一个 Issue：标题对应任务名，正文按五节填写，`可改路径` 与计划中的 Allowed paths 完全一致，`依赖` 用 Issue 编号列出。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解计划，不得创建 Issue。
 
 ## 首次响应格式
 

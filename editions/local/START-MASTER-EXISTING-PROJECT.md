@@ -12,7 +12,7 @@
 
 ## 从计划到任务（Plan to tasks）
 
-若已有按 `templates/PLAN.md` 写出的实现计划，把其中每个任务块直接翻译为一条 `python scripts/orchestrator.py task add --id <Task ID> --title <标题> --paths <Allowed paths> --depends <Depends on> --acceptance <验收条目>` 命令序列。翻译时逐字段核对：路径锁与计划中的 Allowed paths 完全一致；依赖用 `--depends` 指向必须先 VERIFIED 的任务；验收标准逐条写入 `--acceptance`。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解计划，不得直接注册任务；拆解结果先回写计划文档，再逐块注册。
+若项目根目录已有 `PLAN.md` 写出的实现计划（该文件由 `python scripts/orchestrator.py init` 从 `templates/PLAN.md` 复制而来；模板只是初始化种子，不再作为计划读取），把其中每个任务块直接翻译为一条 `python scripts/orchestrator.py task add --id <Task ID> --title <标题> --paths <Allowed paths> --depends <Depends on> --acceptance <验收条目>` 命令序列。翻译时逐字段核对：路径锁与计划中的 Allowed paths 完全一致；依赖用 `--depends` 指向必须先 VERIFIED 的任务；验收标准逐条写入 `--acceptance`。任务块粒度过粗（验收无法逐条勾验，或一个块包含多个可验收目标）时，必须先继续拆解计划，不得直接注册任务；拆解结果先回写计划文档，再逐块注册。
 
 先向用户输出项目状态、任务状态 / 锁、主要风险、本轮计划和需要决策的问题，然后推进最合适的一个或一组不冲突任务。
 
