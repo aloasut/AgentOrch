@@ -9,6 +9,7 @@
 - **Context:**
 - **Allowed paths:**
 - **Forbidden paths:**
+- **declared_resources:**
 - **Dependencies (must be VERIFIED):**
 - **Acceptance criteria:**
   - [ ] AC-1:
@@ -33,6 +34,7 @@
 - **One goal per packet.** `Goal / user-visible result` states a single independently acceptable outcome; if it needs "and also", split the packet.
 - **AC numbering.** Acceptance criteria are numbered `AC-1`, `AC-2`, ...; one checkable statement each, and the ids never change after dispatch (add new ids instead of renumbering).
 - **Structured scenario fields.** Both editions use the same five names: `invariants`, `negative_cases`, `migration_cases`, `integration_paths`, `unverified_assumptions`. Meaning, requiredness and value rules live in `AGENT-ORCHESTRATION.md` 4.1; this template only carries the fields. Small tasks write `N/A: <reason>`; empty or a bare `N/A` counts as a missing field.
+- **`declared_resources` is optional.** It is the task's named resource set, written as `<resource_id>:<mode>[:<ttl>]` separated by commas (`db:test/mysql-main:exclusive,svc:build/win-01:shared:600`). Empty (or omitted) means the task takes no resource lock and behaves exactly like a path-lock-only task. Semantics live only in `docs/design/RESOURCE-LOCKS.md`; the shape here is only what the carrier needs to record. A resource set is acquired atomically at dispatch, so any conflict fails the whole dispatch instead of taking a partial set. `local` acquires these locks atomically inside one SQLite transaction; `github` only records an advisory reservation and claims no atomicity.
 - **Evidence matrix.** Column order is fixed: `ac_id`, `method`, `expected`, `actual`, `status`, `environment`, `commit_sha`, `evidence_ref`, `notes` (meaning and rules: 4.1, not restated here). Every AC needs at least one row, and every `commit_sha` must equal `Evidence head SHA` except on `NOT_APPLICABLE` rows.
 - **Why not always maximal.** What is enforced is "field present + rules apply", not volume: a field that truly does not apply gets `N/A: <reason>`, and scenarios must not be invented to fill the format.
 
