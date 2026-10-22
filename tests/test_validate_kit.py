@@ -3,7 +3,7 @@
 The field names / status enum are read back from AGENT-ORCHESTRATION.md, so these
 tests fail if the authoritative definition and the validator drift apart.
 """
-import importlib.util, re, subprocess, sys, tempfile, unittest
+import importlib.util, json, re, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'scripts' / 'validate_kit.py'
@@ -448,6 +448,98 @@ class ContractTemplateTests(unittest.TestCase):
         acceptance = (ROOT / 'AGENT-ORCHESTRATION-ACCEPTANCE.md').read_text(encoding='utf-8')
         for rel in ('templates/MILESTONE-AUDIT.md', 'templates/CONTRACT-DECISION-LOG.md'):
             self.assertIn(rel, acceptance)
+
+
+class CapabilityAndMetricsTemplateTests(unittest.TestCase):
+    """The capability register and the metric definitions are contracts too.
+
+    A dropped capability row silently claims a capability nobody probed; a
+    dropped metric column leaves the start / end event, timezone, exclusion or
+    missing-data rule undefined. Both fail validation instead of yielding a
+    shorter document that still looks authoritative.
+    """
+
+    CAPABILITY = 'templates/RUNTIME-CAPABILITY.md'
+    METRICS = 'templates/METRICS.md'
+
+    def test_templates_are_required_and_present(self):
+        for rel in (self.CAPABILITY, self.METRICS):
+            self.assertIn(rel, validate.REQUIRED)
+            self.assertTrue((ROOT / rel).is_file(), f'{rel} is missing')
+
+    def test_kit_validation_covers_both_templates(self):
+        self.assertEqual(validate.template_structure_errors(ROOT), [])
+        errors, _ = validate.validate_kit(ROOT)
+        self.assertEqual(errors, [])
+
+    def test_capability_template_covers_the_contract_and_the_fine_boundaries(self):
+        text = (ROOT / self.CAPABILITY).read_text(encoding='utf-8')
+        for capability in ('| C1 |', '| C2 |', '| C3 |', '| C4 |', '| C5 |', '| C6 |', '| C7 |'):
+            self.assertIn(capability, text)
+        for needle in ('UNKNOWN', 're-probe', 'spawned-subagent', 'manual-handoff',
+                       'Probe date (UTC)', 'evidence_ref', 'Limits'):
+            self.assertIn(needle, text)
+        # A record must not become a permission grant or a second definition of C1-C4.
+        self.assertIn('not a permission grant', text)
+        self.assertIn('AGENT-ORCHESTRATION.md', text)
+
+    def test_capability_template_refuses_a_stale_pass(self):
+        text = (ROOT / self.CAPABILITY).read_text(encoding='utf-8')
+        self.assertIn('Downgrade a verdict to `UNKNOWN`', text)
+        self.assertIn('never unlocks the sub-agent path', text)
+
+    def test_metrics_template_defines_seven_metrics_with_precise_columns(self):
+        text = (ROOT / self.METRICS).read_text(encoding='utf-8')
+        header = next(line for line in text.splitlines() if line.startswith('| ID | Metric'))
+        for column in ('Start event', 'End event', 'Timezone', 'Exclusions',
+                       'Missing handling'):
+            self.assertIn(column, header)
+        for mid in ('**M1**', '**M2**', '**M3**', '**M4**', '**M5**', '**M6**', '**M7**'):
+            self.assertIn(mid, text)
+
+    def test_metrics_template_forbids_context_free_ranking(self):
+        text = (ROOT / self.METRICS).read_text(encoding='utf-8')
+        self.assertIn('No context-free ranking', text)
+        self.assertIn('sample size', text)
+        self.assertIn('Missing is not zero', text)
+
+    def test_metrics_gold_sample_is_valid_json_and_covers_every_case(self):
+        text = (ROOT / self.METRICS).read_text(encoding='utf-8')
+        start = text.index('```metrics-sample') + len('```metrics-sample')
+        end = text.index('```', start)
+        payload = json.loads(text[start:end])
+        self.assertEqual(len(payload['tasks']), 9)
+        statuses = {event.get('to_status') for event in payload['events']}
+        for terminal in ('VERIFIED', 'FAILED', 'CANCELED', 'BLOCKED', 'MERGED', 'APPROVED'):
+            self.assertIn(terminal, statuses)
+
+    def test_missing_section_in_either_template_is_reported(self):
+        cases = ((self.METRICS, '## Gold sample', '## Sample notes'),
+                 (self.CAPABILITY, '## UNKNOWN and re-probe', '## Re-probe notes'))
+        for rel, old, new in cases:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                self.copy_templates(root)
+                target = root / rel
+                text = target.read_text(encoding='utf-8')
+                self.assertIn(old, text)
+                target.write_text(text.replace(old, new), encoding='utf-8')
+                errors = validate.template_structure_errors(root)
+            expected = f'{rel} is missing required section: {"Gold sample" if "Gold" in old else "UNKNOWN and re-probe"}'
+            self.assertTrue(any(expected in error for error in errors), errors)
+
+    def test_readme_and_acceptance_point_at_the_new_artifacts(self):
+        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        for rel in (self.CAPABILITY, self.METRICS, 'scripts/report_metrics.py'):
+            self.assertIn(rel, readme)
+        acceptance = (ROOT / 'AGENT-ORCHESTRATION-ACCEPTANCE.md').read_text(encoding='utf-8')
+        for rel in (self.CAPABILITY, self.METRICS):
+            self.assertIn(rel, acceptance)
+
+    def copy_templates(self, root):
+        (root / 'templates').mkdir()
+        for rel in validate.TEMPLATE_SECTIONS:
+            (root / rel).write_text((ROOT / rel).read_text(encoding='utf-8'), encoding='utf-8')
 
 
 if __name__ == '__main__':
