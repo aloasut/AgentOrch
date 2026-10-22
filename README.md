@@ -33,7 +33,7 @@
 
 ## 2. 两种底座怎么选
 
-两个底座共用同一份核心契约，角色权限、审查门、禁改路径、证据标准完全一致，**只有任务载体与证据来源不同**。底座由 [ORCHESTRATION-PROJECT.md](ORCHESTRATION-PROJECT.md) 的 `edition` 决定，取值只能是 `local` 或 `github`；缺失或非法时必须停止调度并报告，不得猜测或按默认值继续。
+两个底座共用同一份核心契约，角色权限、审查门、禁改路径、证据标准完全一致，**只有任务载体与证据来源不同**。底座由 [ORCHESTRATION-PROJECT.md](ORCHESTRATION-PROJECT.md) 的 `edition` 决定，取值只能是 `local` 或 `github`；缺失或非法时必须停止调度并报告，不得猜测或按默认值继续。本地 CLI 只维护 `local` 任务库：声明 `github` 时调度命令会被明确拒绝并给出下一步指引，而不是静默按 `local` 执行（支持矩阵见 6.2）。
 
 | 维度 | `local`（[说明](editions/local/README.md)） | `github`（[说明](editions/github/README.md)） |
 | --- | --- | --- |
@@ -99,14 +99,16 @@ python -m unittest discover -s tests
 $ python scripts/orchestrator.py init
 Initialized local task registry: <项目根>\.orchestration\state.sqlite3
 Review-fix retry cap: 3 (edit key "retry_cap" in <项目根>\.orchestration\config.json to change it)
-No remote platform is used. Back up .orchestration/ with your project backups.
+Local task registry only: the edition is read from <项目根>\ORCHESTRATION-PROJECT.md, not from this config.
+Back up .orchestration/ with your project backups.
 
 $ python scripts/orchestrator.py config show
 Config file: <项目根>\.orchestration\config.json
   retry_cap  = 3          (source: config.json)
-  edition    = local      (source: config.json)
   local_dir  = .local     (source: config.json)
-Edit .orchestration/config.json to override; invalid values fall back to defaults.
+  edition    = local      (source: ORCHESTRATION-PROJECT.md)
+Edition is selected only by `edition` in <项目根>\ORCHESTRATION-PROJECT.md; config.json holds local CLI runtime parameters (retry_cap, local_dir) and never selects an edition.
+Edit .orchestration/config.json to change retry_cap or local_dir; invalid values there fall back to defaults.
 
 $ python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths README.md src/ --acceptance "有最小可运行入口" "测试命令退出码为 0"
 TASK-0001: created in PLANNED
@@ -128,7 +130,7 @@ $ python scripts/validate_kit.py
 Kit validation passed (37 required files checked; editions local/github share 7 files, github adds 3 templates).
 
 $ python -m unittest discover -s tests
-Ran 23 tests in 5.433s
+Ran 63 tests in 7.936s
 OK
 ```
 
@@ -216,7 +218,7 @@ OK
 
 | 字段 | 作用 |
 | --- | --- |
-| `edition` | 底座选择器，只能 `local` 或 `github`；缺失或非法时停止，不猜测 |
+| `edition` | 底座的**唯一权威来源**，只能 `local` 或 `github`，且只写取值、不加说明文字；缺失、为空、非法字符串或类型错误时阻断调度，并报出实际值与修复位置（文件 + 键名） |
 | 允许改动路径 / 永远禁止改动路径 | 任务默认范围与硬边界；任务只能进一步收窄 |
 | 验证命令 | 审查门 G4 要求的测试、静态检查、构建命令；必须可真实执行 |
 | 并发策略 | 不写固定数字，按机器余量动态判断 |
@@ -227,29 +229,48 @@ OK
 
 ### 6.2 运行时配置：`.orchestration/config.json`
 
-由 `python scripts/orchestrator.py init` 创建。键与优先级：
+由 `python scripts/orchestrator.py init` 创建，**只描述本地 CLI 的运行参数**；它不决定底座，也不存在“缺省底座”。底座只看 6.1 的 `edition`。
 
 | 键 | 允许值 / 默认 | 作用 |
 | --- | --- | --- |
 | `retry_cap` | 整数 ≥ 1，默认 `3` | 审查—修复往返上限；达到上限仍未通过则转 `BLOCKED` |
-| `edition` | `local` / `github`，默认 `local` | 本机运行时记录的底座；**权威值在 `ORCHESTRATION-PROJECT.md`**，不一致时停止核实，不要自行切换 |
 | `local_dir` | 非空字符串，默认 `.local` | 本机私有目录的位置 |
 
-**优先级**：`config.json` 中的合法值优先；文件缺失、键缺失、类型错误、取值非法（如 `retry_cap: 0`、`edition: cloud`）时静默回落到内置默认，不报错也不中断。查看每个键的生效值与来源：
+**非法值的处理分两类，不要混淆**：
+
+- `retry_cap` / `local_dir`：文件缺失、键缺失、类型错误、取值非法或 JSON 损坏时**静默回落到内置默认**，既有本地库行为不变。
+- `edition`：只在 `ORCHESTRATION-PROJECT.md` 中读取。缺失、为空、非法字符串（如 `GITHUB`、`cloud`）、类型错误（如 `1`、`true`）、重复声明或文件不可读时**阻断调度**，诊断给出实际值与修复位置（文件 + 键名）。`config.json` 里残留的 `edition` 键只作为历史记录，`config show` 会标注 `legacy key is ignored`，不参与路由。
+
+查看每个键的生效值与来源：
 
 ```bash
 python scripts/orchestrator.py config show
 ```
 
-输出中的 `source` 为 `config.json` 表示来自文件，为 `default` 表示回落到内置默认。示例（合法覆盖时）：
+`source` 为 `config.json` 表示来自运行时文件，为 `default` 表示回落到内置默认；`edition` 的来源固定是 `ORCHESTRATION-PROJECT.md`。示例（合法覆盖 + 合法 `local` 声明）：
 
 ```text
 Config file: <项目根>\.orchestration\config.json
   retry_cap  = 5          (source: config.json)
-  edition    = local      (source: config.json)
   local_dir  = .private   (source: config.json)
-Edit .orchestration/config.json to override; invalid values fall back to defaults.
+  edition    = local      (source: ORCHESTRATION-PROJECT.md)
+Edition is selected only by `edition` in <项目根>\ORCHESTRATION-PROJECT.md; config.json holds local CLI runtime parameters (retry_cap, local_dir) and never selects an edition.
+Edit .orchestration/config.json to change retry_cap or local_dir; invalid values there fall back to defaults.
 ```
+
+`edition` 缺失或非法时，`config show` 仍打印运行参数，同时把诊断写到 stderr 并以退出码 1 结束。
+
+#### 底座与命令支持矩阵
+
+| 命令 | `local` | `github` | `edition` 缺失 / 非法 |
+| --- | --- | --- | --- |
+| `init` | 可用 | 可用（只建本地库，不选底座） | 可用 |
+| `backup` | 可用 | 可用 | 可用 |
+| `config show` | 可用，退出码 0 | 可用，退出码 0 | 打印诊断，退出码 1 |
+| `task list` / `task show` | 可用 | 可用（只读归档） | 可用（只读） |
+| `task add` / `ready` / `dispatch` / `status` / `workspace` / `amend` / `unlock` | 可用 | 拒绝，并给出 Issue / PR 指引 | 拒绝，并给出实际值与修复位置 |
+
+`github` 底座的调度由 Issue / PR 承载：新建任务按 [editions/github/ISSUE-TEMPLATE.md](editions/github/ISSUE-TEMPLATE.md) 写 Issue，执行按 [editions/github/START-EXECUTION.md](editions/github/START-EXECUTION.md) 推进。本地 CLI **不**声称支持 github 调度，也不会把状态写进本地库。
 
 ### 6.3 私有目录：`.local/`
 
@@ -286,7 +307,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `ORCHESTRATION-PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `ORCHESTRATION-PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA 等行为；当前 23 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA，以及 edition 的权威来源与 fail-closed 行为；当前 63 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 发布前的完整自检（构建内置、无跳过开关）见 `release/README.md`。
 
