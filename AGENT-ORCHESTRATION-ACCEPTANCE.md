@@ -33,11 +33,13 @@
 - [ ] 旧任务按 4.1 节的兼容策略处理：未回填完整矩阵的既有任务仍按自然语言清单逐条判定，且没有被宣称“已通过矩阵验收”。
 - [ ] G2 变更路径全部属于允许路径；没有未授权文件或夹带重构。
 - [ ] G3 分支基于最新主分支，合并预演无冲突。
-- [ ] G4 必需检查在当前 head SHA 全绿；`local` 为配置中的测试与静态检查，`github` 为 CI 工作流。
+- [ ] G4 必需检查在当前 head SHA 全绿；`local` 为配置中的测试与静态检查，`github` 为 CI 工作流（`.github/workflows/ci.yml`：`pull_request`→`main`、`push`→`main`、`workflow_dispatch`；Python 3.12 / 3.13 矩阵；`permissions: contents: read`）。
+- [ ] `github`：G4 以**当前 head SHA** 的 CI 运行为主要证据，证据矩阵记录运行 URL 与 head SHA；可在 PR 的 Checks 区域或 `gh pr checks <PR 编号>` 复核。本地三条命令是补充证据，不能替代 CI；CI 绿灯同样不能折算为 G1 的逐条通过。
+
 - [ ] G5 命令、输出、退出码与 head SHA 一致；失败测试未被删除、跳过或弱化。
 - [ ] G6 新依赖、迁移、权限 / 安全变化与未实现行为已登记；需要决策时已进入 `NEEDS_HUMAN_DECISION`。
 - [ ] 执行者无法直接把任务标记为 `APPROVED` / `MERGED` / `VERIFIED` 而绕过 Master 审查（至少在运行纪律及工具使用上验证）。
-- [ ] head 变化会使先前 `APPROVED` 失效。
+- [ ] head 变化会使先前 `APPROVED` 失效；`github` 底座还必须在新 head 上重跑 CI，旧 head 的绿灯不作为证据。
 - [ ] 合并只由 Master 操作；合并后验证未通过时不能标记 `VERIFIED`。
 
 ## D. 运行时能力探测 C1–C4
@@ -72,6 +74,7 @@
 活动任务锁测试命令与结果：
 证据矩阵位置（任务记录 / PR 评论）：
 矩阵声明的 head SHA 与各证据行 commit_sha 是否一致：
+CI 运行 URL 与 head SHA（`github` 底座）：
 未执行项（NOT_RUN / BLOCKED / NOT_APPLICABLE）及其理由：
 失败演练轮次与 head SHA：
 第 3 轮后是否 BLOCKED：

@@ -203,6 +203,7 @@ OK
 │   ├── validate_kit.py                # 结构 / 概念 / 链接自检，同时是发布清单
 │   └── build_release.py               # 发布构建（仅仓库内，不随包发布）
 ├── tests/                             # orchestrator 的单元测试
+├── .github/workflows/ci.yml           # PR / main 推送时跑三条登记检查（github 底座 G4 证据）
 ├── release/README.md                  # 发布标准与发布清单（产物不入库）
 ├── docs/                              # 本仓库自己的章程与决策记录（不随包发布）
 └── .local/                            # 本机私有文件（除说明文件外不入库）
@@ -309,6 +310,23 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
 
 `unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA，以及 edition 的权威来源与 fail-closed 行为；当前 63 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
+### 7.1 CI（`github` 底座）
+
+仓库自带一条 GitHub Actions 工作流 [`.github/workflows/ci.yml`](.github/workflows/ci.yml)，把上面三条登记检查放到平台上执行：
+
+- **触发**：`pull_request` 目标 `main`、`push` 到 `main`、以及手动 `workflow_dispatch`。
+- **环境**：`ubuntu-latest`，Python 版本矩阵 `3.12` / `3.13`（两个版本都跑，任一失败即整体失败）。
+- **步骤**：只有三条登记检查，按顺序执行且不跳过失败步骤 —— `python scripts/validate_kit.py`、`python -m unittest discover -s tests`、`python -m py_compile scripts/orchestrator.py scripts/validate_kit.py`。
+- **边界**：`permissions: contents: read`，不使用 `pull_request_target`，不引入第三方依赖、密钥或 `pip install`。
+
+**证据地位**：`github` 底座下，G4 以**当前 head SHA** 上的 CI 运行全绿为准 —— 本地三条命令仍是可复现的补充证据，不能替代 CI；反过来，CI 绿灯也只覆盖这三条命令，不能代替 G1 的逐条验收。head 变化后旧 head 的绿灯失效，必须在新 head 上重新运行。
+
+**查看方式**：
+
+- PR 页面的 **Checks** 区域（或提交旁的绿勾 / 红叉）展开即见各矩阵任务与失败步骤日志；
+- 命令行：`gh pr checks <PR 编号>` 查看当前 head 的检查状态，`gh pr checks <PR 编号> --watch` 等待结果；
+- Actions 页面（`https://github.com/<owner>/<repo>/actions/workflows/ci.yml`）可查历史运行记录；写证据矩阵时记录运行 URL 与 head SHA。
+
 发布前的完整自检（构建内置、无跳过开关）见 `release/README.md`。
 
 ## 8. 发布
@@ -328,7 +346,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py
   - **按机器余量的并发策略**：不再固定并发数量，派发前按 CPU、内存、磁盘与测试资源余量决定并行度（见 6.4 节）。
   - **配置自省**：`python scripts/orchestrator.py config show` 可查看每个配置键的生效值与来源，便于定位缺省值与项目覆盖。
 - 纯 **Python 3 标准库**，**零第三方依赖**；不需要数据库服务、包管理器或构建步骤。
-- 已在 **Windows + Git Bash** 环境用 Python 3 验证；其他操作系统与 shell **未验证**，命令中的引号与路径写法可能需要调整。
+- 已在 **Windows + Git Bash** 环境用 Python 3 验证；三条登记检查另由 CI 在 `ubuntu-latest` + Python 3.12/3.13 上运行（见 7.1）。其他操作系统、其他 shell 与其余命令**未验证**，命令中的引号与路径写法可能需要调整。
 - `orchestrator.py` 只管理本地任务状态与路径锁，不启动模型、不写代码、不运行项目测试、不自动合并 Git 分支；这些动作由 Agent 按提示词执行，合并由 Master 决策。
 - 若运行时无法真实完成 spawn / wait / collect（C1–C4 未全部通过），必须降级为多会话人工交接，不得声称已派发。
 
