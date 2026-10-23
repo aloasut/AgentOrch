@@ -67,7 +67,7 @@
 - **1.4（当前）** 相对 1.3：
   - **设计目标权威迁到 `docs/PLAN.md`**：任务方向以 `docs/PLAN.md` 为准；`init` 在 `docs/PLAN.md` 缺失且无旧根 `PLAN.md` 时创建 `docs/` 并放入模板，发现旧根 `PLAN.md` 时不迁移、只提示 `git mv`；`validate_kit` 对残留根 `PLAN.md` 报错（fail-closed，防两个设计权威并存）。迁移步骤见仓库 `docs/UPGRADE-2026-10.md` 第 11 节。
   - **图片协作条款**：设计文档可配图（`docs/images/`，正文相对引用）；Agent 只按正文指引按需查看图片、禁止批量读取；图文双写；公开仓库截图脱敏。`docs/images/` 不随包发布。
-  - **README 用户指引话术化**：启动 / 登记 / 派发 / 收口等说明改为中文自然语言话术（对 Agent 说），话术 → 命令对照保留在详解节（随 README 任务落地）。
+  - **README 用户指引话术化**：启动 / 登记 / 派发 / 收口等说明改为中文自然语言话术（对 Agent 说），话术 → 命令 → 预期证据对照表保留在 README 3.0 节。
 - **1.3** 相对 1.2：
   - **资源锁的载体字段**：任务载体新增具名资源锁字段——通用任务包 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`）、`github` 登记块 `locked_resources` 与 `resource_lease_until`、`local` 任务库 `resources_json` 列。字段形状属载体契约，故格式版本升级；语义与冲突矩阵仍只在 `docs/design/RESOURCE-LOCKS.md`。
   - **`MANIFEST.json` 与 `check_drift.py`**：包内新增机器可读清单（自检 a 的校验对象），分类与清单生成下移到 `scripts/check_drift.py` 并由构建脚本导入，同时随包提供下游只读漂移诊断。
