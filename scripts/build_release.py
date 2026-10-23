@@ -4,8 +4,8 @@
 The set of packaged files is not maintained here: it is *derived* from the
 `REQUIRED` list inside scripts/validate_kit.py, which is the single source of
 truth for both (1) this repository's structurally required files and (2) the
-release package manifest. The packaged `ORCHESTRATION-PROJECT.md` is replaced by
-the per-project template templates/ORCHESTRATION-PROJECT.template.md, so a
+release package manifest. The per-project config is NOT packaged: downstream
+copies kit/templates/project.md to docs/PROJECT.md and fills it in, so a
 released kit always ships the unfilled FILL_IN template.
 
 Archived bytes are normalized to LF line endings first. A payload is treated as
@@ -77,8 +77,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / 'scripts' / 'validate_kit.py'
-TEMPLATE = ROOT / 'templates' / 'ORCHESTRATION-PROJECT.template.md'
-PROJECT_CONFIG = 'ORCHESTRATION-PROJECT.md'
+PROJECT_TEMPLATE = ROOT / 'templates' / 'project.md'
+PROJECT_CONFIG = 'docs/PROJECT.md'  # project-owned; never packaged (docs/ is forbidden)
 DEFAULT_OUTPUT_DIR = 'release'
 
 # check_drift.py owns manifest generation, file classification and byte
@@ -148,15 +148,18 @@ def read_required():
 
 
 def collect_sources(required):
-    """Return {relative_path: bytes} for every file that should ship."""
+    """Return {relative_path: bytes} for every file that should ship.
+
+    The per-project config is intentionally NOT shipped: docs/ is a forbidden
+    segment, so downstream copies kit/templates/project.md to docs/PROJECT.md
+    and fills it in (self-check c proves --project-ready fails until they do).
+    """
     files = {}
     for rel in required:
-        source = TEMPLATE if rel == PROJECT_CONFIG else (ROOT / rel)
+        source = ROOT / rel
         if not source.is_file():
             raise SystemExit(f'build error: required source missing: {source}')
         files[rel] = normalize_line_endings(source.read_bytes())
-    if files[PROJECT_CONFIG] != normalize_line_endings(TEMPLATE.read_bytes()):
-        raise SystemExit('build error: could not substitute the per-project template')
     return files
 
 

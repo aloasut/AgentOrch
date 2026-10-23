@@ -11,13 +11,15 @@ orch=importlib.util.module_from_spec(spec); spec.loader.exec_module(orch)
 class LocalOrchestratorTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
-        # The edition is read from ORCHESTRATION-PROJECT.md only, and is required:
+        # The edition is read from docs/PROJECT.md only, and is required:
         # every local-CLI test root therefore declares it explicitly.
         self.write_edition('local')
         orch.init(self.root)
     def tearDown(self): self.tmp.cleanup()
     def write_edition(self, value, key='edition'):
-        (self.root/'ORCHESTRATION-PROJECT.md').write_text(
+        (self.root/'docs').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs').mkdir(parents=True, exist_ok=True)
+        (self.root/'docs/PROJECT.md').write_text(
             f'# Project\n\n## 运行配置\n\n- `{key}`：`{value}`\n',encoding='utf-8')
     def add(self,tid,paths,depends=None):
         class A: pass
@@ -320,11 +322,11 @@ class LocalOrchestratorTests(unittest.TestCase):
             self.assertEqual(conf['sources'][key],'default',key)
         # The edition never comes from config.json: it is the project declaration.
         self.assertEqual(conf['edition'],'local')
-        self.assertEqual(conf['sources']['edition'],'ORCHESTRATION-PROJECT.md')
+        self.assertEqual(conf['sources']['edition'],'docs/PROJECT.md')
         # A root with no project file has no edition at all; it must not default to local.
         with tempfile.TemporaryDirectory() as other:
             with self.assertRaises(orch.EditionError) as cm: orch.read_config(Path(other))
-            self.assertIn('ORCHESTRATION-PROJECT.md',str(cm.exception))
+            self.assertIn('docs/PROJECT.md',str(cm.exception))
         # init writes the runtime defaults only; the edition stays out of this file.
         orch.init(self.root)
         self.assertTrue(cfg.exists())
@@ -343,7 +345,7 @@ class LocalOrchestratorTests(unittest.TestCase):
         # A leftover `edition` key in config.json is a record, not a routing input:
         # the project declaration wins and no second definition is honoured.
         self.assertEqual(conf['edition'],'local')
-        self.assertEqual(conf['sources']['edition'],'ORCHESTRATION-PROJECT.md')
+        self.assertEqual(conf['sources']['edition'],'docs/PROJECT.md')
         self.assertEqual(orch.read_retry_cap(self.root),1)
         # Illegal runtime values fall back to their own default, not to the whole file.
         (self.root/'.orchestration'/'config.json').write_text(
@@ -357,7 +359,7 @@ class LocalOrchestratorTests(unittest.TestCase):
         with contextlib.redirect_stdout(out): rc=orch.config_show(self.root)
         text=out.getvalue()
         self.assertEqual(rc,0)
-        for key in ('retry_cap','local_dir','edition','config.json','ORCHESTRATION-PROJECT.md'):
+        for key in ('retry_cap','local_dir','edition','config.json','docs/PROJECT.md'):
             self.assertIn(key,text)
         (self.root/'.orchestration'/'config.json').write_text(
             json.dumps({'retry_cap':2,'edition':'github','local_dir':'priv'}),encoding='utf-8')
@@ -370,7 +372,7 @@ class LocalOrchestratorTests(unittest.TestCase):
         self.assertIn('source: config.json',text)
         # The printed edition is the project declaration, not the legacy config.json key.
         self.assertIn('edition    = local',text)
-        self.assertIn('source: ORCHESTRATION-PROJECT.md',text)
+        self.assertIn('source: docs/PROJECT.md',text)
         self.assertIn('legacy key is ignored',text)
 
 class ProjectEditionTests(unittest.TestCase):
@@ -379,7 +381,9 @@ class ProjectEditionTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
     def tearDown(self): self.tmp.cleanup()
     def project(self, body):
-        (self.root/'ORCHESTRATION-PROJECT.md').write_text(f'# Project\n\n## 运行配置\n\n{body}\n',encoding='utf-8')
+        (self.root/'docs').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs').mkdir(parents=True, exist_ok=True)
+        (self.root/'docs/PROJECT.md').write_text(f'# Project\n\n## 运行配置\n\n{body}\n',encoding='utf-8')
     def config(self, payload):
         target=self.root/'.orchestration'; target.mkdir(exist_ok=True)
         (target/'config.json').write_text(payload,encoding='utf-8')
@@ -389,7 +393,7 @@ class ProjectEditionTests(unittest.TestCase):
         self.config(json.dumps({'edition':'github','retry_cap':2}))
         conf=orch.read_config(self.root)
         self.assertEqual(conf['edition'],'local')
-        self.assertEqual(conf['sources']['edition'],'ORCHESTRATION-PROJECT.md')
+        self.assertEqual(conf['sources']['edition'],'docs/PROJECT.md')
         self.assertEqual(conf['retry_cap'],2)
         self.project('- `edition`：`github`')
         self.assertEqual(orch.read_config(self.root)['edition'],'github')
@@ -397,7 +401,7 @@ class ProjectEditionTests(unittest.TestCase):
     def test_missing_project_file_blocks(self):
         with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
         msg=str(cm.exception)
-        self.assertIn('ORCHESTRATION-PROJECT.md',msg)
+        self.assertIn('docs/PROJECT.md',msg)
         self.assertIn('file not found',msg)
         self.assertIn(str(self.root),msg)
 
@@ -406,7 +410,7 @@ class ProjectEditionTests(unittest.TestCase):
         with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
         msg=str(cm.exception)
         self.assertIn('missing required key `edition`',msg)
-        self.assertIn(str(self.root/'ORCHESTRATION-PROJECT.md'),msg)
+        self.assertIn(str(self.root/'docs/PROJECT.md'),msg)
 
     def test_illegal_edition_strings_block(self):
         for bad in ('GITHUB','cloud','local edition','local|github'):
@@ -416,7 +420,7 @@ class ProjectEditionTests(unittest.TestCase):
                 msg=str(cm.exception)
                 self.assertIn(bad,msg)
                 self.assertIn('allowed values are local, github',msg)
-                self.assertIn(str(self.root/'ORCHESTRATION-PROJECT.md'),msg)
+                self.assertIn(str(self.root/'docs/PROJECT.md'),msg)
 
     def test_wrong_type_edition_blocks(self):
         for bad in ('1','true','"local"','[local]'):
@@ -438,7 +442,8 @@ class ProjectEditionTests(unittest.TestCase):
         self.assertIn('declared 2 times',str(cm.exception))
 
     def test_unreadable_project_file_blocks(self):
-        (self.root/'ORCHESTRATION-PROJECT.md').write_bytes(b'- `edition`: \xff\xfe local\n')
+        (self.root/'docs').mkdir(parents=True, exist_ok=True)
+        (self.root/'docs/PROJECT.md').write_bytes(b'- `edition`: \xff\xfe local\n')
         with self.assertRaises(orch.EditionError) as cm: orch.read_project_edition(self.root)
         self.assertIn('cannot read',str(cm.exception))
 
@@ -490,7 +495,7 @@ class ProjectEditionTests(unittest.TestCase):
         self.assertEqual(rc,0)
         text=out.getvalue()
         self.assertIn('edition    = github',text)
-        self.assertIn('source: ORCHESTRATION-PROJECT.md',text)
+        self.assertIn('source: docs/PROJECT.md',text)
         with contextlib.redirect_stdout(io.StringIO()): orch.task_list(self.root,SimpleNamespace(active_only=False))
         with contextlib.redirect_stdout(io.StringIO()): orch.task_show(self.root,'TASK-0503')
         with contextlib.redirect_stdout(io.StringIO()): orch.backup(self.root)
@@ -504,7 +509,7 @@ class ProjectEditionTests(unittest.TestCase):
         self.assertIn('(invalid)',out.getvalue())
         self.assertIn('retry_cap',out.getvalue())
         self.assertIn('cloud',err.getvalue())
-        self.assertIn('ORCHESTRATION-PROJECT.md',err.getvalue())
+        self.assertIn('docs/PROJECT.md',err.getvalue())
 
     def test_retry_cap_is_never_blocked_by_an_edition_problem(self):
         self.project('- `edition`：`cloud`')
@@ -521,7 +526,9 @@ class PlanDocumentInitTests(unittest.TestCase):
     """
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
-        (self.root/'ORCHESTRATION-PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n',encoding='utf-8')
+        (self.root/'docs').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs').mkdir(parents=True, exist_ok=True)
+        (self.root/'docs/PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n',encoding='utf-8')
     def tearDown(self): self.tmp.cleanup()
     def write_template(self, data):
         target=self.root/'templates'; target.mkdir(exist_ok=True)
@@ -547,7 +554,7 @@ class PlanDocumentInitTests(unittest.TestCase):
     def test_existing_docs_plan_is_kept_and_repeated_init_is_idempotent(self):
         self.write_template(b'# Implementation Plan\n\ntemplate\n')
         sentinel=b'# my plan\n\nSENTINEL: owner content, never overwrite\n'
-        (self.root/'docs').mkdir(); (self.root/'docs'/'PLAN.md').write_bytes(sentinel)
+        (self.root/'docs').mkdir(parents=True, exist_ok=True); (self.root/'docs'/'PLAN.md').write_bytes(sentinel)
         config=self.root/'.orchestration'/'config.json'
         rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
         self.assertIn('kept unchanged',out)
@@ -580,7 +587,7 @@ class PlanDocumentInitTests(unittest.TestCase):
         rc,out,err=self.run_init()
         self.assertEqual(rc,0,err)
         self.assertFalse((self.root/'docs'/'PLAN.md').exists())
-        self.assertFalse((self.root/'docs').exists())           # no empty docs/ is fabricated
+        self.assertFalse((self.root/'docs'/'PLAN.md').exists())   # no PLAN is fabricated
         self.assertIn('PLAN.md not created: template missing',out)
         self.assertTrue(orch.db_path(self.root).is_file())
 
@@ -698,11 +705,12 @@ class ResourceIdTests(unittest.TestCase):
 
 
 class ResourceLockTests(unittest.TestCase):
-    """Named resource locks, implemented against docs/design/RESOURCE-LOCKS.md."""
+    """Named resource locks, implemented against docs/design/resource-locks.md."""
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
-        (self.root / 'ORCHESTRATION-PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n', encoding='utf-8')
+        (self.root / 'docs').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs' / 'PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n', encoding='utf-8')
         with contextlib.redirect_stdout(io.StringIO()): orch.init(self.root)
         config = self.root / '.orchestration' / 'config.json'
         data = json.loads(config.read_text(encoding='utf-8'))
@@ -1223,7 +1231,8 @@ class ResourceLifecycleOnStatusTests(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
-        (self.root / 'ORCHESTRATION-PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n', encoding='utf-8')
+        (self.root / 'docs').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs' / 'PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n', encoding='utf-8')
         with contextlib.redirect_stdout(io.StringIO()): orch.init(self.root)
         config = self.root / '.orchestration' / 'config.json'
         data = json.loads(config.read_text(encoding='utf-8')); data['resource_lease_ttl'] = 600

@@ -232,7 +232,7 @@ def _project_root(ctx, edition='local', config=None):
     """A throw-away project root with an explicit edition and an initialized store."""
     root = ctx.sandbox / f'project-{edition}'
     root.mkdir(parents=True, exist_ok=True)
-    (root / 'ORCHESTRATION-PROJECT.md').write_text(
+    (root/'docs').mkdir(parents=True, exist_ok=True) or (root / 'docs/PROJECT.md').write_text(
         f'# Synthetic project\n\n- `edition`\uFF1A`{edition}`\n', encoding='utf-8')
     (root / '.orchestration').mkdir(exist_ok=True)
     payload = {'retry_cap': 3, 'local_dir': '.local'}
@@ -680,9 +680,9 @@ def scenario_d2(ctx):
                                           '- `edition`\uFF1A`github`\n')):
         root = ctx.sandbox / f'edition-{label.replace(" ", "-")}'
         root.mkdir(parents=True, exist_ok=True)
-        (root / 'ORCHESTRATION-PROJECT.md').write_text(body, encoding='utf-8')
+        (root/'docs').mkdir(parents=True, exist_ok=True) or (root / 'docs/PROJECT.md').write_text(body, encoding='utf-8')
         message = _expect_refused(lambda root=root: ctx.orch.read_project_edition(root),
-                                  'ORCHESTRATION-PROJECT.md', label)
+                                  'docs/PROJECT.md', label)
         cases.append(f'{label}: {message}')
 
     broken = ctx.sandbox / 'edition-absent'

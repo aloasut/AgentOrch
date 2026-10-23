@@ -34,9 +34,9 @@ SUITE = 'Agent-Orchestration Starter Kit'
 FORMAT = '1.2'
 
 TREE_FILES = {
-    'AGENT-ORCHESTRATION.md': '# core contract\n',
-    'editions/local/MASTER.md': '# local edition\n',
-    'ORCHESTRATION-PROJECT.md': '- `edition`: `local`\n',
+    'kit/orchestration.md': '# core contract\n',
+    'editions/local/master.md': '# local edition\n',
+    'docs/PROJECT.md': '- `edition`: `local`\n',
 }
 
 
@@ -90,8 +90,8 @@ def run_cli(*args, cwd=None):
 
 class ManifestGenerationTests(unittest.TestCase):
     def test_entries_are_sorted_and_carry_the_contract_fields(self):
-        files = {'editions/local/MASTER.md': b'e', 'AGENT-ORCHESTRATION.md': b'c',
-                 'templates/PLAN.md': b't', 'ORCHESTRATION-PROJECT.md': b'p'}
+        files = {'editions/local/master.md': b'e', 'kit/orchestration.md': b'c',
+                 'templates/plan.md': b't', 'docs/PROJECT.md': b'p'}
         manifest = drift.build_manifest(files, SUITE, FORMAT)
         self.assertEqual(sorted(manifest), ['files', 'format_version', 'schema_version', 'suite'])
         self.assertEqual(manifest['schema_version'], drift.MANIFEST_SCHEMA_VERSION)
@@ -105,7 +105,7 @@ class ManifestGenerationTests(unittest.TestCase):
             self.assertRegex(entry['sha256'], r'^[0-9a-f]{64}$')
 
     def test_manifest_has_no_timestamp_and_is_byte_stable(self):
-        files = {'AGENT-ORCHESTRATION.md': b'# core\n', 'AGENT-BOOTSTRAP.md': b'# boot\n'}
+        files = {'kit/orchestration.md': b'# core\n', 'kit/orchestration.md': b'# boot\n'}
         first = drift.dumps_manifest(drift.build_manifest(files, SUITE, FORMAT))
         second = drift.dumps_manifest(drift.build_manifest(files, SUITE, FORMAT))
         self.assertEqual(first, second)
@@ -114,7 +114,7 @@ class ManifestGenerationTests(unittest.TestCase):
             self.assertNotIn(key, payload)
 
     def test_hash_and_size_follow_lf_normalization(self):
-        manifest = drift.build_manifest({'AGENT-ORCHESTRATION.md': b'# a\r\n# b\r\n'},
+        manifest = drift.build_manifest({'kit/orchestration.md': b'# a\r\n# b\r\n'},
                                         SUITE, FORMAT)
         entry = manifest['files'][0]
         self.assertEqual(entry['size'], len(b'# a\n# b\n'))
@@ -122,7 +122,7 @@ class ManifestGenerationTests(unittest.TestCase):
 
     def test_binary_payload_is_hashed_verbatim(self):
         payload = b'\x00\x01binary'
-        entry = drift.build_manifest({'LICENSE.txt': payload}, SUITE, FORMAT)['files'][0]
+        entry = drift.build_manifest({'LICENSE.md': payload}, SUITE, FORMAT)['files'][0]
         self.assertEqual(entry['sha256'], drift.sha256_bytes(payload))
         self.assertEqual(entry['size'], len(payload))
 
@@ -130,9 +130,9 @@ class ManifestGenerationTests(unittest.TestCase):
         cases = {
             'AGENTS.md': 'core',
             'scripts/check_drift.py': 'core',
-            'editions/github/MASTER.md': 'edition',
-            'templates/TASK-PACKET.md': 'template',
-            'ORCHESTRATION-PROJECT.md': 'project-profile',
+            'editions/github/master.md': 'edition',
+            'templates/task-packet.md': 'template',
+            'docs/PROJECT.md': 'project-profile',
             'PLAN.md': 'project-profile',
         }
         for path, expected in cases.items():
@@ -152,9 +152,9 @@ class ManifestGenerationTests(unittest.TestCase):
     def test_two_archives_of_one_tree_are_byte_identical(self):
         builder = load('build_release_under_test', BUILD)
         files = {
-            'AGENT-ORCHESTRATION.md': b'# core\n',
-            'editions/local/MASTER.md': b'# edition\n',
-            'ORCHESTRATION-PROJECT.md': b'# project\n',
+            'kit/orchestration.md': b'# core\n',
+            'editions/local/master.md': b'# edition\n',
+            'docs/PROJECT.md': b'# project\n',
         }
         manifest = drift.build_manifest(files, SUITE, FORMAT)
         files[drift.MANIFEST_NAME] = drift.dumps_manifest(manifest).encode('utf-8')
@@ -191,12 +191,12 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertEqual(len(manifest['files']), len(required))
 
     def test_missing_file_is_reported(self):
-        (self.tree.root / 'editions/local/MASTER.md').unlink()
+        (self.tree.root / 'editions/local/master.md').unlink()
         errors = drift.validate_manifest(self.tree.root, self.manifest)
         self.assertTrue(any('missing on disk' in e for e in errors), errors)
 
     def test_hash_mismatch_is_reported(self):
-        self.tree.write('AGENT-ORCHESTRATION.md', '# tampered\n')
+        self.tree.write('kit/orchestration.md', '# tampered\n')
         errors = drift.validate_manifest(self.tree.root, self.manifest)
         self.assertTrue(any('sha256 does not match' in e for e in errors), errors)
 
@@ -240,10 +240,10 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertTrue(any('must not contain' in e for e in errors), errors)
 
     def test_manifest_does_not_list_itself(self):
-        files = {'AGENT-ORCHESTRATION.md': b'c', drift.MANIFEST_NAME: b'{}'}
+        files = {'kit/orchestration.md': b'c', drift.MANIFEST_NAME: b'{}'}
         manifest = drift.build_manifest(files, SUITE, FORMAT)
         self.assertEqual([entry['path'] for entry in manifest['files']],
-                         ['AGENT-ORCHESTRATION.md'])
+                         ['kit/orchestration.md'])
 
     def test_schema_newer_than_supported_is_not_a_structure_error(self):
         manifest = json.loads(drift.dumps_manifest(self.manifest))
@@ -272,20 +272,20 @@ class DiagnosisTests(unittest.TestCase):
             self.assertEqual(report['findings'][key], [])
 
     def test_modified_core_file_is_drift(self):
-        self.tree.write('AGENT-ORCHESTRATION.md', '# changed contract\n')
+        self.tree.write('kit/orchestration.md', '# changed contract\n')
         report = drift.diagnose(self.tree.root)
         self.assertEqual(report['status'], 'drift')
         self.assertEqual(report['exit_code'], 2)
-        self.assertEqual(self.paths(report, 'modified'), ['AGENT-ORCHESTRATION.md'])
+        self.assertEqual(self.paths(report, 'modified'), ['kit/orchestration.md'])
         item = report['findings']['modified'][0]
         self.assertEqual(item['category'], 'core')
         self.assertNotEqual(item['expected_sha256'], item['actual_sha256'])
 
     def test_missing_core_file_is_drift(self):
-        (self.tree.root / 'editions/local/MASTER.md').unlink()
+        (self.tree.root / 'editions/local/master.md').unlink()
         report = drift.diagnose(self.tree.root)
         self.assertEqual(report['exit_code'], 2)
-        self.assertEqual(self.paths(report, 'missing'), ['editions/local/MASTER.md'])
+        self.assertEqual(self.paths(report, 'missing'), ['editions/local/master.md'])
 
     def test_project_extension_is_reported_but_not_drift(self):
         self.tree.write('src/app.py', 'print("project code")\n')
@@ -306,12 +306,12 @@ class DiagnosisTests(unittest.TestCase):
         self.assertNotIn('editions/local/EXTRA.md', self.paths(report, 'extensions'))
 
     def test_project_profile_edit_is_not_drift(self):
-        self.tree.write('ORCHESTRATION-PROJECT.md', '- `edition`: `github`\n')
+        self.tree.write('docs/PROJECT.md', '- `edition`: `github`\n')
         self.tree.write('PLAN.md', '# design goals\n')
         report = drift.diagnose(self.tree.root)
         self.assertEqual(report['status'], 'clean')
         self.assertEqual(sorted(self.paths(report, 'project_profile')),
-                         ['ORCHESTRATION-PROJECT.md', 'PLAN.md'])
+                         ['PLAN.md', 'docs/PROJECT.md'])
         self.assertEqual(report['findings']['modified'], [])
 
     def test_tree_without_manifest_reports_unknown_version(self):
@@ -333,7 +333,7 @@ class DiagnosisTests(unittest.TestCase):
         self.assertTrue(any('outside this tool' in note for note in report['notes']))
 
     def test_crlf_checkout_is_not_reported_as_modified(self):
-        path = self.tree.root / 'AGENT-ORCHESTRATION.md'
+        path = self.tree.root / 'kit/orchestration.md'
         path.write_bytes(b'# core contract\r\n')
         report = drift.diagnose(self.tree.root)
         self.assertEqual(report['findings']['modified'], [])
@@ -355,7 +355,7 @@ class DiagnosisTests(unittest.TestCase):
         self.assertIn('does not exist', result.stderr)
 
     def test_file_as_root_is_a_tool_error(self):
-        result = run_cli(str(self.tree.root / 'AGENT-ORCHESTRATION.md'))
+        result = run_cli(str(self.tree.root / 'kit/orchestration.md'))
         self.assertEqual(result.returncode, 1)
         self.assertIn('not a directory', result.stderr)
 
@@ -389,7 +389,7 @@ class CliContractTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_json_mode_prints_only_json_on_stdout(self):
-        self.tree.write('AGENT-ORCHESTRATION.md', '# changed\n')
+        self.tree.write('kit/orchestration.md', '# changed\n')
         result = run_cli(str(self.tree.root), '--json')
         self.assertEqual(result.returncode, 2, result.stderr)
         report = json.loads(result.stdout)
@@ -397,7 +397,7 @@ class CliContractTests(unittest.TestCase):
         self.assertEqual(report['exit_code'], 2)
         self.assertEqual(report['report_schema_version'], drift.REPORT_SCHEMA_VERSION)
         self.assertEqual(set(report), self.REPORT_KEYS)
-        self.assertEqual(report['findings']['modified'][0]['path'], 'AGENT-ORCHESTRATION.md')
+        self.assertEqual(report['findings']['modified'][0]['path'], 'kit/orchestration.md')
         self.assertIn('status: drift', result.stderr)
 
     def test_json_mode_reports_clean_with_exit_zero(self):

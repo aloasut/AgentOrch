@@ -14,7 +14,7 @@ Two jobs live here, and only here:
    - `missing`  - a manifest entry that is absent from the tree (drift)
    - `modified` - a `core` / `edition` / `template` entry whose bytes changed
                   (drift); checks hash *and* size
-   - `project_profile` - `ORCHESTRATION-PROJECT.md` / `PLAN.md` (legacy root
+   - `project_profile` - `docs/PROJECT.md` / `docs/PLAN.md` (current) or legacy root
                   or `docs/PLAN.md`) / `DESIGN.md` edits and additions;
                   expected after a project fills them in, so reported but
                   **never** counted as drift
@@ -56,7 +56,7 @@ import re
 import sys
 from pathlib import Path
 
-VERSION_FILE = 'VERSION.txt'
+VERSION_FILE = 'VERSION.md'
 MANIFEST_NAME = 'MANIFEST.json'
 
 # Schema of the report this tool prints. Bump only on an incompatible field
@@ -75,7 +75,8 @@ CATEGORIES = UPSTREAM_CATEGORIES + ('project-extension', 'unknown')
 # Per-project files. Their content is meant to change after installation, so a
 # hash difference is reported as `project_profile`, never as drift. The root
 # PLAN.md is the legacy (<=1.3) plan location; docs/PLAN.md is the current one.
-PROJECT_PROFILE_PATHS = ('ORCHESTRATION-PROJECT.md', 'PLAN.md', 'docs/PLAN.md', 'DESIGN.md')
+PROJECT_PROFILE_PATHS = ('ORCHESTRATION-PROJECT.md', 'docs/PROJECT.md', 'PLAN.md',
+                         'docs/PLAN.md', 'DESIGN.md', 'docs/DESIGN.md')
 # Directories whose contents the manifest owns. A file that appears here without
 # a manifest entry is `unknown` (drift), not a project extension.
 UPSTREAM_NAMESPACES = ('editions/', 'templates/', 'scripts/', 'prompts/', 'tests/')
@@ -175,8 +176,12 @@ def read_version(root):
     except OSError as exc:
         raise DriftError(f'cannot read {VERSION_FILE}: {exc}')
     suite, format_version = '', ''
-    for line in text.splitlines():
-        line = line.strip()
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if line.startswith('#'):
+            line = line.lstrip('#').strip()
+        if line.startswith('- '):
+            line = line[2:].strip()
         if not line:
             continue
         match = re.match(r'(?i)^format\s+version\s*[:：]\s*(\S+)$', line)

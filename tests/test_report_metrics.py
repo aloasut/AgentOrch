@@ -1,6 +1,6 @@
 """Tests for scripts/report_metrics.py (read-only delivery metrics).
 
-The metric definitions live in templates/METRICS.md and the fixed synthetic
+The metric definitions live in templates/metrics.md and the fixed synthetic
 dataset is embedded there, so these tests fail if the documented sample and the
 implementation drift apart. They also pin the parts a report must never get
 wrong: an empty input is "no data" (not zero), a task without the events a

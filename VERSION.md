@@ -1,0 +1,4 @@
+# Agent-Orchestration Starter Kit
+
+- Editions: local, github
+- Format version: 1.5

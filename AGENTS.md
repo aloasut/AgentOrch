@@ -1,8 +1,8 @@
-每次会话开始，先执行 AGENT-BOOTSTRAP.md 的入口流程恢复状态并路由。
+每次会话开始，先执行 kit/orchestration.md 的入口流程恢复状态并路由。
 
 # AGENTS.md — Agent Collaboration Contract
 
-本文件是仓库内所有 Agent 的唯一权威核心契约，与底座（edition）无关。每次接手先读本文件、`AGENT-ORCHESTRATION.md` 与 `ORCHESTRATION-PROJECT.md`，再读 `editions/<edition>/MASTER.md` 和当前底座的提示词。有分歧时，以项目所有者最近一次明确决定为最高约束，其次是本文件，再到 `AGENT-ORCHESTRATION.md`、底座手册与提示词；发现冲突必须登记为任务，不能自行发明权限。
+本文件是仓库内所有 Agent 的唯一权威核心契约，与底座（edition）无关。每次接手先读本文件、`kit/orchestration.md` 与 `docs/PROJECT.md`，再读 `editions/<edition>/MASTER.md` 和当前底座的提示词。有分歧时，以项目所有者最近一次明确决定为最高约束，其次是本文件，再到 `kit/orchestration.md`、底座手册与提示词；发现冲突必须登记为任务，不能自行发明权限。
 
 ## 0. 底座（Edition）
 
@@ -13,9 +13,9 @@
 | `local` | 离线单机 | SQLite 任务库（`.orchestration/state.sqlite3`） | 原子路径锁 | 本地命令输出 + head SHA |
 | `github` | 托管平台 | Issue 任务单 | Issue 内 `ORCH-TASK-REGISTRY` 登记块 + 开放 PR 同文件检查 | CI 结果 + PR 评论 + head SHA |
 
-- 底座由 `ORCHESTRATION-PROJECT.md` 的 `edition` 决定，取值只能是 `local` 或 `github`。缺失或非法时，停止调度并明确报告，**不得猜测或按默认值继续**。
+- 底座由 `docs/PROJECT.md` 的 `edition` 决定，取值只能是 `local` 或 `github`。缺失或非法时，停止调度并明确报告，**不得猜测或按默认值继续**。
 - 角色权限、审查门、禁改路径、证据标准、测试强度在两个底座完全一致；底座不得成为降低标准的理由。
-- **禁止在一个项目里混用两种底座**：路径锁与 Issue 登记块不能互相替代，也不能双写。迁移只能按 `AGENT-ORCHESTRATION.md` 的“底座切换”单向执行，切换点前后的任务状态分别由各自底座记录。
+- **禁止在一个项目里混用两种底座**：路径锁与 Issue 登记块不能互相替代，也不能双写。迁移只能按 `kit/orchestration.md` 的“底座切换”单向执行，切换点前后的任务状态分别由各自底座记录。
 
 ## 1. 基本约定
 
@@ -46,15 +46,15 @@
 1. 唯一 ID 与单一目标。
 2. 背景和用户可感知的结果。
 3. 可改路径与禁改路径。
-4. 明确的逐条验收标准，并映射到 `AGENT-ORCHESTRATION.md` 4.1 节定义的验收证据矩阵（每条 AC 至少一条 evidence item）。
+4. 明确的逐条验收标准，并映射到 `kit/orchestration.md` 4.1 节定义的验收证据矩阵（每条 AC 至少一条 evidence item）。
 5. 依赖任务及其完成状态。
 6. 要运行的检查命令；未知命令标为待探测，不可伪造。
 7. 风险、产品决策和回退要求。
-8. **计划挂靠**：计划分两层。`docs/PLAN.md` 是**设计目标权威**——为什么做、做到什么程度、原则与边界，任务方向必须与它一致；阶段目标、任务顺序与状态写在 `docs/` 的阶段计划里（项目需要时从 `templates/IMPLEMENTATION-PLAN.md` 复制，`init` 不创建它）。`templates/PLAN.md` 只用于初始化复制（`init` 在 `docs/PLAN.md` 缺失且不存在 1.3 之前的根 `PLAN.md` 时，创建 `docs/` 并逐字节复制一份），既有文件不被覆盖；发现 1.3 之前的根 `PLAN.md` 时，`init` 与 `validate_kit` 都会拒绝并提示 `git mv PLAN.md docs/PLAN.md` 迁移。两者冲突时，以 `docs/PLAN.md` 的设计目标为准，停下对齐，不得各写一套。**设计文档可配图**：图放 `docs/images/`，在正文中以相对路径引用（如 `![图 1](images/xxx.png)`）；**Agent 只在文档文本明确指向某图时才打开该图，禁止批量读取 `docs/images/`**；**图文双写**——设计意图必须能仅凭文字成立，图片只作补充，每个图片引用都要有相邻文字说明。
+8. **计划挂靠**：计划分两层。`docs/PLAN.md` 是**设计目标权威**——为什么做、做到什么程度、原则与边界，任务方向必须与它一致；阶段目标、任务顺序与状态写在 `docs/` 的阶段计划里（项目需要时从 `templates/implementation-plan.md` 复制，`init` 不创建它）。`templates/plan.md` 只用于初始化复制（`init` 在 `docs/PLAN.md` 缺失且不存在 1.3 之前的根 `PLAN.md` 时，创建 `docs/` 并逐字节复制一份），既有文件不被覆盖；发现 1.3 之前的根 `PLAN.md` 时，`init` 与 `validate_kit` 都会拒绝并提示 `git mv PLAN.md docs/PLAN.md` 迁移。两者冲突时，以 `docs/PLAN.md` 的设计目标为准，停下对齐，不得各写一套。**设计文档可配图**：图放 `docs/images/`，在正文中以相对路径引用（如 `![图 1](images/xxx.png)`）；**Agent 只在文档文本明确指向某图时才打开该图，禁止批量读取 `docs/images/`**；**图文双写**——设计意图必须能仅凭文字成立，图片只作补充，每个图片引用都要有相邻文字说明。
 
-任务包字段在两个底座必须一一对应：`local` 写入任务库，`github` 写入 Issue（见 `editions/github/ISSUE-TEMPLATE.md`）。缺任一字段不得进入 `READY`。
+任务包字段在两个底座必须一一对应：`local` 写入任务库，`github` 写入 Issue（见 `editions/github/issue-template.md`）。缺任一字段不得进入 `READY`。
 
-证据矩阵与五个结构化场景字段（`invariants`、`negative_cases`、`migration_cases`、`integration_paths`、`unverified_assumptions`）的字段名、取值与判定规则只在 `AGENT-ORCHESTRATION.md` 4.1 节定义，本文件与模板只引用不重述。小任务的场景字段填 `N/A: <理由>`，不得只写 `N/A`。该要求是增量补充：既有任务的验收语义与状态流转不变，兼容策略见 4.1 节。
+证据矩阵与五个结构化场景字段（`invariants`、`negative_cases`、`migration_cases`、`integration_paths`、`unverified_assumptions`）的字段名、取值与判定规则只在 `kit/orchestration.md` 4.1 节定义，本文件与模板只引用不重述。小任务的场景字段填 `N/A: <理由>`，不得只写 `N/A`。该要求是增量补充：既有任务的验收语义与状态流转不变，兼容策略见 4.1 节。
 
 ## 4. Git 和实现纪律
 
