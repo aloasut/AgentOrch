@@ -22,7 +22,7 @@
 - Decision:
 - Alternatives:
 - Trade-offs / risks:
-- Contracts frozen by these decisions (fill [DESIGN.md](DESIGN.md), record each one in [CONTRACT-DECISION-LOG.md](CONTRACT-DECISION-LOG.md)):
+- Contracts frozen by these decisions (fill [DESIGN.md](design.md), record each one in [CONTRACT-DECISION-LOG.md](contract-decision-log.md)):
 
 ## Open decisions requiring owner input
 - Question / options / recommendation:
@@ -32,7 +32,7 @@
 - Smallest end-to-end vertical slice:
 - Validation method:
 - Rollback / recovery:
-- Closeout audit (fill [MILESTONE-AUDIT.md](MILESTONE-AUDIT.md) before calling this milestone done):
+- Closeout audit (fill [MILESTONE-AUDIT.md](milestone-audit.md) before calling this milestone done):
 
 
 ## 附：章程引导话术（原 templates/project-charter.md，1.5 起并入）

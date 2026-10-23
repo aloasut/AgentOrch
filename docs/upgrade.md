@@ -5,7 +5,7 @@
 >
 > - `edition` 的权威来源、合法值与失败关闭：[README.md](README.md) 6.1 / 6.2
 > - 计划分两层（设计目标 / 阶段计划）：[AGENTS.md](../AGENTS.md) 第 8 条
-> - 资源锁语义（冲突矩阵、租约与恢复、底座边界）：[docs/design/resource-locks.md](design/RESOURCE-LOCKS.md)
+> - 资源锁语义（冲突矩阵、租约与恢复、底座边界）：[docs/design/resource-locks.md](design/resource-locks.md)
 > - 清单格式、文件分类与漂移诊断口径：[docs/drift.md](drift.md)
 >
 > 1.4 起套件命令统一加 `uv run python` 前缀执行；本文记录的是 1.3 时代的实测命令（直接 `python`），语义不变，对照执行时自行加前缀。
@@ -293,7 +293,7 @@ Total: 1 row(s); generated with the frozen contract docs/design/resource-locks.m
 
 - **`github` 底座不需要配**这两个键：本地 CLI 在 `github` 下拒绝 `task dispatch` / `renew` / `reclaim`（报 `edition is 'github' ...`，退出码 1），资源占用只以 Issue 登记块协作记录，不走这套租约。
 - 声明里自带 ttl（`db:test/mysql-main:exclusive:600`）时，`task dispatch` 不读 config 的 `resource_lease_ttl`；但 `task renew` 仍然读它（实测：config 里没有该键时 `renew` 报 `RESOURCE_CONFIG_INVALID`）。
-- 租约到期只是转 `EXPIRED`，**不释放、也不等于空闲**；语义见 [docs/design/resource-locks.md](design/RESOURCE-LOCKS.md)。
+- 租约到期只是转 `EXPIRED`，**不释放、也不等于空闲**；语义见 [docs/design/resource-locks.md](design/resource-locks.md)。
 
 ### 5.6 不要这样做
 

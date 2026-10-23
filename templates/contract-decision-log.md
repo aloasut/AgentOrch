@@ -1,6 +1,6 @@
 # Contract Decision Log
 
-> One append-mostly log per project (or per milestone) that records every change to a frozen contract. The contract itself is [DESIGN.md](DESIGN.md); the closeout review that consumes these records is [MILESTONE-AUDIT.md](MILESTONE-AUDIT.md).
+> One append-mostly log per project (or per milestone) that records every change to a frozen contract. The contract itself is [DESIGN.md](design.md); the closeout review that consumes these records is [MILESTONE-AUDIT.md](milestone-audit.md).
 >
 > A decision log answers three questions that a design document alone cannot: what is frozen, what is still undecided, and what is expected to change later. It is not a task list — execution state lives on the task carrier and follows the lifecycle in [kit/orchestration.md](../kit/orchestration.md), which this file does not restate.
 
@@ -53,7 +53,7 @@
 - `Before` / `After` are filled for a change: what the contract said, what it says now. For a first freeze, `Before` is `(none)`.
 - Evidence is a resolvable pointer — task ID, PR or Issue comment — plus the head SHA it was recorded at. A decision without evidence is `OPEN`, not `FROZEN`.
 - Do not delete rows. An obsolete decision becomes `SUPERSEDED` and stays visible.
-- A change to a frozen item also updates the affected section of [DESIGN.md](DESIGN.md) in the same task; the log and the contract must not disagree.
+- A change to a frozen item also updates the affected section of [DESIGN.md](design.md) in the same task; the log and the contract must not disagree.
 - `OPEN` rows must say what unblocks them. Anything still `OPEN` at milestone closeout is reported as `NEEDS_HUMAN_DECISION`, not silently dropped.
 
 ### Example (fabricated, for shape only)

@@ -6,7 +6,7 @@
 >
 > **Lightweight mode:** a small change does not have to produce a long document, but it must not delete headings. Keep every heading and answer the ones that do not apply with `N/A: <reason>` (a bare `N/A` is not acceptable, and a missing heading is not the same as "not applicable").
 >
-> **Freeze is not permanence.** "Frozen" means downstream tasks may not rewrite the contract on their own; it does not mean the contract can never change. Any change is made by recording a decision in [CONTRACT-DECISION-LOG.md](CONTRACT-DECISION-LOG.md) with the affected tasks, the before/after text and the evidence, then updating this file.
+> **Freeze is not permanence.** "Frozen" means downstream tasks may not rewrite the contract on their own; it does not mean the contract can never change. Any change is made by recording a decision in [CONTRACT-DECISION-LOG.md](contract-decision-log.md) with the affected tasks, the before/after text and the evidence, then updating this file.
 >
 > This template deliberately does **not** restate the task state machine, the merge gates G1–G6 or the evidence matrix. Those are defined once in [kit/orchestration.md](../kit/orchestration.md); reference them, never copy them here.
 
@@ -95,7 +95,7 @@
 
 - Items frozen by this document:
 - Items still open at freeze time (each with who decides and what is blocked):
-- Items frozen now but expected to change (record them as revisitable in [CONTRACT-DECISION-LOG.md](CONTRACT-DECISION-LOG.md)):
+- Items frozen now but expected to change (record them as revisitable in [CONTRACT-DECISION-LOG.md](contract-decision-log.md)):
 
 ## Open decisions
 

@@ -17,13 +17,13 @@
 
 ## 任务载体
 
-- 每个任务一个 Issue，正文固定使用 [ISSUE-TEMPLATE.md](ISSUE-TEMPLATE.md) 的五节：目标 / 验收标准 / 可改路径 / 禁改路径 / 依赖。
+- 每个任务一个 Issue，正文固定使用 [ISSUE-TEMPLATE.md](issue-template.md) 的五节：目标 / 验收标准 / 可改路径 / 禁改路径 / 依赖。
 - Issue 标签至少表达状态（`status:ready`、`status:in-progress`、`status:review`、`status:blocked`）与类型。
 - Issue 正文是任务的唯一权威描述；聊天与 PR 描述不能替代或悄悄修改验收标准。
 
 ## 锁机制
 
-- 开工前在 Issue 内写入 [ACTIVE-TASK-REGISTRY.md](ACTIVE-TASK-REGISTRY.md) 的 `ORCH-TASK-REGISTRY` 登记块，声明 `locked_paths`、分支、PR、执行者与时间戳。
+- 开工前在 Issue 内写入 [ACTIVE-TASK-REGISTRY.md](active-task-registry.md) 的 `ORCH-TASK-REGISTRY` 登记块，声明 `locked_paths`、分支、PR、执行者与时间戳。
 - 同时列出所有开放 PR 的变更文件，检查是否与 `locked_paths` 相交；相交即冲突，整个派发失败，不允许“先开工再协调”。
 - 路径相同或父子重叠即冲突。活动期间扩大 `locked_paths` 必须在 Issue 评论说明并重新做冲突检查。
 - 释放条件与核心契约一致：只有 `VERIFIED` / `CANCELED` 才把登记块标记为释放；失败或状态未知保持锁定并写 `blocked_reason`。
