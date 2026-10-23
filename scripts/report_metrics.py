@@ -27,7 +27,7 @@ from statistics import median
 
 SCHEMA_VERSION = '1.0'
 TIMEZONE = 'UTC'
-GOLD_SAMPLE_TEMPLATE = Path(__file__).resolve().parents[1] / 'templates' / 'METRICS.md'
+GOLD_SAMPLE_TEMPLATE = Path(__file__).resolve().parents[1] / 'templates' / 'metrics.md'
 GOLD_SAMPLE_FENCE = 'metrics-sample'
 
 STATUS_CHANGED = 'STATUS_CHANGED'
