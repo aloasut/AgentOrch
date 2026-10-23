@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only delivery metrics for the Agent-Orchestration kit.
 
-The seven metric definitions live in ``templates/METRICS.md``; this module
+The seven metric definitions live in ``templates/metrics.md``; this module
 implements them and prints the metric ``id`` on every row so a report can be
 traced back to that definition. It reads task-library events and evidence
 references only:
@@ -15,7 +15,7 @@ Sources:
 
 * a SQLite task library (``.orchestration/state.sqlite3``) opened read-only;
 * a JSON event sample (``--gold-sample`` reads the fixed sample embedded in
-  ``templates/METRICS.md``).
+  ``templates/metrics.md``).
 
 Exit codes: ``0`` for a produced report (including "no data"), ``2`` when the
 source cannot be read.
@@ -244,7 +244,7 @@ def load_sqlite(path):
 
 
 def gold_sample_text(root=GOLD_SAMPLE_TEMPLATE):
-    """The fixed synthetic dataset embedded in templates/METRICS.md."""
+    """The fixed synthetic dataset embedded in templates/metrics.md."""
     try:
         text = Path(root).read_text(encoding='utf-8')
     except OSError as exc:
@@ -712,7 +712,7 @@ def main(argv=None):
     parser.add_argument('source', nargs='?',
                         help='task library (.sqlite3 / .db) or JSON event sample')
     parser.add_argument('--gold-sample', action='store_true',
-                        help='use the fixed sample embedded in templates/METRICS.md')
+                        help='use the fixed sample embedded in templates/metrics.md')
     parser.add_argument('--json', action='store_true', help='print the stable JSON report')
     parser.add_argument('--since', help='window start (ISO date or timestamp, UTC)')
     parser.add_argument('--until', help='window end, exclusive (ISO date or timestamp, UTC)')

@@ -297,7 +297,7 @@ def run_self_check(zip_path, required, top_dir, extra_patterns=()):
         rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'validate_kit.py'), '--project-ready'], pkg_root)
         if rc == 0:
             failures.append('(c) validate_kit.py --project-ready unexpectedly PASSED; '
-                            'ORCHESTRATION-PROJECT.md was not released as the FILL_IN template')
+                            'docs/PROJECT.md was not shipped (by design); FILL_IN guidance missing')
         elif 'FILL_IN' not in out:
             failures.append('(c) validate_kit.py --project-ready failed but output never mentions '
                             f'FILL_IN:\n{indent(out)}')

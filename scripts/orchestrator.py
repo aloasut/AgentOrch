@@ -166,8 +166,8 @@ def require_local_scheduler(root, action):
     raise EditionError(
         f'edition is {edition!r} ({project_config_path(root)}); this CLI cannot run `{action}` for the {edition} edition: '
         f'it writes the local SQLite task registry, which is a read-only archive under {edition}. '
-        'Next: create or update the task as a GitHub Issue using editions/github/ISSUE-TEMPLATE.md, record the '
-        'ORCH-TASK-REGISTRY block before starting, and drive the PR per editions/github/START-EXECUTION.md. '
+        'Next: create or update the task as a GitHub Issue using editions/github/issue-template.md, record the '
+        'ORCH-TASK-REGISTRY block before starting, and drive the PR per editions/github/execution.md. '
         'init, backup, config show, task list, task show and task resources stay available.'
     )
 
