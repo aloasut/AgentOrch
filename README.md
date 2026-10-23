@@ -37,9 +37,9 @@
 
 **用法一句话：把下面的话术原样复制给你的 Agent（WorkBuddy、Claude Code、Cursor… 都行），它会自己识别要做什么、执行对应命令，并把输出与退出码带回来给你。** 命令不需要你手打；想知道 Agent 到底会跑什么，见第 3 节的「话术 → 命令」对照表。Agent 第一次接入本项目时，先让它读 [AGENT-BOOTSTRAP.md](AGENT-BOOTSTRAP.md) 与 [AGENTS.md](AGENTS.md)——那是它的行为契约，话术只负责"点菜"。
 
-**第 1 步 · 装进项目**（先从本仓库 Releases 下载 `agentorch-YYYYMMDD.zip` 解压备好，或 clone 本仓库——注意不要把 `.git/` 带进项目，细节见 3.1）：
+**第 1 步 · 装进项目**（先从本仓库 Releases 下载最新的 `agentorch-YYYYMMDD.zip` 解压备好，细节见 3.1）：
 
-> 把这套 Agent-Orchestration 套件装进我的项目：保留 scripts/、editions/、templates/ 的相对路径，不要复制 .git/、.worktrees/、.orchestration/ 和 .local/。装完列出顶层目录给我确认。
+> 从 AgentOrch 仓库的 Releases 下载最新的发行包并解压，把包内 agentorch-YYYYMMDD/ 目录的全部内容装进我的项目根（保留 scripts/、editions/、templates/ 的相对路径）。装完列出顶层目录给我确认。
 
 **第 2 步 · 选底座并初始化**：
 
@@ -112,7 +112,7 @@
 
 | 话术（对 Agent 说） | Agent 执行的命令 | 预期证据 |
 | --- | --- | --- |
-| "把套件装进我的项目…" | 复制 `agentorch-YYYYMMDD/` 内容到项目根（排除 `.git/`、`.worktrees/`、`.orchestration/`、`.local/`） | 顶层目录清单：`scripts/`、`editions/`、`templates/`、`ORCHESTRATION-PROJECT.md` 等 |
+| "把套件装进我的项目…" | 从 Releases 下载发行包并解压，把 `agentorch-YYYYMMDD/` 内容复制到项目根 | 顶层目录清单：`scripts/`、`editions/`、`templates/`、`ORCHESTRATION-PROJECT.md` 等 |
 | "编辑 ORCHESTRATION-PROJECT.md…然后运行初始化" | 编辑 `ORCHESTRATION-PROJECT.md`；`python scripts/orchestrator.py init` | 退出码 0；输出含 `Created docs/PLAN.md from <项目根>\templates\PLAN.md`；`.orchestration/state.sqlite3` 出现 |
 | "把 config show 和 task list 的完整输出给我看" | `python scripts/orchestrator.py config show`、`task list` | 退出码 0；`edition = local`；任务库为空 |
 | "登记 ID 为 TASK-0001 的示例任务…" | `python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"` | 输出 `TASK-0001: created in PLANNED` |
@@ -122,15 +122,15 @@
 
 ### 3.1 放入套件
 
-新建项目目录，把套件内容复制进去，保留 `scripts/`、`editions/`、`templates/` 等相对路径（示例源为已解压的分发包）：
+**直接使用发行版，不要 clone 本仓库。** 本仓库是套件自我开发与完善的现场——阶段计划、任务记录、审计与设计过程材料都在里面，不面向使用者；面向使用者的只有 Releases 里的发行包。发行包只含可复用产出（核心契约、两套底座、模板、脚本与自检），并经隐私自检：无个人路径、无凭据痕迹、无任务记录与过程残留。
 
 ```bash
-mkdir my-project
-cd my-project
-cp -r /path/to/agentorch-YYYYMMDD/. .
+# 从 Releases 下载 agentorch-YYYYMMDD.zip 后解压，把包内目录内容复制进你的项目根
+unzip /path/to/agentorch-YYYYMMDD.zip -d /tmp/agentorch-kit
+cp -r /tmp/agentorch-kit/agentorch-YYYYMMDD/. your-project/ && cd your-project
 ```
 
-若使用本仓库而不是分发包，复制时不要带上 `.git/`、`.worktrees/`、`.orchestration/` 与本机私有目录。随后编辑 `ORCHESTRATION-PROJECT.md`，至少填好 `edition: local`、允许 / 禁改路径和验证命令；分发包里的该文件是带 `FILL_IN` 的待填模板。
+随后编辑 `ORCHESTRATION-PROJECT.md`，至少填好 `edition: local`、允许 / 禁改路径和验证命令；发行包里的该文件是带 `FILL_IN` 的待填模板。
 
 ### 3.2 最小命令序列
 
