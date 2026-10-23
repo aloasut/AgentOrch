@@ -532,7 +532,7 @@ class PlanDocumentInitTests(unittest.TestCase):
     def tearDown(self): self.tmp.cleanup()
     def write_template(self, data):
         target=self.root/'templates'; target.mkdir(exist_ok=True)
-        (target/'PLAN.md').write_bytes(data)
+        (target/'plan.md').write_bytes(data)
     def run_init(self):
         out,err=io.StringIO(),io.StringIO()
         with mock.patch.object(sys,'argv',['orchestrator.py','--root',str(self.root),'init']), \
@@ -547,7 +547,7 @@ class PlanDocumentInitTests(unittest.TestCase):
         rc,out,err=self.run_init()
         self.assertEqual(rc,0,err)
         self.assertEqual((self.root/'docs'/'PLAN.md').read_bytes(),data)
-        self.assertEqual((self.root/'templates'/'PLAN.md').read_bytes(),data)
+        self.assertEqual((self.root/'templates'/'plan.md').read_bytes(),data)
         self.assertIn('Created docs/PLAN.md',out)
         self.assertIn('下一步：填写 docs/PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）',out)
 
