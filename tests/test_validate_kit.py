@@ -327,10 +327,10 @@ class PlanLayerSplitTests(unittest.TestCase):
 
     def test_implementation_plan_template_is_in_the_release_manifest(self):
         self.assertIn('templates/implementation-plan.md', validate.REQUIRED)
-        self.assertTrue((ROOT / 'templates' / 'IMPLEMENTATION-PLAN.md').is_file())
+        self.assertTrue((ROOT / 'templates' / 'implementation-plan.md').is_file())
 
     def test_design_template_points_to_the_separate_phase_plan(self):
-        text = (ROOT / 'templates' / 'PLAN.md').read_text(encoding='utf-8')
+        text = (ROOT / 'templates' / 'plan.md').read_text(encoding='utf-8')
         self.assertIn('templates/implementation-plan.md', text)
         for needle in ('Allowed paths', 'Depends on', 'AC-1'):
             self.assertNotIn(needle, text,
@@ -349,7 +349,7 @@ class PlanLayerSplitTests(unittest.TestCase):
                                 for e in errors), errors)
 
     def test_phase_plan_template_carries_phases_and_task_blocks(self):
-        text = (ROOT / 'templates' / 'IMPLEMENTATION-PLAN.md').read_text(encoding='utf-8')
+        text = (ROOT / 'templates' / 'implementation-plan.md').read_text(encoding='utf-8')
         for needle in ('Phase', 'Goal', 'Allowed paths', 'Depends on', 'AC-1',
                        '当前状态', '维护规则'):
             self.assertIn(needle, text)
@@ -431,7 +431,7 @@ class ContractTemplateTests(unittest.TestCase):
     def test_design_contract_states_freeze_is_not_permanent(self):
         text = (ROOT / 'templates' / 'design.md').read_text(encoding='utf-8')
         self.assertIn('not permanence', text)
-        self.assertIn('CONTRACT-DECISION-LOG.md', text)
+        self.assertIn('contract-decision-log.md', text)
         for needle in ('N/A: <reason>', 'kit/orchestration.md'):
             self.assertIn(needle, text)
 
