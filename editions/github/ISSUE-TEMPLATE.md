@@ -22,7 +22,7 @@
 
 - 矩阵必须声明一个 head SHA（= PR 最新 commit）；head 变化后重新取证，旧行只能作为历史。
 - 列顺序固定（与 `local` 任务包一致）：`ac_id`、`method`、`expected`、`actual`、`status`、`environment`、`commit_sha`、`evidence_ref`、`notes`；字段含义与判定规则见 `AGENT-ORCHESTRATION.md` 4.1 节。
-- 结构检查：`python scripts/validate_kit.py --task-packet <填好的任务包路径>` 是本地等价物；PR 评论里的矩阵必须与任务包字段同名同义。
+- 结构检查：`uv run python scripts/validate_kit.py --task-packet <填好的任务包路径>` 是本地等价物；PR 评论里的矩阵必须与任务包字段同名同义。
 
 **结构化场景字段**（与 `local` 任务包同名同义，含义见 `AGENT-ORCHESTRATION.md` 4.1 节）：`invariants`、`negative_cases`、`migration_cases`、`integration_paths`、`unverified_assumptions`。
 
@@ -51,7 +51,7 @@
 - 同一登记块可写 `resource_lease_until` 作为最新租约的记账值；平台不会因为它的日期过去而拒绝任何写入。
 - 这两项是**协作性占用登记**：正确性依赖“同一时刻只有一个 Master 在派发”和每次派发前重读登记块与开放 PR 快照。GitHub 不提供跨 Issue / 跨评论的事务，检查与写入之间存在 TOCTOU 窗口，因此这里写的是“已登记”，不是“已取得原子锁”；冲突后的处理权在人工（串行化、改资源或明确接受风险并记录）。
 - 字段含义只在 `docs/design/RESOURCE-LOCKS.md` 定义，本模板不重述；`local` 底座的资源锁才在单库单主机范围内具备原子性。
-- 结构检查：`python scripts/validate_kit.py --task-packet <任务包路径>` 会校验本字段的格式；留空不会被判为失败。
+- 结构检查：`uv run python scripts/validate_kit.py --task-packet <任务包路径>` 会校验本字段的格式；留空不会被判为失败。
 
 ---
 

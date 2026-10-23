@@ -33,7 +33,7 @@
 
 ## 快速上手（5 分钟）
 
-前提：Python 3.12+ 与 Git。脚本只用标准库，**无需安装任何依赖**；`local` 底座完全离线可用。
+前提：Git 与 [uv](https://docs.astral.sh/uv/)（本项目统一用 `uv run python` 执行脚本）；脚本只用标准库，**无第三方依赖**；`local` 底座完全离线可用。
 
 **用法一句话：把下面的话术原样复制给你的 Agent（WorkBuddy、Claude Code、Cursor… 都行），它会自己识别要做什么、执行对应命令，并把输出与退出码带回来给你。** 命令不需要你手打；想知道 Agent 到底会跑什么，见第 3 节的「话术 → 命令」对照表。Agent 第一次接入本项目时，先让它读 [AGENT-BOOTSTRAP.md](AGENT-BOOTSTRAP.md) 与 [AGENTS.md](AGENTS.md)——那是它的行为契约，话术只负责"点菜"。
 
@@ -104,7 +104,7 @@
 
 ## 3. 上手命令详解（local）
 
-这是「快速上手」的完整版：话术对应哪些命令、每条命令的真实输出、退出码与逐条解释。
+这是「快速上手」的完整版：话术对应哪些命令、每条命令的真实输出、退出码与逐条解释。所有命令都通过 `uv run python` 执行（uv 会自动选择合适的解释器）。
 
 ### 3.0 话术 → 命令对照表
 
@@ -113,12 +113,12 @@
 | 话术（对 Agent 说） | Agent 执行的命令 | 预期证据 |
 | --- | --- | --- |
 | "把套件装进我的项目…" | 从 Releases 下载发行包并解压，把 `agentorch-YYYYMMDD/` 内容复制到项目根 | 顶层目录清单：`scripts/`、`editions/`、`templates/`、`ORCHESTRATION-PROJECT.md` 等 |
-| "编辑 ORCHESTRATION-PROJECT.md…然后运行初始化" | 编辑 `ORCHESTRATION-PROJECT.md`；`python scripts/orchestrator.py init` | 退出码 0；输出含 `Created docs/PLAN.md from <项目根>\templates\PLAN.md`；`.orchestration/state.sqlite3` 出现 |
-| "把 config show 和 task list 的完整输出给我看" | `python scripts/orchestrator.py config show`、`task list` | 退出码 0；`edition = local`；任务库为空 |
-| "登记 ID 为 TASK-0001 的示例任务…" | `python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"` | 输出 `TASK-0001: created in PLANNED` |
-| "置为 READY 再 DISPATCH" | `python scripts/orchestrator.py task ready TASK-0001`、`task dispatch TASK-0001` | 退出码 0；`DISPATCHED; locks acquired for src`；任务包生成并展示 |
-| "运行结构自检并告诉我退出码" | `python scripts/validate_kit.py` | 退出码 0；`Kit validation passed (49 required files checked; …)` |
-| "把示例任务置为 CANCELED" | `python scripts/orchestrator.py task status TASK-0001 CANCELED --note "冒烟结束"` | 退出码 0；路径锁释放 |
+| "编辑 ORCHESTRATION-PROJECT.md…然后运行初始化" | 编辑 `ORCHESTRATION-PROJECT.md`；`uv run python scripts/orchestrator.py init` | 退出码 0；输出含 `Created docs/PLAN.md from <项目根>\templates\PLAN.md`；`.orchestration/state.sqlite3` 出现 |
+| "把 config show 和 task list 的完整输出给我看" | `uv run python scripts/orchestrator.py config show`、`task list` | 退出码 0；`edition = local`；任务库为空 |
+| "登记 ID 为 TASK-0001 的示例任务…" | `uv run python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"` | 输出 `TASK-0001: created in PLANNED` |
+| "置为 READY 再 DISPATCH" | `uv run python scripts/orchestrator.py task ready TASK-0001`、`task dispatch TASK-0001` | 退出码 0；`DISPATCHED; locks acquired for src`；任务包生成并展示 |
+| "运行结构自检并告诉我退出码" | `uv run python scripts/validate_kit.py` | 退出码 0；`Kit validation passed (49 required files checked; …)` |
+| "把示例任务置为 CANCELED" | `uv run python scripts/orchestrator.py task status TASK-0001 CANCELED --note "冒烟结束"` | 退出码 0；路径锁释放 |
 
 ### 3.1 放入套件
 
@@ -135,20 +135,20 @@ cp -r /tmp/agentorch-kit/agentorch-YYYYMMDD/. your-project/ && cd your-project
 ### 3.2 最小命令序列
 
 ```bash
-python scripts/orchestrator.py init
-python scripts/orchestrator.py config show
-python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths README.md src/ --acceptance "有最小可运行入口" "测试命令退出码为 0"
-python scripts/orchestrator.py task ready TASK-0001
-python scripts/orchestrator.py task dispatch TASK-0001
-python scripts/orchestrator.py task list
-python scripts/validate_kit.py
-python -m unittest discover -s tests
+uv run python scripts/orchestrator.py init
+uv run python scripts/orchestrator.py config show
+uv run python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths README.md src/ --acceptance "有最小可运行入口" "测试命令退出码为 0"
+uv run python scripts/orchestrator.py task ready TASK-0001
+uv run python scripts/orchestrator.py task dispatch TASK-0001
+uv run python scripts/orchestrator.py task list
+uv run python scripts/validate_kit.py
+uv run python -m unittest discover -s tests
 ```
 
 关键输出（为便于阅读，绝对路径以 `<项目根>` 代替，分隔符随平台变化、示例为 Windows 写法；路径末尾的 `/` 会被规范化为 `src`）：
 
 ```text
-$ python scripts/orchestrator.py init
+$ uv run python scripts/orchestrator.py init
 Initialized local task registry: <项目根>\.orchestration\state.sqlite3
 Review-fix retry cap: 3 (edit key "retry_cap" in <项目根>\.orchestration\config.json to change it)
 Local task registry only: the edition is read from <项目根>\ORCHESTRATION-PROJECT.md, not from this config.
@@ -156,7 +156,7 @@ Back up .orchestration/ with your project backups.
 Created docs/PLAN.md from <项目根>\templates\PLAN.md
 下一步：填写 docs/PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）；配图放 docs/images/，在正文中用相对路径引用，Agent 只按文中指引查看图片
 
-$ python scripts/orchestrator.py config show
+$ uv run python scripts/orchestrator.py config show
 Config file: <项目根>\.orchestration\config.json
   retry_cap  = 3          (source: config.json)
   local_dir  = .local     (source: config.json)
@@ -164,26 +164,26 @@ Config file: <项目根>\.orchestration\config.json
 Edition is selected only by `edition` in <项目根>\ORCHESTRATION-PROJECT.md; config.json holds local CLI runtime parameters (retry_cap, local_dir) and never selects an edition.
 Edit .orchestration/config.json to change retry_cap or local_dir; invalid values there fall back to defaults.
 
-$ python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths README.md src/ --acceptance "有最小可运行入口" "测试命令退出码为 0"
+$ uv run python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths README.md src/ --acceptance "有最小可运行入口" "测试命令退出码为 0"
 TASK-0001: created in PLANNED
 
-$ python scripts/orchestrator.py task ready TASK-0001
+$ uv run python scripts/orchestrator.py task ready TASK-0001
 TASK-0001: READY
 
-$ python scripts/orchestrator.py task dispatch TASK-0001
+$ uv run python scripts/orchestrator.py task dispatch TASK-0001
 TASK-0001: DISPATCHED; locks acquired for README.md, src
 Now pass the self-contained task packet to a real Execution Agent. This command does not launch agents.
 
-$ python scripts/orchestrator.py task list
+$ uv run python scripts/orchestrator.py task list
 TASK-0001	DISPATCHED	建立项目骨架
   paths: README.md, src
   locks: README.md, src
   retries: 0
 
-$ python scripts/validate_kit.py
+$ uv run python scripts/validate_kit.py
 Kit validation passed (49 required files checked; editions local/github share 7 files, github adds 3 templates).
 
-$ python -m unittest discover -s tests
+$ uv run python -m unittest discover -s tests
 Ran 241 tests in 28.594s
 OK
 ```
@@ -195,7 +195,7 @@ OK
 - **计划分两层**：`docs/PLAN.md` 是**设计目标权威**（为什么做、做到什么程度、原则与边界），任务方向必须与它一致；阶段目标、任务顺序与状态写在 `docs/` 的阶段计划里，需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建阶段计划）。两者冲突时以 `docs/PLAN.md` 的设计目标为准，停下对齐，不得各写一套。`templates/PLAN.md` 只用于初始化复制，不要直接把它当项目计划。**设计文档可配图**：图放 `docs/images/`、正文相对引用；Agent 只按文中指引看图、不批量读取；设计意图必须文字自足（规则见 [AGENTS.md](AGENTS.md) 第 8 条）。
 - `dispatch` 只登记状态并占用路径锁，**不会启动 Agent**。拿到锁后，把自包含任务包交给真实执行实例；没有真实 spawn 能力时，由操作者另开会话执行。
 - 单元测试会大量打印临时任务库日志，属正常现象；退出码为 0 即通过。
-- 冒烟完成后可取消这条示例任务并释放锁：`python scripts/orchestrator.py task status TASK-0001 CANCELED --note "快速开始冒烟结束"`。
+- 冒烟完成后可取消这条示例任务并释放锁：`uv run python scripts/orchestrator.py task status TASK-0001 CANCELED --note "快速开始冒烟结束"`。
 
 ## 4. 三条落地路径
 
@@ -206,7 +206,7 @@ OK
 目标：从一句想法走到项目章程、首批任务与第一个可运行切片。
 
 1. 按第 3 节把套件放入空目录，`ORCHESTRATION-PROJECT.md` 填 `edition: local`。
-2. 运行 `python scripts/orchestrator.py init` 与 `python scripts/orchestrator.py task list`：`init` 会从 `templates/PLAN.md` 复制出 `docs/PLAN.md`，先在这份**设计目标**文件里写清问题、目标、原则、边界与全局验收，再确认任务库可用且为空。需要阶段计划时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`，在那里写阶段目标、任务顺序与状态。
+2. 运行 `uv run python scripts/orchestrator.py init` 与 `uv run python scripts/orchestrator.py task list`：`init` 会从 `templates/PLAN.md` 复制出 `docs/PLAN.md`，先在这份**设计目标**文件里写清问题、目标、原则、边界与全局验收，再确认任务库可用且为空。需要阶段计划时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`，在那里写阶段目标、任务顺序与状态。
 3. 在 Master Agent 会话中加载 [editions/local/START-MASTER-NEW-PROJECT.md](editions/local/START-MASTER-NEW-PROJECT.md)，按提示词澄清目标、产出章程、拆出 1–3 个最小任务。
 4. 若想法本身还很模糊，先走 [prompts/START-CHARTER.md](prompts/START-CHARTER.md) 的章程引导流程，再进入任务拆解。
 
@@ -219,9 +219,9 @@ OK
 3. 运行：
 
    ```bash
-   python scripts/orchestrator.py init
-   python scripts/orchestrator.py task list
-   python scripts/validate_kit.py
+   uv run python scripts/orchestrator.py init
+   uv run python scripts/orchestrator.py task list
+   uv run python scripts/validate_kit.py
    ```
 
 4. 在 Master Agent 会话中加载 [editions/local/START-MASTER-EXISTING-PROJECT.md](editions/local/START-MASTER-EXISTING-PROJECT.md)。该提示词会要求先读 Git 状态与任务库，再拆任务与派发。
@@ -294,7 +294,7 @@ OK
 
 ### 6.2 运行时配置：`.orchestration/config.json`
 
-由 `python scripts/orchestrator.py init` 创建，**只描述本地 CLI 的运行参数**；它不决定底座，也不存在“缺省底座”。底座只看 6.1 的 `edition`。
+由 `uv run python scripts/orchestrator.py init` 创建，**只描述本地 CLI 的运行参数**；它不决定底座，也不存在“缺省底座”。底座只看 6.1 的 `edition`。
 
 | 键 | 允许值 / 默认 | 作用 |
 | --- | --- | --- |
@@ -312,7 +312,7 @@ OK
 查看每个键的生效值与来源：
 
 ```bash
-python scripts/orchestrator.py config show
+uv run python scripts/orchestrator.py config show
 ```
 
 `source` 为 `config.json` 表示来自运行时文件，为 `default` 表示回落到内置默认；`edition` 的来源固定是 `ORCHESTRATION-PROJECT.md`。示例（合法覆盖 + 合法 `local` 声明）：
@@ -360,10 +360,10 @@ Edit .orchestration/config.json to change retry_cap or local_dir; invalid values
 路径锁只能回答“两个任务是否改同一批文件”。测试数据库、共享构建机、端到端测试槽这类**不落在文件上**的独占需求，用可选具名资源锁表达：任务声明显式资源集合，派发时与路径锁一起判定，两者都通过才可派发。语义（冲突矩阵、原子集合获取、租约与恢复、底座边界、故障场景）**只在仓库中的 `docs/design/RESOURCE-LOCKS.md` 定义**（该目录不随发行包发布），本节只列命令。
 
 ```bash
-python scripts/orchestrator.py task add --id TASK-0002 --title "跑集成测试" --paths tests/ --acceptance "集成测试通过" --resources db:test/mysql-main:exclusive svc:build/win-01:shared:600
-python scripts/orchestrator.py task dispatch TASK-0002 --holder "$ORCH_HOLDER" --evidence "issue #12 comment"
-python scripts/orchestrator.py task resources      # 资源 / 模式 / 状态 / 租约 / 持有者 / 阻塞效果
-python scripts/orchestrator.py task show TASK-0002 # 本任务的资源锁与最近阻塞原因
+uv run python scripts/orchestrator.py task add --id TASK-0002 --title "跑集成测试" --paths tests/ --acceptance "集成测试通过" --resources db:test/mysql-main:exclusive svc:build/win-01:shared:600
+uv run python scripts/orchestrator.py task dispatch TASK-0002 --holder "$ORCH_HOLDER" --evidence "issue #12 comment"
+uv run python scripts/orchestrator.py task resources      # 资源 / 模式 / 状态 / 租约 / 持有者 / 阻塞效果
+uv run python scripts/orchestrator.py task show TASK-0002 # 本任务的资源锁与最近阻塞原因
 ```
 
 - **不声明就不参与**：不带 `--resources` 的任务与之前完全一致，行为、报错文案、锁表都不变。
@@ -379,10 +379,10 @@ python scripts/orchestrator.py task show TASK-0002 # 本任务的资源锁与最
 套件自带两层自检：结构自检保证文件与文档没有腐化，单元测试保证任务库与锁的行为不变。
 
 ```bash
-python scripts/validate_kit.py
-python scripts/validate_kit.py --project-ready
-python -m unittest discover -s tests
-python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/report_metrics.py scripts/check_drift.py scripts/build_release.py scripts/run_delivery_scenarios.py
+uv run python scripts/validate_kit.py
+uv run python scripts/validate_kit.py --project-ready
+uv run python -m unittest discover -s tests
+uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/report_metrics.py scripts/check_drift.py scripts/build_release.py scripts/run_delivery_scenarios.py
 ```
 
 `validate_kit.py` 检查：
@@ -406,7 +406,7 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/rep
 
 - **触发**：`pull_request` 目标 `main`、`push` 到 `main`、以及手动 `workflow_dispatch`。
 - **环境**：`ubuntu-latest`，Python 版本矩阵 `3.12` / `3.13`（两个版本都跑，任一失败即整体失败）。
-- **步骤**：按顺序执行且不跳过失败步骤 —— `python scripts/validate_kit.py`、`python -m unittest discover -s tests`、`python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py`、`python scripts/build_release.py`。
+- **步骤**：按顺序执行且不跳过失败步骤 —— `uv run python scripts/validate_kit.py`、`uv run python -m unittest discover -s tests`、`uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py`、`uv run python scripts/build_release.py`。
 - **打包自检**：最后一步是发布构建本身。它失败即 job 失败 —— 没有 `continue-on-error`、没有 `|| true`、没有跳过开关，因此"少打包一个文件、包里断链、清单哈希对不上、包内出现禁止路径"这类回归会在 PR 上直接变红，而不是等 Master 手工构建才发现。
   - **两个版本都跑的原因**：自检会在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`（a–f 中的 b、d），即真正检验"这一档 Python 拿到的包是否可用"；两档都证明一次，成本是本机数秒级的重复，换来不依赖版本判断的一致性（无 `if:` 条件，也就不会出现"某档静默跳过打包步骤"）。
   - **产物处理**：zip 写到 runner 的 `release/`（`.gitignore` 已忽略 `release/*.zip`），不提交、不上传 artifact、不使用任何密钥。
@@ -429,10 +429,10 @@ python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/rep
 
 ```bash
 # 固定合成样本：成功 / 失败 / 取消 / 阻塞 / 重试 / 缺事件都覆盖
-python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until 2026-02-01
+uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until 2026-02-01
 
 # 真实 local 任务库（只读打开；不会写状态、不释放锁）
-python scripts/report_metrics.py .orchestration/state.sqlite3 --json
+uv run python scripts/report_metrics.py .orchestration/state.sqlite3 --json
 ```
 
 - **能力登记**按 [templates/RUNTIME-CAPABILITY.md](templates/RUNTIME-CAPABILITY.md) 填写：运行时名称与精确版本、底座、执行模式、探测时间（UTC）、C1–C4 逐条结论、更细的边界（spawn 句柄、隔离、wait-collect、终局分类、取消、文件 / 命令 / CI 权限、工具与测试环境、证据、限制）。未探测、证据失效或运行时升级一律写 `UNKNOWN`，先降级再重测。**记录只说明观察到的事实，不授予权限，也不替代 G1–G6。**
@@ -446,8 +446,8 @@ python scripts/report_metrics.py .orchestration/state.sqlite3 --json
 
 ```bash
 # 全量运行（人类摘要写到 stdout；--json 时 stdout 只有报告，摘要转 stderr）
-python scripts/run_delivery_scenarios.py
-python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-report.json"
+uv run python scripts/run_delivery_scenarios.py
+uv run python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-report.json"
 ```
 
 - **退出码三态**：`0` 全部场景通过；`1` 至少一个场景失败或异常（不当作通过）；`2` 运行器自身未能开跑（模块缺失、`--only` 未知 ID、输出不可写）。
@@ -462,7 +462,7 @@ python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-report.
 
 ### 8.1 构建发行包
 
-- **构建**：`python scripts/build_release.py` 产出 `release/agentorch-{YYYYMMDD}.zip`；包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`。
+- **构建**：`uv run python scripts/build_release.py` 产出 `release/agentorch-{YYYYMMDD}.zip`；包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`。
 - **机器可读清单**：`MANIFEST.json` 记录 `schema_version`（清单格式版本）、`suite`、`format_version`（套件格式版本）与 `files[]`；每个条目含 `path`、`category`、`sha256`、`size`。清单**不含时间戳**、条目按路径排序，分类规则只有一处实现（`scripts/check_drift.py`，构建脚本导入它），因此同一工作树两次构建得到完全相同的清单与 zip SHA256。
 - **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–f 自检，失败会删除未通过自检的产物，没有跳过开关。自检 a 现在校验「包内文件集合 == `REQUIRED` + `MANIFEST.json`」、清单中每条路径可解析、SHA-256 与大小和实际文件一致、分类合法且清单路径与 `REQUIRED` 完全一致。
 - **可复现**：归档时间戳固定、文本文件按 LF 归一后打包，清单哈希同样按归一后的字节计算；同一仓库状态重建应得到同一 SHA256，Windows 上 `core.autocrlf=true` 的检出也不会改变结果。
@@ -474,8 +474,8 @@ python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-report.
 项目从发行包复制出来后，用下面这条命令判断「我用的哪个版本、核心契约是否被改过」，**只报告、不覆盖**：
 
 ```bash
-python scripts/check_drift.py <项目根>          # 人类可读摘要，stdout
-python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要转到 stderr
+uv run python scripts/check_drift.py <项目根>          # 人类可读摘要，stdout
+uv run python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要转到 stderr
 ```
 
 输出把文件分成五类，同一路径只归一类：
@@ -504,7 +504,7 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 - `1.3` 相对 `1.2` 的变更要点：
   - **资源锁的载体字段**：具名资源锁把"不落在文件上"的独占需求写成任务字段——通用任务包新增可选 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`，逗号分隔）；`github` 登记块新增 `locked_resources` 与 `resource_lease_until`（后者仅为记账值，平台不会因其过期而拒绝写入）；`local` 任务库新增 `resources_json` 列。字段格式属载体契约，故 `Format version` 从 `1.2` 升到 `1.3`；语义仍只在 `docs/design/RESOURCE-LOCKS.md` 定义（该目录不随包发布）。
   - **发布清单与漂移工具进包**：包内新增 `MANIFEST.json`，分类与清单生成只有一处实现（`scripts/check_drift.py`，构建脚本导入它），`check_drift.py` 同时随包提供下游只读漂移诊断（见 8.1 / 8.2 节）。
-  - **CI 打包自检**：`.github/workflows/ci.yml` 在每个 PR 与 `main` 推送的两个 Python 版本上都执行 `python scripts/build_release.py`，失败即红（见 7.1 节）；`py_compile` 同时覆盖 `scripts/check_drift.py`。
+  - **CI 打包自检**：`.github/workflows/ci.yml` 在每个 PR 与 `main` 推送的两个 Python 版本上都执行 `uv run python scripts/build_release.py`，失败即红（见 7.1 节）；`py_compile` 同时覆盖 `scripts/check_drift.py`。
 - `1.2` 相对 `1.1` 的变更要点：
   - **发行包版本清单**：包内新增机器可读的 `MANIFEST.json`（套件版本、清单 schema 版本、逐文件分类与 SHA-256），构建可复现，清单无时间戳（见 8.1 节）。
   - **下游只读漂移诊断**：新增 `scripts/check_drift.py`，报告缺失、被改动的核心文件、上游目录内的未知文件、无清单旧项目与版本跨度，只诊断不覆盖，退出码区分 clean / drift / 工具错误（见 8.2 节）。
@@ -512,7 +512,7 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
   - **双底座**：`Edition: offline-single-user` 改为 `Editions: local, github`，同一套核心契约下分 `local`（纯本地）与 `github`（多人协作）两种底座，选择判据见第 2 节。
   - **`.local` 隐私层**：机器信息、凭据与发布扫描规则统一放 `.local/`，除目录说明外永不入库、永不打包（见 6.3 节）。
   - **按机器余量的并发策略**：不再固定并发数量，派发前按 CPU、内存、磁盘与测试资源余量决定并行度（见 6.4 节）。
-  - **配置自省**：`python scripts/orchestrator.py config show` 可查看每个配置键的生效值与来源，便于定位缺省值与项目覆盖。
+  - **配置自省**：`uv run python scripts/orchestrator.py config show` 可查看每个配置键的生效值与来源，便于定位缺省值与项目覆盖。
 - 纯 **Python 3 标准库**，**零第三方依赖**；不需要数据库服务、包管理器或构建步骤。
 - 已在 **Windows + Git Bash** 环境用 Python 3 验证；四条检查（三条登记检查 + 发布打包自检）另由 CI 在 `ubuntu-latest` + Python 3.12/3.13 上运行（见 7.1）。其他操作系统、其他 shell 与其余命令**未验证**，命令中的引号与路径写法可能需要调整。
 - `orchestrator.py` 只管理本地任务状态与路径锁，不启动模型、不写代码、不运行项目测试、不自动合并 Git 分支；这些动作由 Agent 按提示词执行，合并由 Master 决策。
@@ -527,7 +527,7 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 **没有自动迁移**：套件不提供迁移脚本，`init` 也不会替你拆分计划或改写配置。动手前先留证据：
 
 ```bash
-python scripts/orchestrator.py backup    # 备份任务库，退出码 0
+uv run python scripts/orchestrator.py backup    # 备份任务库，退出码 0
 git rev-parse HEAD                       # 记录升级前 head，回退时要用
 ```
 
@@ -541,7 +541,7 @@ git rev-parse HEAD                       # 记录升级前 head，回退时要�
   + `edition`: local
   ```
 
-- **怎么自检**：`python scripts/orchestrator.py config show` 中 `edition` 一行应为 `local`（或 `github`）、`source` 为 `ORCHESTRATION-PROJECT.md`，退出码 `0`。旧格式的报错长这样（都以退出码 `1` 结束）：
+- **怎么自检**：`uv run python scripts/orchestrator.py config show` 中 `edition` 一行应为 `local`（或 `github`）、`source` 为 `ORCHESTRATION-PROJECT.md`，退出码 `0`。旧格式的报错长这样（都以退出码 `1` 结束）：
 
   ```text
   ERROR: ORCHESTRATION-PROJECT.md: key `edition` has unsupported value 'local（单人本地；需要多人协作时改为 github）' in <项目根>\ORCHESTRATION-PROJECT.md; allowed values are local, github (write the value alone, with no extra text)
@@ -567,8 +567,8 @@ git rev-parse HEAD                       # 记录升级前 head，回退时要�
 
   ```bash
   grep -n '^|' PLAN.md || echo "no table rows: PLAN.md carries no task status table"
-  python scripts/validate_kit.py
-  python -m unittest discover -s tests
+  uv run python scripts/validate_kit.py
+  uv run python -m unittest discover -s tests
   ```
 
   根 `PLAN.md` 不该再有任务状态表；后两条各以退出码 `0` 结束。
@@ -592,8 +592,8 @@ git rev-parse HEAD                       # 记录升级前 head，回退时要�
 - **怎么自检**：
 
   ```bash
-  python scripts/orchestrator.py task dispatch TASK-0001 --holder runner:local-01 --evidence "upgrade smoke"
-  python scripts/orchestrator.py task resources
+  uv run python scripts/orchestrator.py task dispatch TASK-0001 --holder runner:local-01 --evidence "upgrade smoke"
+  uv run python scripts/orchestrator.py task resources
   ```
 
   没配时报：
@@ -610,8 +610,8 @@ git rev-parse HEAD                       # 记录升级前 head，回退时要�
 - **怎么改**：把当初安装时那份发行包里的 `MANIFEST.json` 放到项目根即可。找不到原包时，在与安装版本一致的套件仓库 checkout 里重建一次，再从产物里取清单：
 
   ```bash
-  python scripts/build_release.py --date <YYYYMMDD> --output-dir <输出目录>
-  python -m zipfile -e <输出目录>/agentorch-<YYYYMMDD>.zip <解压目录>
+  uv run python scripts/build_release.py --date <YYYYMMDD> --output-dir <输出目录>
+  uv run python -m zipfile -e <输出目录>/agentorch-<YYYYMMDD>.zip <解压目录>
   cp <解压目录>/agentorch-<YYYYMMDD>/MANIFEST.json .
   ```
 
@@ -620,7 +620,7 @@ git rev-parse HEAD                       # 记录升级前 head，回退时要�
 - **怎么自检**：
 
   ```bash
-  python scripts/check_drift.py .
+  uv run python scripts/check_drift.py .
   ```
 
   ```text
@@ -634,10 +634,10 @@ git rev-parse HEAD                       # 记录升级前 head，回退时要�
 ### 10.5 升级后一次性自检
 
 ```bash
-python scripts/orchestrator.py config show    # 0：edition 不是 (invalid)
-python scripts/validate_kit.py                # 0
-python -m unittest discover -s tests          # 0
-python scripts/check_drift.py .               # 0：已登记基线
+uv run python scripts/orchestrator.py config show    # 0：edition 不是 (invalid)
+uv run python scripts/validate_kit.py                # 0
+uv run python -m unittest discover -s tests          # 0
+uv run python scripts/check_drift.py .               # 0：已登记基线
 ```
 
 `check_drift.py` 在**未登记基线**的树（包括本仓库的裸 checkout）上按设计返回 `2`，这是“需基线登记”的正确表现，不是失败。
@@ -652,12 +652,12 @@ python scripts/check_drift.py .               # 0：已登记基线
   git mv PLAN.md docs/PLAN.md
   ```
 
-  然后把文内指向仓库根文件的相对链接补上 `../`（如 `[AGENTS.md](AGENTS.md)` → `[AGENTS.md](../AGENTS.md)`）；`python scripts/validate_kit.py` 会逐个指出断链。
+  然后把文内指向仓库根文件的相对链接补上 `../`（如 `[AGENTS.md](AGENTS.md)` → `[AGENTS.md](../AGENTS.md)`）；`uv run python scripts/validate_kit.py` 会逐个指出断链。
 - **怎么自检**：
 
   ```bash
-  python scripts/validate_kit.py                     # 0：不再报 legacy root PLAN.md
-  python scripts/orchestrator.py init                # 输出 kept unchanged: <项目根>\docs\PLAN.md
+  uv run python scripts/validate_kit.py                     # 0：不再报 legacy root PLAN.md
+  uv run python scripts/orchestrator.py init                # 输出 kept unchanged: <项目根>\docs\PLAN.md
   ```
 
 - **图片规则**（写入 [AGENTS.md](AGENTS.md) 第 8 条，本节只提醒）：图放 `docs/images/`、正文相对引用；**Agent 只在正文明确指向某图时才打开它，禁止批量读取 `docs/images/`**；**图文双写**——设计意图必须文字自足，每个图引用都要有相邻文字说明；`docs/images/` 随公开仓库公开、不随发行包发布，截图先脱敏。

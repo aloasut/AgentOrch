@@ -8,7 +8,7 @@
 - 命名规范：`release/agentorch-{YYYYMMDD}.zip`，`{YYYYMMDD}` 为发布当天日期。
 - zip 顶层目录固定为 `agentorch-{YYYYMMDD}/`，包内路径相对该目录。
 - 产物不纳入 git：`.gitignore` 忽略 `release/*.zip`；仓库只保留流程文档、构建脚本与本标准；历史版本记录由 GitHub Releases 承担。`release/README.md` 不入忽略范围。
-- 产物可随时重建：运行 `python scripts/build_release.py`（默认输出到 `release/`）。构建是**可复现**的：同一仓库状态下，包内文件集合、各文件内容与 zip 的校验和均一致（归档时间戳使用固定值），因此 zip 的校验和可被任何人重建复核。可复现性不依赖检出行尾：构建时文本文件按 LF 归一后打包、二进制文件原样打包（仓库以 `.gitattributes` 统一 LF），故任何检出（含 Windows 上 `core.autocrlf=true`）重建都得到同一校验和。
+- 产物可随时重建：运行 `uv run python scripts/build_release.py`（默认输出到 `release/`）。构建是**可复现**的：同一仓库状态下，包内文件集合、各文件内容与 zip 的校验和均一致（归档时间戳使用固定值），因此 zip 的校验和可被任何人重建复核。可复现性不依赖检出行尾：构建时文本文件按 LF 归一后打包、二进制文件原样打包（仓库以 `.gitattributes` 统一 LF），故任何检出（含 Windows 上 `core.autocrlf=true`）重建都得到同一校验和。
 
 ## 2. 包内容规范
 
@@ -36,7 +36,7 @@
 - a. 包内容文件集合 == `REQUIRED` + `MANIFEST.json`（数量与名称一致）；解压后 `MANIFEST.json` 必须能解析每条 `path`、`sha256` 与 `size` 与实际文件一致、`category` 只用合法分类，且清单列出的路径集合与 `REQUIRED` 完全一致。
 - b. 解压到临时目录后，`scripts/validate_kit.py` 退出码为 0。
 - c. 解压目录内 `scripts/validate_kit.py --project-ready` **预期失败**（退出码 1 且输出含 `FILL_IN`）。这是正确行为而非缺陷：发布的是待填模板；若它"通过"了反而要报错。
-- d. 解压目录内 `python -m unittest discover -s tests` 退出码为 0。
+- d. 解压目录内 `uv run python -m unittest discover -s tests` 退出码为 0。
 - e. 解压目录内 `scripts/orchestrator.py init` 与 `scripts/orchestrator.py task list` 冒烟退出码为 0（`init` 会在临时目录创建 `.orchestration/`，属预期）。
 - f. 非必要信息扫描零命中：对包内每个文本文件扫描个人路径与用户名、本仓库任务 ID、本仓库专有文档名与凭据痕迹；并断言包内不存在 `.orchestration/`、`release/`、`scripts/build_release.py`、`docs/` 等结构残留。命中即失败并打印文件与行号。凭据痕迹分两类：`ghp_`、`github_pat_`、`-----BEGIN`、`AKIA` 等精确子串；以及用精确形状正则匹配的 OpenAI 风格密钥——词边界 + `sk-` + 至少 16 位密钥字符（**不使用裸 `sk-` 子串**，否则会误命中 `task-id`、`risk-based`、`subtask-level` 等普通词，误拦正常发布）。此外，断言包内文本文件不含 CRLF（换行统一为 LF），保证构建对检出行尾不敏感；命中即失败并打印文件。
   - 扫描模式分层：**通用模式内置在脚本**（个人主目录、凭据形状等，任何克隆都适用）；**机器 / 本仓库相关模式放在 `.local/release-scan.json`**（`{"forbidden_patterns": [...]}`，逐条按精确子串匹配）。该文件缺失时跳过本地规则并打印 `extra scan patterns: none`；该文件永不入库、永不打包。
@@ -46,7 +46,7 @@
 
 ### 3.1 CI 与本标准的覆盖分工
 
-`.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，于 `ubuntu-latest` 的两个 Python 版本（3.12 / 3.13）上执行同一套自检：`python scripts/build_release.py`。该步骤**失败即 job 失败**，没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
+`.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，于 `ubuntu-latest` 的两个 Python 版本（3.12 / 3.13）上执行同一套自检：`uv run python scripts/build_release.py`。该步骤**失败即 job 失败**，没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
 
 - **两档都跑的理由**：自检 b、d 在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`，即真正检验"该 Python 版本拿到的包是否可用"；两档各证明一次，成本是本机数秒级重复，换来不设 `if:` 条件、不会出现某档静默跳过打包步骤。
 - **CI 证明什么**：包能构建，且内置自检 a–f 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档"这类回归。
@@ -56,7 +56,7 @@
 
 1. 在任务库登记发布任务（唯一 ID、单一目标、允许路径与验收）。
 2. 从最新本地主分支创建独立分支 / Worktree；不在共享工作区直接构建。
-3. 构建：运行 `python scripts/build_release.py` 生成 `release/agentorch-{YYYYMMDD}.zip`。
+3. 构建：运行 `uv run python scripts/build_release.py` 生成 `release/agentorch-{YYYYMMDD}.zip`。
 4. 自检：确认脚本内置 a–f 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
 5. Master 独立审查（逐条对照本文件的自检清单与验收标准）。
 6. 合并到本地主分支；合并后重新运行验证并记录结果。
@@ -67,6 +67,7 @@
 - **1.4（当前）** 相对 1.3：
   - **设计目标权威迁到 `docs/PLAN.md`**：任务方向以 `docs/PLAN.md` 为准；`init` 在 `docs/PLAN.md` 缺失且无旧根 `PLAN.md` 时创建 `docs/` 并放入模板，发现旧根 `PLAN.md` 时不迁移、只提示 `git mv`；`validate_kit` 对残留根 `PLAN.md` 报错（fail-closed，防两个设计权威并存）。迁移步骤见仓库 `docs/UPGRADE-2026-10.md` 第 11 节。
   - **图片协作条款**：设计文档可配图（`docs/images/`，正文相对引用）；Agent 只按正文指引按需查看图片、禁止批量读取；图文双写；公开仓库截图脱敏。`docs/images/` 不随包发布。
+  - **统一用 `uv` 运行 Python 脚本**：文档命令、模板验证命令与 CI 全部改为 `uv run python …` 前缀；CI 增加 setup-uv 步骤（`uv run` 会使用 PATH 上的解释器）。
   - **README 用户指引话术化**：启动 / 登记 / 派发 / 收口等说明改为中文自然语言话术（对 Agent 说），话术 → 命令 → 预期证据对照表保留在 README 3.0 节。
 - **1.3** 相对 1.2：
   - **资源锁的载体字段**：任务载体新增具名资源锁字段——通用任务包 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`）、`github` 登记块 `locked_resources` 与 `resource_lease_until`、`local` 任务库 `resources_json` 列。字段形状属载体契约，故格式版本升级；语义与冲突矩阵仍只在 `docs/design/RESOURCE-LOCKS.md`。

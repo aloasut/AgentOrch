@@ -8,6 +8,7 @@
 > - 资源锁语义（冲突矩阵、租约与恢复、底座边界）：[docs/design/RESOURCE-LOCKS.md](design/RESOURCE-LOCKS.md)
 > - 清单格式、文件分类与漂移诊断口径：[docs/RELEASE-DRIFT.md](RELEASE-DRIFT.md)
 >
+> 1.4 起套件命令统一加 `uv run python` 前缀执行；本文记录的是 1.3 时代的实测命令（直接 `python`），语义不变，对照执行时自行加前缀。
 > 本文出现的每条命令与每个退出码都在 2026-10-23 于 Windows 10 + Git Bash + Python 3.13 上**真实执行**过，逐条记录见第 9 节。未实测的部分会明写「未实测」。
 
 ## 1. 适用对象与迁移路径
