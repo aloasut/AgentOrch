@@ -37,9 +37,22 @@
 
 **用法一句话：把下面的话术原样复制给你的 Agent（WorkBuddy、Claude Code、Cursor… 都行），它会自己识别要做什么、执行对应命令，并把输出与退出码带回来给你。** 命令不需要你手打；想知道 Agent 到底会跑什么，见第 3 节的「话术 → 命令」对照表。Agent 第一次接入本项目时，先让它读 [kit/orchestration.md](../kit/orchestration.md) 与 [AGENTS.md](../AGENTS.md)——那是它的行为契约，话术只负责"点菜"。
 
-**第 1 步 · 装进项目**（先从本仓库 Releases 下载最新的 `agentorch-YYYYMMDD.zip` 解压备好，细节见 3.1）：
+**先判断你处在哪种情况**：
+
+- **情况 A · 新建项目**（空目录 / 刚起步的仓库）：套件文件直接装进项目文件夹即可，按下面第 1–4 步走。
+- **情况 B · 旧项目**（已有代码、已有 README / LICENSE / docs / scripts 等的仓库）：**不要把发行包直接解压覆盖进项目根**——那可能盖掉你项目的重要文件。改用下面第 1 步 B 的话术，让 Agent 先读套件方法、盘点冲突、经你确认后引入；完整步骤见第 4 节路径二。
+
+**第 1 步 A · 装进新项目**（先从本仓库 Releases 下载最新的 `agentorch-YYYYMMDD.zip` 解压备好，细节见 3.1）：
 
 > 从 AgentOrch 仓库的 Releases 下载最新的发行包并解压，把包内 agentorch-YYYYMMDD/ 目录的全部内容装进我的项目根（保留 scripts/、editions/、templates/ 的相对路径）。装完列出顶层目录给我确认。
+
+**第 1 步 B · 引入旧项目**（旧项目专用，代替第 1 步 A；发行包解压到项目外的临时目录，细节见第 4 节路径二）：
+
+> 这是把 Agent-Orchestration 套件引入我的旧项目，分四步做，全程不许覆盖我项目的现有文件：
+> 1. 先读方法：读 kit/orchestration.md 的会话入口、AGENTS.md、editions/local/master.md 的「已有项目接入」章节，给我用三句话概括这套流程的角色分工与合并门。
+> 2. 解压到项目外的临时目录，然后对照发行包文件清单（AGENTS.md、LICENSE.md、VERSION.md、docs/、kit/、editions/、templates/、scripts/、tests/）逐个检查我的项目里哪些位置会重名或被覆盖，输出冲突清单给我。
+> 3. 经我确认后引入：无冲突的文件直接复制到位；与我已有文件重名的（尤其 AGENTS.md、LICENSE.md 和 docs/、scripts/、tests/ 里的同名文件），先给我看两边内容，按我决定的合并方式写入；套件的 scripts/ 与 tests/ 不得混进我项目自有的同名目录下已有的文件。
+> 4. 引入完成后列出项目根的最新状态给我复核。
 
 **第 2 步 · 选底座并初始化**：
 
@@ -132,6 +145,8 @@ cp -r /tmp/agentorch-kit/agentorch-YYYYMMDD/. your-project/ && cd your-project
 
 随后编辑 `docs/PROJECT.md`，至少填好 `edition: local`、允许 / 禁改路径和验证命令；发行包里的该文件是带 `FILL_IN` 的待填模板。
 
+**旧项目注意**：本节命令适用于新建项目；已有代码的仓库**不要**在项目根直接解压覆盖（可能盖掉你自己的 README / LICENSE / docs / scripts），改走第 4 节路径二的"先读方法、临时解压、冲突盘点、不覆盖引入"流程。
+
 ### 3.2 最小命令序列
 
 ```bash
@@ -196,11 +211,14 @@ uv run python -m unittest discover -s tests
 
 ### 路径二：接入已有仓库
 
-目标：在不破坏既有规则的前提下接入套件，恢复真实进度，再继续推进。
+目标：在不破坏既有规则、**不覆盖旧项目任何重要文件**的前提下接入套件，恢复真实进度，再继续推进。对 Agent 说的话术见快速上手「第 1 步 B」，本节是它背后的完整步骤：
 
-1. 把套件复制进现有仓库根目录；**已有 `AGENTS.md` 时先人工合并，不能盲目覆盖**。
-2. 填写 `docs/PROJECT.md`：底座、主分支、允许 / 禁改路径、验证命令、并发策略。
-3. 运行：
+1. **Agent 先读方法，再动手**：读 [kit/orchestration.md](../kit/orchestration.md) 的会话入口、[AGENTS.md](../AGENTS.md) 与 [editions/local/master.md](../editions/local/master.md)（github 底座为 [editions/github/master.md](../editions/github/master.md)）的「已有项目接入」章节，理解角色分工、合并门与证据要求后，才允许改你的项目。
+2. **发行包解压到项目外的临时目录**，不进项目根——后续所有复制都以"逐文件决策"方式进行。
+3. **冲突盘点**：对照发行包文件清单（`AGENTS.md`、`LICENSE.md`、`VERSION.md`、`docs/`、`kit/`、`editions/`、`templates/`、`scripts/`、`tests/`）与项目现有文件，输出"会重名 / 会覆盖"清单给所有者确认；已有 `AGENTS.md` 的项目按"人工合并、不盲目覆盖"处理。
+4. **不覆盖引入**：无冲突文件直接复制；重名文件逐个展示两边内容，由所有者决定合并方式后写入；套件的 `scripts/`、`tests/` 不得污染项目自有同名目录下的既有文件。
+5. **填写 `docs/PROJECT.md`**：底座、主分支、允许 / 禁改路径（按旧项目真实关键目录从严设定）、验证命令（对齐旧项目真实的测试方式）、并发策略。
+6. **初始化并自检**：
 
    ```bash
    uv run python scripts/orchestrator.py init
@@ -208,7 +226,7 @@ uv run python -m unittest discover -s tests
    uv run python scripts/validate_kit.py
    ```
 
-4. 在 Master Agent 会话中加载 [editions/local/master.md](../editions/local/master.md)。该提示词会要求先读 Git 状态与任务库，再拆任务与派发。
+7. 在 Master Agent 会话中加载 [editions/local/master.md](../editions/local/master.md)。该提示词会要求先读 Git 状态与任务库，再拆任务与派发。
 
 ### 路径三：从 `local` 迁移到 `github`
 
