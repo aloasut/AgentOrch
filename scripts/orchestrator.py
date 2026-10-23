@@ -54,10 +54,13 @@ EDITIONS = ('local','github')
 # file removes the second, silently-defaulting definition that used to exist.
 RUNTIME_DEFAULTS = {'retry_cap': RETRY_CAP_DEFAULT, 'local_dir': '.local'}
 PROJECT_CONFIG = 'ORCHESTRATION-PROJECT.md'
-# The project root PLAN.md is the plan of record (task registration, dispatch and
-# phase close-out read it); templates/PLAN.md is only the seed copy that `init`
-# copies once. Both names are relative to the project root.
-PLAN_DOC = 'PLAN.md'
+# docs/PLAN.md is the plan of record (task registration, dispatch and phase
+# close-out read it); templates/PLAN.md is only the seed copy that `init`
+# copies once. A root-level PLAN.md is the legacy (<=1.3) location: init never
+# touches it and never seeds docs/PLAN.md while it exists, so the design goals
+# always keep a single authority. Both names are relative to the project root.
+PLAN_DOC = 'docs/PLAN.md'
+LEGACY_PLAN_DOC = 'PLAN.md'
 PLAN_TEMPLATE = 'templates/PLAN.md'
 EDITION_LINE = re.compile(r'^\s*[-*]\s*`?edition`?\s*[:：]\s*(?P<value>.*)$', re.M)
 
@@ -218,27 +221,36 @@ def event(con, task_id, action, from_status=None, to_status=None, note='', data=
         (task_id,now(),action,from_status,to_status,note,json.dumps(data or {},ensure_ascii=False)))
 
 def init_plan(root):
-    """Seed <root>/PLAN.md from templates/PLAN.md exactly once.
+    """Seed <root>/docs/PLAN.md from templates/PLAN.md exactly once.
 
-    The root PLAN.md is the plan of record, so an existing file is never
-    overwritten (that would destroy the project owner's plan). A missing
+    docs/PLAN.md is the plan of record, so an existing file is never
+    overwritten (that would destroy the project owner's plan). A legacy root
+    PLAN.md (<=1.3 location) is never touched either: while it exists,
+    docs/PLAN.md is NOT seeded, because two design-goal authorities are worse
+    than one stale path — init prints the migration step instead. A missing
     template is reported and skipped: `init` must still finish its task-store
     work and exit 0. A write failure is raised instead of being reported as
-    success. Returns 'created', 'kept' or 'template-missing'.
+    success. Returns 'created', 'kept', 'legacy-present' or 'template-missing'.
     """
     target=root/PLAN_DOC
+    legacy=root/LEGACY_PLAN_DOC
     if target.exists():
         print(f'PLAN.md already present, kept unchanged: {target}')
-        print('Next: judge task direction from the design goals in the root PLAN.md; templates/PLAN.md is only the initial copy.')
+        print('Next: judge task direction from the design goals in docs/PLAN.md; templates/PLAN.md is only the initial copy.')
         return 'kept'
+    if legacy.exists():
+        print(f'Legacy root PLAN.md found; docs/PLAN.md not created: {legacy}')
+        print('Next: keep a single design-goal authority — run `git mv PLAN.md docs/PLAN.md` (create docs/ first if needed), then rerun init; see README section 10.')
+        return 'legacy-present'
     template=root/PLAN_TEMPLATE
     if not template.is_file():
         print(f'PLAN.md not created: template missing at {template}')
-        print('Next: copy templates/PLAN.md into the project root (kit installed there), then rerun init.')
+        print('Next: copy templates/PLAN.md into docs/PLAN.md (kit installed there), then rerun init.')
         return 'template-missing'
+    (root/'docs').mkdir(parents=True,exist_ok=True)
     target.write_bytes(template.read_bytes())
-    print(f'Created PLAN.md from {template}')
-    print('下一步：填写 PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）')
+    print(f'Created docs/PLAN.md from {template}')
+    print('下一步：填写 docs/PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）；配图放 docs/images/，在正文中用相对路径引用，Agent 只按文中指引查看图片')
     return 'created'
 
 def init(root):
@@ -1324,7 +1336,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',default='.',help='project root (default: current directory)')
     sub=parser.add_subparsers(dest='cmd',required=True)
-    sub.add_parser('init',help='initialize the local task database and .orchestration/config.json (retry_cap, local_dir); seed PLAN.md from templates/PLAN.md when absent')
+    sub.add_parser('init',help='initialize the local task database and .orchestration/config.json (retry_cap, local_dir); seed docs/PLAN.md from templates/PLAN.md when absent')
     sub.add_parser('backup',help='create a consistent SQLite backup')
     cf=sub.add_parser('config',help='inspect runtime configuration'); cs=cf.add_subparsers(dest='configcmd',required=True)
     cs.add_parser('show',help='print effective config values and their source')

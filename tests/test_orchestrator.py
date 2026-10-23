@@ -514,7 +514,11 @@ class ProjectEditionTests(unittest.TestCase):
         self.assertEqual(orch.read_retry_cap(self.root),5)
 
 class PlanDocumentInitTests(unittest.TestCase):
-    """`init` seeds the root PLAN.md once; the root file stays the plan of record."""
+    """`init` seeds docs/PLAN.md once; docs/PLAN.md stays the plan of record.
+
+    A legacy root PLAN.md (<=1.3) is never touched and blocks seeding, so the
+    design goals always keep a single authority.
+    """
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
         (self.root/'ORCHESTRATION-PROJECT.md').write_text('# Project\n\n- `edition`：`local`\n',encoding='utf-8')
@@ -535,31 +539,48 @@ class PlanDocumentInitTests(unittest.TestCase):
         self.write_template(data)
         rc,out,err=self.run_init()
         self.assertEqual(rc,0,err)
-        self.assertEqual((self.root/'PLAN.md').read_bytes(),data)
+        self.assertEqual((self.root/'docs'/'PLAN.md').read_bytes(),data)
         self.assertEqual((self.root/'templates'/'PLAN.md').read_bytes(),data)
-        self.assertIn('Created PLAN.md',out)
-        self.assertIn('下一步：填写 PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）',out)
+        self.assertIn('Created docs/PLAN.md',out)
+        self.assertIn('下一步：填写 docs/PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）',out)
 
-    def test_existing_plan_is_kept_and_repeated_init_is_idempotent(self):
+    def test_existing_docs_plan_is_kept_and_repeated_init_is_idempotent(self):
         self.write_template(b'# Implementation Plan\n\ntemplate\n')
         sentinel=b'# my plan\n\nSENTINEL: owner content, never overwrite\n'
-        (self.root/'PLAN.md').write_bytes(sentinel)
+        (self.root/'docs').mkdir(); (self.root/'docs'/'PLAN.md').write_bytes(sentinel)
         config=self.root/'.orchestration'/'config.json'
         rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
         self.assertIn('kept unchanged',out)
         self.assertIn('judge task direction from the design goals',out)
-        self.assertNotIn('Created PLAN.md',out)
-        first=(self.root/'PLAN.md').read_bytes(), config.read_bytes()
+        self.assertNotIn('Created docs/PLAN.md',out)
+        first=(self.root/'docs'/'PLAN.md').read_bytes(), config.read_bytes()
         rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
-        self.assertEqual((self.root/'PLAN.md').read_bytes(),sentinel)
-        self.assertEqual((self.root/'PLAN.md').read_bytes(),first[0])
+        self.assertEqual((self.root/'docs'/'PLAN.md').read_bytes(),sentinel)
+        self.assertEqual((self.root/'docs'/'PLAN.md').read_bytes(),first[0])
         self.assertEqual(config.read_bytes(),first[1])          # runtime config untouched
         self.assertTrue(orch.db_path(self.root).is_file())      # task store still initialised
+
+    def test_legacy_root_plan_blocks_seeding_and_is_never_touched(self):
+        # A root PLAN.md is the <=1.3 location. init must not move it, must not
+        # seed docs/PLAN.md next to it, and must point at the migration step.
+        self.write_template(b'# Implementation Plan\n\ntemplate\n')
+        sentinel=b'# legacy design goals\n\nSENTINEL: never auto-migrated\n'
+        (self.root/'PLAN.md').write_bytes(sentinel)
+        rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
+        self.assertFalse((self.root/'docs'/'PLAN.md').exists())
+        self.assertEqual((self.root/'PLAN.md').read_bytes(),sentinel)
+        self.assertIn('Legacy root PLAN.md found',out)
+        self.assertIn('git mv PLAN.md docs/PLAN.md',out)
+        self.assertNotIn('Created docs/PLAN.md',out)
+        # Rerunning stays deterministic: no second authority appears.
+        rc,out,err=self.run_init(); self.assertEqual(rc,0,err)
+        self.assertFalse((self.root/'docs'/'PLAN.md').exists())
 
     def test_missing_template_is_reported_and_init_still_succeeds(self):
         rc,out,err=self.run_init()
         self.assertEqual(rc,0,err)
-        self.assertFalse((self.root/'PLAN.md').exists())
+        self.assertFalse((self.root/'docs'/'PLAN.md').exists())
+        self.assertFalse((self.root/'docs').exists())           # no empty docs/ is fabricated
         self.assertIn('PLAN.md not created: template missing',out)
         self.assertTrue(orch.db_path(self.root).is_file())
 
@@ -572,7 +593,7 @@ class PlanDocumentInitTests(unittest.TestCase):
         self.assertEqual(rc,1)
         self.assertIn('ERROR:',err)
         self.assertIn('read-only file system',err)
-        self.assertFalse((self.root/'PLAN.md').exists())
+        self.assertFalse((self.root/'docs'/'PLAN.md').exists())
 
 # Real multi-process competitor: it waits for a shared start time, then opens its
 # own SQLite connection and races the same resource set. It never retries an

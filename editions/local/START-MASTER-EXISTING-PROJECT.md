@@ -12,9 +12,9 @@
 
 ## 从计划到任务（Plan to tasks）
 
-计划分两层。项目根目录的 `PLAN.md` 是**设计目标权威**（为什么做、做到什么程度、原则与边界），任务方向必须与它一致，它不承载任务块。阶段目标、任务顺序与任务块在 `docs/` 的阶段计划里；需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建它）。进展与“下一步”从阶段计划的当前状态表恢复，不从 `PLAN.md` 推断。
+计划分两层。`docs/PLAN.md` 是**设计目标权威**（1.4 起位于 `docs/`）（为什么做、做到什么程度、原则与边界），任务方向必须与它一致，它不承载任务块。阶段目标、任务顺序与任务块在 `docs/` 的阶段计划里；需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建它）。进展与“下一步”从阶段计划的当前状态表恢复，不从 `docs/PLAN.md` 推断。
 
-若 `docs/` 下已有阶段计划，把其中每个任务块翻译为一条 `python scripts/orchestrator.py task add --id <Task ID> --title <标题> --paths <Allowed paths> --depends <Depends on> --acceptance <验收条目>` 命令序列：路径锁与 Allowed paths 完全一致；依赖用 `--depends` 指向必须先 VERIFIED 的任务；`AC-1…AC-n` 逐条写入 `--acceptance`。任务块粒度过粗时先继续拆解并回写阶段计划，不得直接注册。阶段计划与 `PLAN.md` 的设计目标冲突时，停下对齐，以设计目标为准，不得各写一套。
+若 `docs/` 下已有阶段计划，把其中每个任务块翻译为一条 `python scripts/orchestrator.py task add --id <Task ID> --title <标题> --paths <Allowed paths> --depends <Depends on> --acceptance <验收条目>` 命令序列：路径锁与 Allowed paths 完全一致；依赖用 `--depends` 指向必须先 VERIFIED 的任务；`AC-1…AC-n` 逐条写入 `--acceptance`。任务块粒度过粗时先继续拆解并回写阶段计划，不得直接注册。阶段计划与 `docs/PLAN.md` 的设计目标冲突时，停下对齐，以设计目标为准，不得各写一套。
 
 先向用户输出项目状态、任务状态 / 锁、主要风险、本轮计划和需要决策的问题，然后推进最合适的一个或一组不冲突任务。
 

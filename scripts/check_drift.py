@@ -14,9 +14,10 @@ Two jobs live here, and only here:
    - `missing`  - a manifest entry that is absent from the tree (drift)
    - `modified` - a `core` / `edition` / `template` entry whose bytes changed
                   (drift); checks hash *and* size
-   - `project_profile` - `ORCHESTRATION-PROJECT.md` / `PLAN.md` / `DESIGN.md`
-                  edits and additions; expected after a project fills them in,
-                  so reported but **never** counted as drift
+   - `project_profile` - `ORCHESTRATION-PROJECT.md` / `PLAN.md` (legacy root
+                  or `docs/PLAN.md`) / `DESIGN.md` edits and additions;
+                  expected after a project fills them in, so reported but
+                  **never** counted as drift
    - `unknown`  - a local file that sits inside an upstream directory
                   (`editions/`, `templates/`, `scripts/`, `prompts/`, `tests/`)
                   but is not in the manifest; it may be a leftover from another
@@ -72,8 +73,9 @@ LOCAL_CATEGORIES = ('project-profile', 'project-extension', 'unknown')
 CATEGORIES = UPSTREAM_CATEGORIES + ('project-extension', 'unknown')
 
 # Per-project files. Their content is meant to change after installation, so a
-# hash difference is reported as `project_profile`, never as drift.
-PROJECT_PROFILE_PATHS = ('ORCHESTRATION-PROJECT.md', 'PLAN.md', 'DESIGN.md')
+# hash difference is reported as `project_profile`, never as drift. The root
+# PLAN.md is the legacy (<=1.3) plan location; docs/PLAN.md is the current one.
+PROJECT_PROFILE_PATHS = ('ORCHESTRATION-PROJECT.md', 'PLAN.md', 'docs/PLAN.md', 'DESIGN.md')
 # Directories whose contents the manifest owns. A file that appears here without
 # a manifest entry is `unknown` (drift), not a project extension.
 UPSTREAM_NAMESPACES = ('editions/', 'templates/', 'scripts/', 'prompts/', 'tests/')

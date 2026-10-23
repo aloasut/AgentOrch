@@ -142,8 +142,8 @@ Initialized local task registry: <项目根>\.orchestration\state.sqlite3
 Review-fix retry cap: 3 (edit key "retry_cap" in <项目根>\.orchestration\config.json to change it)
 Local task registry only: the edition is read from <项目根>\ORCHESTRATION-PROJECT.md, not from this config.
 Back up .orchestration/ with your project backups.
-Created PLAN.md from <项目根>\templates\PLAN.md
-下一步：填写 PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）
+Created docs/PLAN.md from <项目根>\templates\PLAN.md
+下一步：填写 docs/PLAN.md 的设计目标（为什么做、做到什么程度、原则与边界）；配图放 docs/images/，在正文中用相对路径引用，Agent 只按文中指引查看图片
 
 $ python scripts/orchestrator.py config show
 Config file: <项目根>\.orchestration\config.json
@@ -180,8 +180,8 @@ OK
 说明：
 
 - `init` 创建 `.orchestration/state.sqlite3` 与 `.orchestration/config.json`，并把 `.orchestration/` 写入当前克隆的 `.git/info/exclude`（若存在 Git），不会覆盖项目的 `.gitignore`。
-- `init` 还会在根目录缺少 `PLAN.md` 时从 `templates/PLAN.md` **逐字节复制**一份并提示“下一步：填写 PLAN.md”；根 `PLAN.md` 已存在时保持原样、只打印提示，重复执行不产生差异。模板缺失时给出提示但 `init` 仍以退出码 0 结束（其余初始化照常完成）；写入失败（例如目录只读）会报 `ERROR` 并以退出码 1 结束，不会假装成功。
-- **计划分两层**：根目录 `PLAN.md` 是**设计目标权威**（为什么做、做到什么程度、原则与边界），任务方向必须与它一致；阶段目标、任务顺序与状态写在 `docs/` 的阶段计划里，需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建它，也不会自动生成 `docs/`）。两者冲突时以 `PLAN.md` 的设计目标为准，停下对齐，不得各写一套。`templates/PLAN.md` 只用于初始化复制，不要直接把它当项目计划。
+- `init` 还会在 `docs/PLAN.md` 缺失且不存在 1.3 之前的根 `PLAN.md` 时，创建 `docs/` 并从 `templates/PLAN.md` **逐字节复制**一份到 `docs/PLAN.md`；发现旧根 `PLAN.md` 时不自动迁移，只提示 `git mv PLAN.md docs/PLAN.md`（见 10.6）；`docs/PLAN.md` 已存在时保持原样、只打印提示，重复执行不产生差异。模板缺失时给出提示但 `init` 仍以退出码 0 结束（其余初始化照常完成）；写入失败（例如目录只读）会报 `ERROR` 并以退出码 1 结束，不会假装成功。
+- **计划分两层**：`docs/PLAN.md` 是**设计目标权威**（为什么做、做到什么程度、原则与边界），任务方向必须与它一致；阶段目标、任务顺序与状态写在 `docs/` 的阶段计划里，需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建阶段计划）。两者冲突时以 `docs/PLAN.md` 的设计目标为准，停下对齐，不得各写一套。`templates/PLAN.md` 只用于初始化复制，不要直接把它当项目计划。**设计文档可配图**：图放 `docs/images/`、正文相对引用；Agent 只按文中指引看图、不批量读取；设计意图必须文字自足（规则见 [AGENTS.md](AGENTS.md) 第 8 条）。
 - `dispatch` 只登记状态并占用路径锁，**不会启动 Agent**。拿到锁后，把自包含任务包交给真实执行实例；没有真实 spawn 能力时，由操作者另开会话执行。
 - 单元测试会大量打印临时任务库日志，属正常现象；退出码为 0 即通过。
 - 冒烟完成后可取消这条示例任务并释放锁：`python scripts/orchestrator.py task status TASK-0001 CANCELED --note "快速开始冒烟结束"`。
@@ -193,7 +193,7 @@ OK
 目标：从一句想法走到项目章程、首批任务与第一个可运行切片。
 
 1. 按第 3 节把套件放入空目录，`ORCHESTRATION-PROJECT.md` 填 `edition: local`。
-2. 运行 `python scripts/orchestrator.py init` 与 `python scripts/orchestrator.py task list`：`init` 会从 `templates/PLAN.md` 复制出根目录 `PLAN.md`，先在这份**设计目标**文件里写清问题、目标、原则、边界与全局验收，再确认任务库可用且为空。需要阶段计划时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`，在那里写阶段目标、任务顺序与状态。
+2. 运行 `python scripts/orchestrator.py init` 与 `python scripts/orchestrator.py task list`：`init` 会从 `templates/PLAN.md` 复制出 `docs/PLAN.md`，先在这份**设计目标**文件里写清问题、目标、原则、边界与全局验收，再确认任务库可用且为空。需要阶段计划时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`，在那里写阶段目标、任务顺序与状态。
 3. 在 Master Agent 会话中加载 [editions/local/START-MASTER-NEW-PROJECT.md](editions/local/START-MASTER-NEW-PROJECT.md)，按提示词澄清目标、产出章程、拆出 1–3 个最小任务。
 4. 若想法本身还很模糊，先走 [prompts/START-CHARTER.md](prompts/START-CHARTER.md) 的章程引导流程，再进入任务拆解。
 
@@ -235,13 +235,16 @@ OK
 ├── AGENT-ORCHESTRATION-ACCEPTANCE.md  # 通用验收程序
 ├── AGENT-BOOTSTRAP.md                 # 会话入口：判定底座、恢复状态、自动路由
 ├── ORCHESTRATION-PROJECT.md           # 每个项目自己的配置（edition 在这里）
-├── PLAN.md                            # 设计目标权威：为什么做、做到什么程度、边界（init 从模板生成后由所有者填写）
 ├── README.md                          # 本文件：入口与使用说明
 ├── VERSION.txt                        # 套件名与 Format version
 ├── LICENSE.txt
 ├── editions/
 │   ├── local/                         # local 增量：SQLite 命令、路径锁、启动提示词
 │   └── github/                        # github 增量：Issue / PR 模板、登记块、启动提示词
+├── docs/
+│   ├── PLAN.md                        # 设计目标权威：为什么做、做到什么程度、边界（init 从模板生成后由所有者填写；1.4 起位于 docs/）
+│   ├── images/                        # 设计配图（正文中相对引用；Agent 按文中指引按需查看，不批量读取）
+│   └── …                              # 阶段计划、UPGRADE 等项目自有文档（不随包发布）
 ├── prompts/                           # 两底座共享提示词（章程、Reviewer）
 ├── templates/                         # 任务包、设计契约与决策日志、阶段收口审计、审查清单等可复制模板
 ├── scripts/
@@ -469,7 +472,7 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 | `core` | 根目录契约与入口（`AGENTS.md`、`AGENT-ORCHESTRATION.md`、`scripts/orchestrator.py` 等） | 缺失或被改动即 drift |
 | `edition` | `editions/<edition>/` 下的底座增量 | 缺失或被改动即 drift |
 | `template` | `templates/` 下的模板 | 缺失或被改动即 drift |
-| `project-profile` | 每项目文件（`ORCHESTRATION-PROJECT.md`、`PLAN.md`、`DESIGN.md`）；安装后本来就该被填写 | 否，单独列出 |
+| `project-profile` | 每项目文件（`ORCHESTRATION-PROJECT.md`、`PLAN.md`（旧根位置）、`docs/PLAN.md`（1.4 起）、`DESIGN.md`）；安装后本来就该被填写 | 否，单独列出 |
 | `project-extension` | 清单之外的本地文件，且不在上游目录里（项目源码、`docs/`、自建目录……） | 否，单独列出，永不被覆盖 |
 | `unknown` | 清单之外、却落在上游目录（`editions/`、`templates/`、`scripts/`、`prompts/`、`tests/`）内的文件，可能是旧版本残留或本地改写的套件路径 | 是，单独列出 |
 
@@ -502,9 +505,9 @@ python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON；摘要
 - `orchestrator.py` 只管理本地任务状态与路径锁，不启动模型、不写代码、不运行项目测试、不自动合并 Git 分支；这些动作由 Agent 按提示词执行，合并由 Master 决策。
 - 若运行时无法真实完成 spawn / wait / collect（C1–C4 未全部通过），必须降级为多会话人工交接，不得声称已派发。
 
-上面每条版本变更对应的**旧项目迁移动作**见第 10 节：`edition` 旧格式行、旧 `PLAN.md` 台账、资源锁 TTL、旧包无 `MANIFEST.json`。
+上面每条版本变更对应的**旧项目迁移动作**见第 10 节：`edition` 旧格式行、旧 `PLAN.md` 台账、资源锁 TTL、旧包无 `MANIFEST.json`；1.4 新增第 10.6 节（根 `PLAN.md` 迁入 `docs/PLAN.md` 与图片规范）。
 
-## 10. 从旧版升级（1.1 → 1.3）
+## 10. 从旧版升级（1.1 → 1.4）
 
 已经装了 1.1 / 1.2 的项目升到 1.3 时，有四条会“先撞错、再猜原因”。下面每条按**变了什么 / 怎么改 / 怎么自检**三段写，命令可直接复制；四条互相独立，命中几条改几条。完整分步清单、报错原文、退出码与逐条回退见仓库文档 `docs/UPGRADE-2026-10.md`（`docs/` 不随发行包发布，因此本节不依赖它：包内用户照本节即可完成四条迁移）。
 
@@ -625,6 +628,27 @@ python scripts/check_drift.py .               # 0：已登记基线
 ```
 
 `check_drift.py` 在**未登记基线**的树（包括本仓库的裸 checkout）上按设计返回 `2`，这是“需基线登记”的正确表现，不是失败。
+
+### 10.6 根 `PLAN.md` 迁入 `docs/PLAN.md` 与图片规范（1.4）
+
+- **变了什么**：设计目标权威从根 `PLAN.md` 移到 `docs/PLAN.md`（放 `docs/` 便于同目录配图：图放 `docs/images/`，正文相对引用）；`init` 改为在 `docs/PLAN.md` 缺失且**无**根 `PLAN.md` 时自动创建；存在根 `PLAN.md`（1.3 及更早）时 `init` 不迁移、`validate_kit` 直接报错——根与 docs 并存等于两个设计权威。
+- **怎么改**（手工两条命令；`init` 不会替你动旧文件）：
+
+  ```bash
+  mkdir docs
+  git mv PLAN.md docs/PLAN.md
+  ```
+
+  然后把文内指向仓库根文件的相对链接补上 `../`（如 `[AGENTS.md](AGENTS.md)` → `[AGENTS.md](../AGENTS.md)`）；`python scripts/validate_kit.py` 会逐个指出断链。
+- **怎么自检**：
+
+  ```bash
+  python scripts/validate_kit.py                     # 0：不再报 legacy root PLAN.md
+  python scripts/orchestrator.py init                # 输出 kept unchanged: <项目根>\docs\PLAN.md
+  ```
+
+- **图片规则**（写入 [AGENTS.md](AGENTS.md) 第 8 条，本节只提醒）：图放 `docs/images/`、正文相对引用；**Agent 只在正文明确指向某图时才打开它，禁止批量读取 `docs/images/`**；**图文双写**——设计意图必须文字自足，每个图引用都要有相邻文字说明；`docs/images/` 随公开仓库公开、不随发行包发布，截图先脱敏。
+- **不要这样做**：把根 `PLAN.md` 重命名成别的名字留在根目录；或迁移后仍保留一份根副本。
 
 ## 11. 设计冻结与阶段收口
 
