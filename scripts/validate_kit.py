@@ -15,26 +15,20 @@ MANIFEST_DOC = 'MANIFEST.json'
 # added or removed. Files that must not ship (docs/, release/, the release builder
 # itself, .orchestration/, .worktrees/, .workbuddy/) are simply not listed here.
 REQUIRED = [
-    'AGENT-BOOTSTRAP.md', 'AGENT-ORCHESTRATION-ACCEPTANCE.md', 'AGENT-ORCHESTRATION.md',
-    'AGENTS.md', 'LICENSE.txt', 'ORCHESTRATION-PROJECT.md', 'README.md', 'VERSION.txt',
-    'editions/github/ACTIVE-TASK-REGISTRY.md', 'editions/github/ISSUE-TEMPLATE.md',
-    'editions/github/MASTER-MULTI-SESSION.md', 'editions/github/MASTER-SINGLE-SESSION.md',
-    'editions/github/MASTER.md', 'editions/github/PR-TEMPLATE.md', 'editions/github/README.md',
-    'editions/github/START-EXECUTION.md', 'editions/github/START-MASTER-EXISTING-PROJECT.md',
-    'editions/github/START-MASTER-NEW-PROJECT.md',
-    'editions/local/MASTER-MULTI-SESSION.md', 'editions/local/MASTER-SINGLE-SESSION.md',
-    'editions/local/MASTER.md', 'editions/local/README.md', 'editions/local/START-EXECUTION.md',
-    'editions/local/START-MASTER-EXISTING-PROJECT.md', 'editions/local/START-MASTER-NEW-PROJECT.md',
-    'prompts/START-CHARTER.md', 'prompts/START-REVIEWER.md',
+    'AGENTS.md', 'LICENSE.md', 'VERSION.md',
+    'kit/orchestration.md',
+    'editions/github/active-task-registry.md', 'editions/github/issue-template.md',
+    'editions/github/execution.md', 'editions/github/master.md',
+    'editions/github/pr-template.md',
+    'editions/local/master.md', 'editions/local/execution.md',
+    'templates/contract-decision-log.md', 'templates/design.md',
+    'templates/implementation-plan.md', 'templates/metrics.md',
+    'templates/milestone-audit.md', 'templates/plan.md', 'templates/project.md',
+    'templates/project-charter.md', 'templates/review-checklist.md',
+    'templates/runtime-capability.md', 'templates/task-packet.md',
+    'templates/gitignore.snippet',
     'scripts/check_drift.py', 'scripts/orchestrator.py', 'scripts/report_metrics.py',
     'scripts/run_delivery_scenarios.py', 'scripts/validate_kit.py',
-    'templates/CONTRACT-DECISION-LOG.md', 'templates/DESIGN.md',
-    'templates/IMPLEMENTATION-PLAN.md', 'templates/METRICS.md',
-    'templates/MILESTONE-AUDIT.md',
-    'templates/ORCHESTRATION-PROJECT.template.md', 'templates/PLAN.md',
-    'templates/PROJECT-CHARTER.md', 'templates/REVIEW-CHECKLIST.md',
-    'templates/RUNTIME-CAPABILITY.md', 'templates/TASK-PACKET.md',
-    'templates/gitignore.snippet',
     'tests/test_orchestrator.py', 'tests/test_release_drift.py',
     'tests/test_report_metrics.py', 'tests/test_run_delivery_scenarios.py',
     'tests/test_validate_kit.py',
@@ -48,14 +42,23 @@ REQUIRED = [
 # deleted section fails validate_kit on a checkout — and the check is skipped
 # when `docs/` is absent, which is exactly the case inside a release package.
 REQUIRED_DOCS = {
-    'docs/testing/DELIVERY-REGRESSION-SCENARIOS.md': (
+    'docs/README.md': (),
+    'docs/PROJECT.md': (),
+    'docs/PLAN.md': ('设计目标',),
+    'docs/implementation-plan.md': ('当前状态',),
+    'docs/charter.md': (),
+    'docs/upgrade.md': ('升级',),
+    'docs/drift.md': (),
+    'docs/metrics.md': (),
+    'docs/design/resource-locks.md': ('冲突',),
+    'docs/testing/delivery-regression-scenarios.md': (
         '场景矩阵', '运行方式', 'Fixture 规则', '正负组', '未验证范围', '清理',
     ),
 }
 
 # --- Milestone-audit closeout contract ---------------------------------------
 # A filled audit record may only be read as "stage complete" when no verdict
-# forbids it. These values are the four classes from templates/MILESTONE-AUDIT.md
+# forbids it. These values are the four classes from templates/milestone-audit.md
 # plus PASS (verified) and the two non-pass markers; anything else is a typo or a
 # second, invented vocabulary, so it is reported instead of counted.
 AUDIT_VERDICTS = ('PASS', 'NON_BLOCKING_HARDENING', 'OPTIONAL', 'NEEDS_HUMAN_DECISION',
@@ -72,20 +75,20 @@ CLOSEOUT_UNVERIFIED_VERDICTS = ('NOT_RUN', 'BLOCKED')
 # Section names are matched case-insensitively as substrings of a heading, so a
 # numbered heading ("### 1. Functional completeness") still matches.
 TEMPLATE_SECTIONS = {
-    'templates/DESIGN.md': (
+    'templates/design.md': (
         'Scope and non-goals', 'Schema and interfaces', 'State transitions', 'Invariants',
         'Failure semantics', 'Compatibility and migration', 'Permission and trust boundaries',
         'Verification strategy', 'Frozen decisions', 'Open decisions',
         'Versioning and change policy',
     ),
-    'templates/MILESTONE-AUDIT.md': (
+    'templates/milestone-audit.md': (
         'When to use', 'How to fill', 'Verdict classes',
         'Functional completeness', 'Cross-module invariants', 'Permissions and security',
         'Legacy data migration', 'Real and synthetic data validation', 'End-to-end path',
         'Recoverability', 'Performance baseline', 'Public content and privacy',
         'Residual items', 'Audit conclusion',
     ),
-    'templates/CONTRACT-DECISION-LOG.md': (
+    'templates/contract-decision-log.md': (
         'When to use', 'Status values', 'Frozen decisions', 'Open decisions',
         'Revisitable items', 'Superseded records', 'Recording rules',
     ),
@@ -93,11 +96,11 @@ TEMPLATE_SECTIONS = {
     # probed; a metric definition that loses a column leaves the start / end
     # event, exclusion or missing-data rule undefined. Both are contracts, so
     # only their structure is checked here, never whether the numbers are true.
-    'templates/RUNTIME-CAPABILITY.md': (
+    'templates/runtime-capability.md': (
         'When to use', 'Record identity', 'Capability matrix', 'Extended boundaries',
         'UNKNOWN and re-probe', 'Permission scope', 'Evidence and limits',
     ),
-    'templates/METRICS.md': (
+    'templates/metrics.md': (
         'When to use', 'Reading rules', 'Common definitions', 'Metric definitions',
         'Missing data and coverage', 'Report contract', 'Gold sample', 'Limits',
     ),
@@ -127,9 +130,9 @@ EXTERNAL_LINK_PREFIXES = ('http://', 'https://', 'mailto:', '#')
 # restate it) and enforces it on the local/github task templates. If the doc drifts
 # away from the contract floor below, validation fails instead of silently
 # accepting a second definition.
-CORE_DOC = 'AGENT-ORCHESTRATION.md'
-TASK_PACKET_DOC = 'templates/TASK-PACKET.md'
-ISSUE_TEMPLATE_DOC = 'editions/github/ISSUE-TEMPLATE.md'
+CORE_DOC = 'kit/orchestration.md'
+TASK_PACKET_DOC = 'templates/task-packet.md'
+ISSUE_TEMPLATE_DOC = 'editions/github/issue-template.md'
 EVIDENCE_FIELD_ANCHOR = '证据条目（evidence item）字段'
 PACKET_FIELD_ANCHOR = '任务包结构化扩展字段'
 # Contract floor for `status`. A silently narrowed or extended enum is reported.
@@ -607,6 +610,9 @@ def validate_kit(root=ROOT, project_ready=False):
     if (root / 'PLAN.md').is_file():
         errors.append("legacy root PLAN.md found: move it to docs/PLAN.md (`git mv PLAN.md docs/PLAN.md`) "
                       'so design goals keep a single authority — see README section 10')
+    if (root / 'ORCHESTRATION-PROJECT.md').is_file():
+        errors.append("legacy root ORCHESTRATION-PROJECT.md found: move it to docs/PROJECT.md "
+                      '(`git mv ORCHESTRATION-PROJECT.md docs/PROJECT.md`) — see docs/upgrade.md')
 
     errors.extend(template_structure_errors(root))
 
@@ -621,11 +627,8 @@ def validate_kit(root=ROOT, project_ready=False):
     # ships three templates. Comparing the *intersection* catches a file that
     # exists on only one side, while comparing each side against its expected set
     # catches strays.
-    common_edition_files = (
-        'MASTER-MULTI-SESSION.md', 'MASTER-SINGLE-SESSION.md', 'MASTER.md', 'README.md',
-        'START-EXECUTION.md', 'START-MASTER-EXISTING-PROJECT.md', 'START-MASTER-NEW-PROJECT.md',
-    )
-    github_only_files = ('ACTIVE-TASK-REGISTRY.md', 'ISSUE-TEMPLATE.md', 'PR-TEMPLATE.md')
+    common_edition_files = ('master.md', 'execution.md')
+    github_only_files = ('active-task-registry.md', 'issue-template.md', 'pr-template.md')
     edition_names = {}
     for edition in ('local', 'github'):
         directory = root / 'editions' / edition
@@ -716,17 +719,17 @@ def validate_kit(root=ROOT, project_ready=False):
 
     # The edition selector is the routing key for the whole kit. It must be present
     # and explicit: silently defaulting would run a project on the wrong task carrier.
-    config_path = root / 'ORCHESTRATION-PROJECT.md'
+    config_path = root / 'docs/PROJECT.md'
     if config_path.is_file():
         config_text = config_path.read_text(encoding='utf-8')
         match = re.search(r'^\s*[-*]\s*`?edition`?\s*[:：]\s*`?([A-Za-z0-9_-]+)`?', config_text, re.M)
         if not match:
-            errors.append('ORCHESTRATION-PROJECT.md is missing the `edition` key '
+            errors.append('docs/PROJECT.md is missing the `edition` key '
                           "(expected `edition`: `local` or `github`)")
         else:
             edition_value = match.group(1)
             if edition_value not in ('local', 'github'):
-                errors.append("ORCHESTRATION-PROJECT.md `edition` must be 'local' or 'github', "
+                errors.append("docs/PROJECT.md `edition` must be 'local' or 'github', "
                               f"got {edition_value!r}")
 
     # Governance concepts are only meaningful in documentation. Scan document-class
@@ -766,17 +769,22 @@ def validate_kit(root=ROOT, project_ready=False):
             if target and not (md.parent / target).exists():
                 errors.append(f'{md.relative_to(root)}: broken relative link: {target}')
     if project_ready:
-        cfg = (root / 'ORCHESTRATION-PROJECT.md').read_text(encoding='utf-8')
-        missing = cfg.count('FILL_IN')
-        if missing:
-            errors.append(f'ORCHESTRATION-PROJECT.md has {missing} FILL_IN placeholders')
+        cfg_path = root / 'docs' / 'PROJECT.md'
+        if not cfg_path.is_file():
+            errors.append('docs/PROJECT.md is missing: copy kit/templates/project.md and replace '
+                          'every FILL_IN placeholder (edition, allowed paths, verification commands)')
+        else:
+            cfg = cfg_path.read_text(encoding='utf-8')
+            missing = cfg.count('FILL_IN')
+            if missing:
+                errors.append(f'docs/PROJECT.md has {missing} FILL_IN placeholders')
     return errors, len(samples)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--project-ready', action='store_true',
-                        help='fail while ORCHESTRATION-PROJECT.md still has FILL_IN placeholders')
+                        help='fail while docs/PROJECT.md still has FILL_IN placeholders')
     parser.add_argument('--task-packet', metavar='PATH',
                         help='validate one filled task packet instead of the whole kit')
     args = parser.parse_args(argv)
@@ -803,7 +811,7 @@ def main(argv=None):
         print('\n'.join(f'- {e}' for e in errors))
         return 1
     print(f'Kit validation passed ({len(REQUIRED)} required files checked; '
-          f'editions local/github share 7 files, github adds 3 templates; '
+          f'editions local/github share 2 files, github adds 3 templates; '
           f'{len(REQUIRED_DOCS)} repository-only document(s) checked; '
           f'{sample_count} task packet samples validated).')
     return 0

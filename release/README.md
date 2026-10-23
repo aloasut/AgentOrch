@@ -15,12 +15,12 @@
 - 只含通用可复用产出；不得包含本仓库特有的演进决策、任务记录或个人环境信息。
 - 包内文件集合 == `scripts/validate_kit.py` 中的 `REQUIRED` 列表 **+ 构建时生成的 `MANIFEST.json`**（数量与名称都一致，即 `len(REQUIRED) + 1` 个文件）。`REQUIRED` 是分发内容的唯一来源，构建脚本直接解析它，不再维护第二份清单；`MANIFEST.json` 是唯一不来自 `REQUIRED` 的成员。
 - **`MANIFEST.json`（机器可读清单）**：由 `scripts/check_drift.py` 生成，构建脚本导入该模块而不另写一份规则，因此分类只有一处实现。字段固定为：
-  - 顶层 `schema_version`（清单格式版本）、`suite`（套件名，取自 `VERSION.txt`）、`format_version`（套件格式版本，当前 `1.3`）、`files[]`；
+  - 顶层 `schema_version`（清单格式版本）、`suite`（套件名，取自 `VERSION.md`）、`format_version`（套件格式版本，当前 `1.3`）、`files[]`；
   - 条目 `path`、`category`、`sha256`、`size`（`sha256` 与 `size` 按包内实际字节计算，文本已按 LF 归一）；
-  - `category` 只允许四种上游分类：`editions/` 前缀 → `edition`，`templates/` 前缀 → `template`，`ORCHESTRATION-PROJECT.md` / `PLAN.md`（旧根位置）/ `docs/PLAN.md`（1.4 起）/ `DESIGN.md` → `project-profile`，其余 → `core`；
+  - `category` 只允许四种上游分类：`editions/` 前缀 → `edition`，`templates/` 前缀 → `template`，`docs/PROJECT.md` / `PLAN.md`（旧根位置）/ `docs/PLAN.md`（1.4 起）/ `DESIGN.md` → `project-profile`，其余 → `core`；
   - 清单**不列出自身**（无法嵌入自己的哈希）、**不含时间戳**、条目按路径排序，因此同一仓库状态两次构建得到逐字节相同的清单。
 - **`check_drift.py` 的只读边界**：该脚本随包发布，供下游项目做漂移诊断。它只读取（`read_bytes` / `read_text`）、列目录，**从不创建、重命名、删除或写入项目根下的任何文件**；诊断只报告差异与建议，是否对齐由项目所有者决定。
-- 发布时 `ORCHESTRATION-PROJECT.md` 自动替换为待填模板 `templates/ORCHESTRATION-PROJECT.template.md`，即分发包总是随附 FILL_IN 模板，首次使用时填写。
+- 发布时 `docs/PROJECT.md` 自动替换为待填模板 `templates/project.md`，即分发包总是随附 FILL_IN 模板，首次使用时填写。
 - 明确排除（不得出现在包内）：
   - `docs/`：本仓库自有章程与验收记录；
   - `release/`：发布目录本身（含本文件与历史分发包）；
@@ -62,15 +62,21 @@
 6. 合并到本地主分支；合并后重新运行验证并记录结果。
 7. 发布后清理本任务分支 / Worktree（独立记账，清理由此与"合并成功"分开记录）。
 
-## 5. 版本变更（`VERSION.txt` 的 `Format version`）
+## 5. 版本变更（`VERSION.md` 的 `Format version`）
 
-- **1.4（当前）** 相对 1.3：
-  - **设计目标权威迁到 `docs/PLAN.md`**：任务方向以 `docs/PLAN.md` 为准；`init` 在 `docs/PLAN.md` 缺失且无旧根 `PLAN.md` 时创建 `docs/` 并放入模板，发现旧根 `PLAN.md` 时不迁移、只提示 `git mv`；`validate_kit` 对残留根 `PLAN.md` 报错（fail-closed，防两个设计权威并存）。迁移步骤见仓库 `docs/UPGRADE-2026-10.md` 第 11 节。
+- **1.5（当前）** 相对 1.4：
+  - **根目录瘦身至 3 文件**：根只保留 `AGENTS.md`、`LICENSE.md`、`VERSION.md`（原 txt→md）；`README.md`→`docs/README.md`（GitHub 仍渲染仓库首页）、`ORCHESTRATION-PROJECT.md`→`docs/PROJECT.md`（配置权威，旧根位置 fail-closed）。
+  - **Agent 权威合并**：`AGENT-BOOTSTRAP.md` + `AGENT-ORCHESTRATION.md` + `AGENT-ORCHESTRATION-ACCEPTANCE.md` 三合一为 `kit/orchestration.md`（随包分发）；editions 每底座 6 份合并为 `master.md`（+`execution.md`）；`prompts/` 并入对应模板后删除；全部模板/底座文件小写命名。
+  - **REQUIRED 49→33**（包 34 = 33 + MANIFEST）；分类规则同步（`docs/PROJECT.md`/`docs/PLAN.md` 归 project-profile）。
+  - **统一 uv**：全部命令 `uv run python` 前缀，CI 加 setup-uv。
+  - 迁移步骤见仓库 `docs/upgrade.md` 第 12 节。
+- **1.4** 相对 1.3：
+  - **设计目标权威迁到 `docs/PLAN.md`**：任务方向以 `docs/PLAN.md` 为准；`init` 在 `docs/PLAN.md` 缺失且无旧根 `PLAN.md` 时创建 `docs/` 并放入模板，发现旧根 `PLAN.md` 时不迁移、只提示 `git mv`；`validate_kit` 对残留根 `PLAN.md` 报错（fail-closed，防两个设计权威并存）。迁移步骤见仓库 `docs/upgrade.md` 第 11 节。
   - **图片协作条款**：设计文档可配图（`docs/images/`，正文相对引用）；Agent 只按正文指引按需查看图片、禁止批量读取；图文双写；公开仓库截图脱敏。`docs/images/` 不随包发布。
   - **统一用 `uv` 运行 Python 脚本**：文档命令、模板验证命令与 CI 全部改为 `uv run python …` 前缀；CI 增加 setup-uv 步骤（`uv run` 会使用 PATH 上的解释器）。
   - **README 用户指引话术化**：启动 / 登记 / 派发 / 收口等说明改为中文自然语言话术（对 Agent 说），话术 → 命令 → 预期证据对照表保留在 README 3.0 节。
 - **1.3** 相对 1.2：
-  - **资源锁的载体字段**：任务载体新增具名资源锁字段——通用任务包 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`）、`github` 登记块 `locked_resources` 与 `resource_lease_until`、`local` 任务库 `resources_json` 列。字段形状属载体契约，故格式版本升级；语义与冲突矩阵仍只在 `docs/design/RESOURCE-LOCKS.md`。
+  - **资源锁的载体字段**：任务载体新增具名资源锁字段——通用任务包 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`）、`github` 登记块 `locked_resources` 与 `resource_lease_until`、`local` 任务库 `resources_json` 列。字段形状属载体契约，故格式版本升级；语义与冲突矩阵仍只在 `docs/design/resource-locks.md`。
   - **`MANIFEST.json` 与 `check_drift.py`**：包内新增机器可读清单（自检 a 的校验对象），分类与清单生成下移到 `scripts/check_drift.py` 并由构建脚本导入，同时随包提供下游只读漂移诊断。
   - **CI 打包自检**：打包自检纳入 CI（见 3.1），并新增 `scripts/check_drift.py` 的 `py_compile` 语法检查；本文件与 README 的发布说明同步改为"包内容 == `REQUIRED` + `MANIFEST.json`"。
 - **1.2**：包内新增 `MANIFEST.json` 与 `scripts/check_drift.py`（本次 1.3 记录将其约束补齐为可执行的清单校验）。

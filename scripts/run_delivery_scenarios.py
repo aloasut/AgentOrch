@@ -11,7 +11,7 @@ taken from a typical failure mode rather than from a product's private data:
   D  orchestration base           (edition, resource lock, stale SHA, retries, audit)
 
 Every scenario declares its precondition, the defect it injects, the gate that
-must fire and the evidence it leaves behind; `docs/testing/DELIVERY-REGRESSION-SCENARIOS.md`
+must fire and the evidence it leaves behind; `docs/testing/delivery-regression-scenarios.md`
 carries the same table for humans. Scenarios are synthetic and self-contained:
 fixtures are generated in a throw-away directory, nothing is read from or
 written to the repository, and no network, credential or external model is used.
@@ -49,7 +49,7 @@ from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / 'scripts'
-SCENARIO_DOC = 'docs/testing/DELIVERY-REGRESSION-SCENARIOS.md'
+SCENARIO_DOC = 'docs/testing/delivery-regression-scenarios.md'
 REPORT_SCHEMA = 'agentorch.delivery-scenarios/1'
 
 HEAD_SHA = 'a' * 40
@@ -232,7 +232,7 @@ def _project_root(ctx, edition='local', config=None):
     """A throw-away project root with an explicit edition and an initialized store."""
     root = ctx.sandbox / f'project-{edition}'
     root.mkdir(parents=True, exist_ok=True)
-    (root / 'ORCHESTRATION-PROJECT.md').write_text(
+    (root/'docs').mkdir(parents=True, exist_ok=True) or (root / 'docs/PROJECT.md').write_text(
         f'# Synthetic project\n\n- `edition`\uFF1A`{edition}`\n', encoding='utf-8')
     (root / '.orchestration').mkdir(exist_ok=True)
     payload = {'retry_cap': 3, 'local_dir': '.local'}
@@ -680,9 +680,9 @@ def scenario_d2(ctx):
                                           '- `edition`\uFF1A`github`\n')):
         root = ctx.sandbox / f'edition-{label.replace(" ", "-")}'
         root.mkdir(parents=True, exist_ok=True)
-        (root / 'ORCHESTRATION-PROJECT.md').write_text(body, encoding='utf-8')
+        (root/'docs').mkdir(parents=True, exist_ok=True) or (root / 'docs/PROJECT.md').write_text(body, encoding='utf-8')
         message = _expect_refused(lambda root=root: ctx.orch.read_project_edition(root),
-                                  'ORCHESTRATION-PROJECT.md', label)
+                                  'docs/PROJECT.md', label)
         cases.append(f'{label}: {message}')
 
     broken = ctx.sandbox / 'edition-absent'

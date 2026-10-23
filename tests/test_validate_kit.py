@@ -1,6 +1,6 @@
 """Structural tests for scripts/validate_kit.py (evidence matrix contract).
 
-The field names / status enum are read back from AGENT-ORCHESTRATION.md, so these
+The field names / status enum are read back from kit/orchestration.md, so these
 tests fail if the authoritative definition and the validator drift apart.
 """
 import importlib.util, json, re, subprocess, sys, tempfile, unittest
@@ -326,15 +326,15 @@ class PlanLayerSplitTests(unittest.TestCase):
     """PLAN.md carries the design goals; phases and task blocks live in a docs plan."""
 
     def test_implementation_plan_template_is_in_the_release_manifest(self):
-        self.assertIn('templates/IMPLEMENTATION-PLAN.md', validate.REQUIRED)
-        self.assertTrue((ROOT / 'templates' / 'IMPLEMENTATION-PLAN.md').is_file())
+        self.assertIn('templates/implementation-plan.md', validate.REQUIRED)
+        self.assertTrue((ROOT / 'templates' / 'implementation-plan.md').is_file())
 
     def test_design_template_points_to_the_separate_phase_plan(self):
-        text = (ROOT / 'templates' / 'PLAN.md').read_text(encoding='utf-8')
-        self.assertIn('templates/IMPLEMENTATION-PLAN.md', text)
+        text = (ROOT / 'templates' / 'plan.md').read_text(encoding='utf-8')
+        self.assertIn('templates/implementation-plan.md', text)
         for needle in ('Allowed paths', 'Depends on', 'AC-1'):
             self.assertNotIn(needle, text,
-                             f'templates/PLAN.md must not carry the task block field {needle!r}')
+                             f'templates/plan.md must not carry the task block field {needle!r}')
 
     def test_legacy_root_plan_is_rejected_with_migration_hint(self):
         """Since 1.4 the design-goal authority is docs/PLAN.md; a root PLAN.md
@@ -349,13 +349,17 @@ class PlanLayerSplitTests(unittest.TestCase):
                                 for e in errors), errors)
 
     def test_phase_plan_template_carries_phases_and_task_blocks(self):
-        text = (ROOT / 'templates' / 'IMPLEMENTATION-PLAN.md').read_text(encoding='utf-8')
+        text = (ROOT / 'templates' / 'implementation-plan.md').read_text(encoding='utf-8')
         for needle in ('Phase', 'Goal', 'Allowed paths', 'Depends on', 'AC-1',
                        '当前状态', '维护规则'):
             self.assertIn(needle, text)
 
+    @unittest.skipUnless((ROOT / 'docs').is_dir(), 'repository-only docs are not shipped')
     def test_documented_required_file_count_matches_the_manifest(self):
-        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        readme_path = ROOT / 'docs' / 'README.md'
+        if not readme_path.is_file():
+            self.skipTest('docs/README.md is repository-only and absent inside a release package')
+        readme = readme_path.read_text(encoding='utf-8')
         numbers = set(re.findall(r'(\d+)\s*项必需文件', readme))
         numbers |= set(re.findall(r'(\d+)\s*required files', readme))
         self.assertEqual(numbers, {str(len(validate.REQUIRED))})
@@ -368,7 +372,7 @@ class ContractTemplateTests(unittest.TestCase):
     missing section must fail validation instead of yielding a shorter document.
     """
 
-    NEW_TEMPLATES = ('templates/MILESTONE-AUDIT.md', 'templates/CONTRACT-DECISION-LOG.md')
+    NEW_TEMPLATES = ('templates/milestone-audit.md', 'templates/contract-decision-log.md')
 
     def copy_templates(self, root):
         """A throwaway root holding the real contract templates."""
@@ -392,14 +396,14 @@ class ContractTemplateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.copy_templates(root)
-            target = root / 'templates' / 'MILESTONE-AUDIT.md'
+            target = root / 'templates' / 'milestone-audit.md'
             text = target.read_text(encoding='utf-8')
             self.assertIn('## 7. Recoverability', text)
             target.write_text(text.replace('## 7. Recoverability', '## Restart notes'),
                               encoding='utf-8')
             errors = validate.template_structure_errors(root)
         self.assertTrue(
-            any('templates/MILESTONE-AUDIT.md is missing required section: Recoverability' in e
+            any('templates/milestone-audit.md is missing required section: Recoverability' in e
                 for e in errors), errors)
 
     def test_missing_template_file_is_reported(self):
@@ -417,48 +421,49 @@ class ContractTemplateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.copy_templates(root)
-            target = root / 'templates' / 'DESIGN.md'
+            target = root / 'templates' / 'design.md'
             target.write_text(target.read_text(encoding='utf-8')
                               + '\nSee [missing decision](does-not-exist.md).\n', encoding='utf-8')
             errors = validate.template_structure_errors(root)
-        self.assertTrue(any('templates/DESIGN.md: broken relative link: does-not-exist.md' in e
+        self.assertTrue(any('templates/design.md: broken relative link: does-not-exist.md' in e
                             for e in errors), errors)
 
     def test_design_contract_states_freeze_is_not_permanent(self):
-        text = (ROOT / 'templates' / 'DESIGN.md').read_text(encoding='utf-8')
+        text = (ROOT / 'templates' / 'design.md').read_text(encoding='utf-8')
         self.assertIn('not permanence', text)
-        self.assertIn('CONTRACT-DECISION-LOG.md', text)
-        for needle in ('N/A: <reason>', 'AGENT-ORCHESTRATION.md'):
+        self.assertIn('contract-decision-log.md', text)
+        for needle in ('N/A: <reason>', 'kit/orchestration.md'):
             self.assertIn(needle, text)
 
     def test_templates_reference_instead_of_restating_the_core_contract(self):
-        for rel in ('templates/DESIGN.md', 'templates/MILESTONE-AUDIT.md'):
+        for rel in ('templates/design.md', 'templates/milestone-audit.md'):
             text = (ROOT / rel).read_text(encoding='utf-8')
-            self.assertIn('AGENT-ORCHESTRATION.md', text)
+            self.assertIn('kit/orchestration.md', text)
             for state in ('DISPATCHED', 'MASTER_REVIEW', 'APPROVED', 'VERIFIED'):
                 self.assertNotIn(state, text, f'{rel} must not copy the task lifecycle')
 
     def test_milestone_audit_keeps_the_verdict_classes_apart(self):
-        text = (ROOT / 'templates' / 'MILESTONE-AUDIT.md').read_text(encoding='utf-8')
+        text = (ROOT / 'templates' / 'milestone-audit.md').read_text(encoding='utf-8')
         for needle in ('BLOCKING', 'NON_BLOCKING_HARDENING', 'OPTIONAL',
                        'NEEDS_HUMAN_DECISION', 'N/A: <reason>'):
             self.assertIn(needle, text)
         self.assertIn('must not be marked complete', text)
 
     def test_decision_log_separates_frozen_open_and_revisitable(self):
-        text = (ROOT / 'templates' / 'CONTRACT-DECISION-LOG.md').read_text(encoding='utf-8')
+        text = (ROOT / 'templates' / 'contract-decision-log.md').read_text(encoding='utf-8')
         for status in ('`OPEN`', '`FROZEN`', '`REVISITABLE`', '`SUPERSEDED`'):
             self.assertIn(status, text)
         for column in ('Decider', 'Affected tasks', 'Before', 'After', 'Rationale', 'Evidence'):
             self.assertIn(column, text)
 
+    @unittest.skipUnless((ROOT / 'docs').is_dir(), 'repository-only docs are not shipped')
     def test_readme_and_acceptance_programme_point_at_the_templates(self):
-        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
-        for rel in ('templates/DESIGN.md', 'templates/CONTRACT-DECISION-LOG.md',
-                    'templates/MILESTONE-AUDIT.md'):
-            self.assertIn(f']({rel})', readme)
-        acceptance = (ROOT / 'AGENT-ORCHESTRATION-ACCEPTANCE.md').read_text(encoding='utf-8')
-        for rel in ('templates/MILESTONE-AUDIT.md', 'templates/CONTRACT-DECISION-LOG.md'):
+        readme = (ROOT / 'docs' / 'README.md').read_text(encoding='utf-8')
+        for rel in ('templates/design.md', 'templates/contract-decision-log.md',
+                    'templates/milestone-audit.md'):
+            self.assertIn(rel, readme)
+        acceptance = (ROOT / 'kit/orchestration.md').read_text(encoding='utf-8')
+        for rel in ('templates/milestone-audit.md', 'templates/contract-decision-log.md'):
             self.assertIn(rel, acceptance)
 
 
@@ -471,8 +476,8 @@ class CapabilityAndMetricsTemplateTests(unittest.TestCase):
     shorter document that still looks authoritative.
     """
 
-    CAPABILITY = 'templates/RUNTIME-CAPABILITY.md'
-    METRICS = 'templates/METRICS.md'
+    CAPABILITY = 'templates/runtime-capability.md'
+    METRICS = 'templates/metrics.md'
 
     def test_templates_are_required_and_present(self):
         for rel in (self.CAPABILITY, self.METRICS):
@@ -493,7 +498,7 @@ class CapabilityAndMetricsTemplateTests(unittest.TestCase):
             self.assertIn(needle, text)
         # A record must not become a permission grant or a second definition of C1-C4.
         self.assertIn('not a permission grant', text)
-        self.assertIn('AGENT-ORCHESTRATION.md', text)
+        self.assertIn('kit/orchestration.md', text)
 
     def test_capability_template_refuses_a_stale_pass(self):
         text = (ROOT / self.CAPABILITY).read_text(encoding='utf-8')
@@ -540,11 +545,12 @@ class CapabilityAndMetricsTemplateTests(unittest.TestCase):
             expected = f'{rel} is missing required section: {"Gold sample" if "Gold" in old else "UNKNOWN and re-probe"}'
             self.assertTrue(any(expected in error for error in errors), errors)
 
+    @unittest.skipUnless((ROOT / 'docs').is_dir(), 'repository-only docs are not shipped')
     def test_readme_and_acceptance_point_at_the_new_artifacts(self):
-        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
+        readme = (ROOT / 'docs' / 'README.md').read_text(encoding='utf-8')
         for rel in (self.CAPABILITY, self.METRICS, 'scripts/report_metrics.py'):
             self.assertIn(rel, readme)
-        acceptance = (ROOT / 'AGENT-ORCHESTRATION-ACCEPTANCE.md').read_text(encoding='utf-8')
+        acceptance = (ROOT / 'kit/orchestration.md').read_text(encoding='utf-8')
         for rel in (self.CAPABILITY, self.METRICS):
             self.assertIn(rel, acceptance)
 
@@ -557,7 +563,7 @@ class CapabilityAndMetricsTemplateTests(unittest.TestCase):
 class AuditConclusionTests(unittest.TestCase):
     """A filled audit may only be read as a closeout when no verdict forbids it.
 
-    The four verdict classes come from templates/MILESTONE-AUDIT.md; this check
+    The four verdict classes come from templates/milestone-audit.md; this check
     only reads the classification back, it never judges whether a verdict is
     justified.
     """
@@ -600,7 +606,7 @@ class DeliveryScenarioIntegrationTests(unittest.TestCase):
 
     RUNNER = 'scripts/run_delivery_scenarios.py'
     RUNNER_TEST = 'tests/test_run_delivery_scenarios.py'
-    SCENARIO_DOC = 'docs/testing/DELIVERY-REGRESSION-SCENARIOS.md'
+    SCENARIO_DOC = 'docs/testing/delivery-regression-scenarios.md'
 
     def test_runner_and_its_test_ship_with_the_kit(self):
         self.assertIn(self.RUNNER, validate.REQUIRED)
@@ -608,6 +614,7 @@ class DeliveryScenarioIntegrationTests(unittest.TestCase):
         for rel in (self.RUNNER, self.RUNNER_TEST):
             self.assertTrue((ROOT / rel).is_file(), f'{rel} is missing')
 
+    @unittest.skipUnless((ROOT / 'docs').is_dir(), 'repository-only docs are not shipped')
     def test_scenario_document_is_a_repository_only_requirement(self):
         # It cannot be in REQUIRED: build_release.py refuses any path with a
         # `docs` segment, so shipping it would fail the release self-check.
@@ -639,9 +646,10 @@ class DeliveryScenarioIntegrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(validate.required_doc_errors(Path(tmp)), [])
 
+    @unittest.skipUnless((ROOT / 'docs').is_dir(), 'repository-only docs are not shipped')
     def test_readme_and_acceptance_point_at_the_scenario_runner(self):
-        readme = (ROOT / 'README.md').read_text(encoding='utf-8')
-        acceptance = (ROOT / 'AGENT-ORCHESTRATION-ACCEPTANCE.md').read_text(encoding='utf-8')
+        readme = (ROOT / 'docs' / 'README.md').read_text(encoding='utf-8')
+        acceptance = (ROOT / 'kit/orchestration.md').read_text(encoding='utf-8')
         self.assertIn(self.RUNNER, readme)
         self.assertIn(self.RUNNER, acceptance)
         self.assertIn(self.SCENARIO_DOC, readme)

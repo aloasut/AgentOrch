@@ -49,11 +49,11 @@ def connect(root):
 RETRY_CAP_DEFAULT = 3
 EDITIONS = ('local','github')
 # `.orchestration/config.json` holds local CLI runtime parameters only. It never
-# selects the edition: that key lives in <root>/ORCHESTRATION-PROJECT.md, which is
+# selects the edition: that key lives in <root>/docs/PROJECT.md, which is
 # the single authority (see read_project_edition). Keeping the edition out of this
 # file removes the second, silently-defaulting definition that used to exist.
 RUNTIME_DEFAULTS = {'retry_cap': RETRY_CAP_DEFAULT, 'local_dir': '.local'}
-PROJECT_CONFIG = 'ORCHESTRATION-PROJECT.md'
+PROJECT_CONFIG = 'docs/PROJECT.md'
 # docs/PLAN.md is the plan of record (task registration, dispatch and phase
 # close-out read it); templates/PLAN.md is only the seed copy that `init`
 # copies once. A root-level PLAN.md is the legacy (<=1.3) location: init never
@@ -61,7 +61,7 @@ PROJECT_CONFIG = 'ORCHESTRATION-PROJECT.md'
 # always keep a single authority. Both names are relative to the project root.
 PLAN_DOC = 'docs/PLAN.md'
 LEGACY_PLAN_DOC = 'PLAN.md'
-PLAN_TEMPLATE = 'templates/PLAN.md'
+PLAN_TEMPLATE = 'templates/plan.md'
 EDITION_LINE = re.compile(r'^\s*[-*]\s*`?edition`?\s*[:：]\s*(?P<value>.*)$', re.M)
 
 class EditionError(RuntimeError):
@@ -101,7 +101,7 @@ def _runtime_config(root):
     return cfg
 
 def read_project_edition(root):
-    """Return the edition declared by <root>/ORCHESTRATION-PROJECT.md.
+    """Return the edition declared by <root>/docs/PROJECT.md.
 
     This key is the only authority for edition selection. A missing file, a
     missing or duplicated key, an empty value, a wrong type or an unsupported
@@ -134,7 +134,7 @@ def read_config(root):
     """Return the effective runtime configuration, its provenance and the edition.
 
     Runtime keys keep their historical silent fallback. The edition is read from
-    ORCHESTRATION-PROJECT.md and raises EditionError when missing or illegal, so
+    docs/PROJECT.md and raises EditionError when missing or illegal, so
     routing can never silently run on the wrong task carrier.
     """
     cfg=_runtime_config(root)
@@ -166,8 +166,8 @@ def require_local_scheduler(root, action):
     raise EditionError(
         f'edition is {edition!r} ({project_config_path(root)}); this CLI cannot run `{action}` for the {edition} edition: '
         f'it writes the local SQLite task registry, which is a read-only archive under {edition}. '
-        'Next: create or update the task as a GitHub Issue using editions/github/ISSUE-TEMPLATE.md, record the '
-        'ORCH-TASK-REGISTRY block before starting, and drive the PR per editions/github/START-EXECUTION.md. '
+        'Next: create or update the task as a GitHub Issue using editions/github/issue-template.md, record the '
+        'ORCH-TASK-REGISTRY block before starting, and drive the PR per editions/github/execution.md. '
         'init, backup, config show, task list, task show and task resources stay available.'
     )
 
@@ -175,7 +175,7 @@ def config_show(root):
     """Print the effective configuration, where each value came from, and the edition.
 
     Returns 0 when the project edition is legal, 1 when it is missing or illegal.
-    The edition is reported from ORCHESTRATION-PROJECT.md only; a leftover
+    The edition is reported from docs/PROJECT.md only; a leftover
     `edition` key in config.json is shown as ignored, never applied.
     """
     cfg=_runtime_config(root); path=config_path(root); exists=path.exists()
