@@ -33,28 +33,25 @@
 
 ## 快速上手（5 分钟）
 
-前提：Python 3.12+ 与 Git。全部脚本只用标准库，**无需安装任何依赖**；`local` 底座完全离线可用。
+前提：Python 3.12+ 与 Git。脚本只用标准库，**无需安装任何依赖**；`local` 底座完全离线可用。
 
-```bash
-# 1) 把套件放进你的项目（推荐：下载 Release 里的 agentorch-YYYYMMDD.zip 解压；
-#    也可以 clone 本仓库，但不要把 .git/ 带进项目，见 3.1）
-cp -r /path/to/agentorch-YYYYMMDD/. your-project/ && cd your-project
+**用法一句话：把下面的话术原样复制给你的 Agent（WorkBuddy、Claude Code、Cursor… 都行），它会自己识别要做什么、执行对应命令，并把输出与退出码带回来给你。** 命令不需要你手打；想知道 Agent 到底会跑什么，见第 3 节的「话术 → 命令」对照表。Agent 第一次接入本项目时，先让它读 [AGENT-BOOTSTRAP.md](AGENT-BOOTSTRAP.md) 与 [AGENTS.md](AGENTS.md)——那是它的行为契约，话术只负责"点菜"。
 
-# 2) 选底座：编辑 ORCHESTRATION-PROJECT.md，把 edition 填成 local（分发包内是 FILL_IN 待填模板）
+**第 1 步 · 装进项目**（先从本仓库 Releases 下载 `agentorch-YYYYMMDD.zip` 解压备好，或 clone 本仓库——注意不要把 `.git/` 带进项目，细节见 3.1）：
 
-# 3) 初始化任务库，登记并派发第一条任务
-python scripts/orchestrator.py init
-python scripts/orchestrator.py task add --id TASK-0001 --title "示例任务" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"
-python scripts/orchestrator.py task ready TASK-0001
-python scripts/orchestrator.py task dispatch TASK-0001
+> 把这套 Agent-Orchestration 套件装进我的项目：保留 scripts/、editions/、templates/ 的相对路径，不要复制 .git/、.worktrees/、.orchestration/ 和 .local/。装完列出顶层目录给我确认。
 
-# 4) 结构自检
-python scripts/validate_kit.py
-```
+**第 2 步 · 选底座并初始化**：
 
-两条最需要先知道的规则：**`dispatch` 只登记状态并占用路径锁，不会启动 Agent**——把生成的任务包交给真实的执行会话去干活，完成、审查后用 `python scripts/orchestrator.py task status TASK-0001 VERIFIED --note "依据"` 收口；**执行者不自批、不自合，合并由 Master 决策**（完整规则见 [AGENTS.md](AGENTS.md)）。
+> 编辑 ORCHESTRATION-PROJECT.md：这是待填模板，把所有 FILL_IN 换成实际内容，edition 填 local。然后运行初始化，生成 docs/PLAN.md，把 config show 和 task list 的完整输出给我看。
 
-以上每条命令的真实输出与逐条解释在第 3 节；冒烟完可取消示例任务释放锁：`python scripts/orchestrator.py task status TASK-0001 CANCELED --note "冒烟结束"`。
+**第 3 步 · 登记并派发第一条任务**：
+
+> 登记 ID 为 TASK-0001 的示例任务：标题"建立项目骨架"，可改路径 src/，验收两条——最小入口可运行；验证命令退出码为 0。然后把它置为 READY 再 DISPATCH，把生成的任务包完整展示给我。提醒：DISPATCH 只登记状态并占用路径锁，不会启动任何 Agent，任务包要交给真实的执行会话去做。
+
+**第 4 步 · 自检与收口**：
+
+> 运行结构自检并告诉我退出码；然后把示例任务置为 CANCELED（理由写"冒烟结束"）以释放路径锁。示例任务以后要走完整流程时：执行会话完成任务包后，由 Master 审查并置为 VERIFIED——执行者不自批、不自合，合并由 Master 决策（完整规则见 AGENTS.md）。
 
 **我想…**（按需跳转，不必通读）：
 
@@ -62,7 +59,7 @@ python scripts/validate_kit.py
 | --- | --- |
 | 知道它是什么、解决什么问题、适不适合我 | 第 1 节 |
 | 选 `local` 还是 `github`，什么时候迁移 | 第 2 节 |
-| 看每条命令的完整输出与解释 | 第 3 节 |
+| 看话术对应哪些命令、每条命令的完整输出 | 第 3 节 |
 | 空目录从零开始 / 接入已有仓库 / 迁到 GitHub | 第 4 节 |
 | 看目录里每个文件是干什么的 | 第 5 节 |
 | 配置底座、重试上限、资源锁 TTL、私有目录、并发 | 第 6 节 |
@@ -107,7 +104,21 @@ python scripts/validate_kit.py
 
 ## 3. 上手命令详解（local）
 
-这是「快速上手」的完整版：每条命令的真实输出、退出码与逐条解释。
+这是「快速上手」的完整版：话术对应哪些命令、每条命令的真实输出、退出码与逐条解释。
+
+### 3.0 话术 → 命令对照表
+
+快速上手的每句话术对应以下命令。**命令不需要用户手打**——列在这里是为了透明与审计：Agent 说它做了什么，你可以对照这张表核实；证据列是 Agent 执行后应带回的最小证据。
+
+| 话术（对 Agent 说） | Agent 执行的命令 | 预期证据 |
+| --- | --- | --- |
+| "把套件装进我的项目…" | 复制 `agentorch-YYYYMMDD/` 内容到项目根（排除 `.git/`、`.worktrees/`、`.orchestration/`、`.local/`） | 顶层目录清单：`scripts/`、`editions/`、`templates/`、`ORCHESTRATION-PROJECT.md` 等 |
+| "编辑 ORCHESTRATION-PROJECT.md…然后运行初始化" | 编辑 `ORCHESTRATION-PROJECT.md`；`python scripts/orchestrator.py init` | 退出码 0；输出含 `Created docs/PLAN.md from <项目根>\templates\PLAN.md`；`.orchestration/state.sqlite3` 出现 |
+| "把 config show 和 task list 的完整输出给我看" | `python scripts/orchestrator.py config show`、`task list` | 退出码 0；`edition = local`；任务库为空 |
+| "登记 ID 为 TASK-0001 的示例任务…" | `python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"` | 输出 `TASK-0001: created in PLANNED` |
+| "置为 READY 再 DISPATCH" | `python scripts/orchestrator.py task ready TASK-0001`、`task dispatch TASK-0001` | 退出码 0；`DISPATCHED; locks acquired for src`；任务包生成并展示 |
+| "运行结构自检并告诉我退出码" | `python scripts/validate_kit.py` | 退出码 0；`Kit validation passed (49 required files checked; …)` |
+| "把示例任务置为 CANCELED" | `python scripts/orchestrator.py task status TASK-0001 CANCELED --note "冒烟结束"` | 退出码 0；路径锁释放 |
 
 ### 3.1 放入套件
 
@@ -187,6 +198,8 @@ OK
 - 冒烟完成后可取消这条示例任务并释放锁：`python scripts/orchestrator.py task status TASK-0001 CANCELED --note "快速开始冒烟结束"`。
 
 ## 4. 三条落地路径
+
+本节命令同样可以用话术交给 Agent 执行——对照关系同 3.0；Agent 不会替你做授权决策（底座迁移、发布），那些仍由你拍板。
 
 ### 路径一：空目录启动新项目
 
