@@ -336,6 +336,18 @@ class PlanLayerSplitTests(unittest.TestCase):
             self.assertNotIn(needle, text,
                              f'templates/PLAN.md must not carry the task block field {needle!r}')
 
+    def test_legacy_root_plan_is_rejected_with_migration_hint(self):
+        """Since 1.4 the design-goal authority is docs/PLAN.md; a root PLAN.md
+        means two competing authorities, so validation fails closed with the
+        exact migration command instead of silently accepting the old layout."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # A minimal tree: only the legacy file matters for this check.
+            (root / 'PLAN.md').write_text('# legacy design goals\n', encoding='utf-8')
+            errors, _ = validate.validate_kit(root)
+            self.assertTrue(any('legacy root PLAN.md' in e and 'git mv PLAN.md docs/PLAN.md' in e
+                                for e in errors), errors)
+
     def test_phase_plan_template_carries_phases_and_task_blocks(self):
         text = (ROOT / 'templates' / 'IMPLEMENTATION-PLAN.md').read_text(encoding='utf-8')
         for needle in ('Phase', 'Goal', 'Allowed paths', 'Depends on', 'AC-1',
@@ -633,6 +645,35 @@ class DeliveryScenarioIntegrationTests(unittest.TestCase):
         self.assertIn(self.RUNNER, readme)
         self.assertIn(self.RUNNER, acceptance)
         self.assertIn(self.SCENARIO_DOC, readme)
+
+
+class MarkdownLinkScanTests(unittest.TestCase):
+    """Links inside code spans / fences are literal text, not live links.
+
+    The image convention is taught by example (`![图](images/x.png)` inside
+    backticks), so the scan must not report those as broken; a real link to a
+    missing file is still flagged, and a link to a real binary (an image)
+    resolves.
+    """
+    def test_code_spans_are_skipped_and_real_breaks_are_flagged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'AGENTS.md').write_text(
+                '# A\n\n用 `![图](images/x.png)` 引用；另有 [坏链](nope/missing.md)。\n',
+                encoding='utf-8')
+            errors, _ = validate.validate_kit(root)
+            self.assertFalse(any('broken relative link: images/x.png' in e for e in errors), errors)
+            self.assertTrue(any('broken relative link: nope/missing.md' in e for e in errors), errors)
+
+    def test_image_links_to_real_binaries_resolve(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'docs' / 'images').mkdir(parents=True)
+            (root / 'docs' / 'images' / 'a.png').write_bytes(b'\x89PNG\r\n\x1a\n')
+            (root / 'docs' / 'PLAN.md').write_text('![图 1](images/a.png) 配图说明：架构总览。\n',
+                                                   encoding='utf-8')
+            errors, _ = validate.validate_kit(root)
+            self.assertFalse(any('broken relative link' in e for e in errors), errors)
 
 
 if __name__ == '__main__':

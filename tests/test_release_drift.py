@@ -142,7 +142,8 @@ class ManifestGenerationTests(unittest.TestCase):
     def test_local_only_classification_separates_extensions_from_unknown(self):
         self.assertEqual(drift.classify_local('src/app.py'), 'project-extension')
         self.assertEqual(drift.classify_local('docs/design.md'), 'project-extension')
-        self.assertEqual(drift.classify_local('PLAN.md'), 'project-profile')
+        self.assertEqual(drift.classify_local('PLAN.md'), 'project-profile')       # legacy root (<=1.3)
+        self.assertEqual(drift.classify_local('docs/PLAN.md'), 'project-profile')  # current location (1.4)
         self.assertEqual(drift.classify_local('editions/local/EXTRA.md'), 'unknown')
         self.assertEqual(drift.classify_local('templates/EXTRA.md'), 'unknown')
         self.assertEqual(drift.classify_local('tests/test_project.py'), 'unknown')

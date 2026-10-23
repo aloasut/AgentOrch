@@ -104,6 +104,21 @@ TEMPLATE_SECTIONS = {
 }
 HEADING_RE = re.compile(r'^#{2,4}\s+(?P<text>.+?)\s*$', re.M)
 MD_LINK_RE = re.compile(r'\[[^\]]*\]\(([^)]+)\)')
+
+
+# Docs teach the link/image syntax itself (e.g. `![图](images/x.png)` inside
+# backticks or fenced blocks). Those spans are literal text, not live links, so
+# scanning them reported false "broken relative link" errors on every document
+# that documents the convention.
+CODE_BLOCK_RE = re.compile(r'```.*?```', re.S)
+CODE_SPAN_RE = re.compile(r'`[^`\n]*`')
+
+
+def markdown_links(text):
+    """Markdown link targets outside fenced code blocks and inline code."""
+    text = CODE_BLOCK_RE.sub('', text)
+    text = CODE_SPAN_RE.sub('', text)
+    return MD_LINK_RE.findall(text)
 EXTERNAL_LINK_PREFIXES = ('http://', 'https://', 'mailto:', '#')
 
 # --- Evidence matrix contract -------------------------------------------------
@@ -568,7 +583,7 @@ def template_structure_errors(root=ROOT):
         for section in sections:
             if not any(section.lower() in heading for heading in headings):
                 errors.append(f'{rel} is missing required section: {section}')
-        for target in MD_LINK_RE.findall(text):
+        for target in markdown_links(text):
             if target.startswith(EXTERNAL_LINK_PREFIXES):
                 continue
             target = target.split('#', 1)[0]
@@ -584,6 +599,14 @@ def validate_kit(root=ROOT, project_ready=False):
     for rel in REQUIRED:
         if not (root / rel).is_file():
             errors.append(f'missing required file: {rel}')
+
+    # Since Format 1.4 the design-goal authority lives at docs/PLAN.md. A root
+    # PLAN.md is the legacy (<=1.3) location: it must be moved, not kept, or the
+    # project ends up with two competing design-goal authorities. init refuses
+    # to seed docs/PLAN.md while it exists, so validation fails closed too.
+    if (root / 'PLAN.md').is_file():
+        errors.append("legacy root PLAN.md found: move it to docs/PLAN.md (`git mv PLAN.md docs/PLAN.md`) "
+                      'so design goals keep a single authority — see README section 10')
 
     errors.extend(template_structure_errors(root))
 
@@ -736,7 +759,7 @@ def validate_kit(root=ROOT, project_ready=False):
         if md.relative_to(root).as_posix() in TEMPLATE_SECTIONS:
             continue
         content = md.read_text(encoding='utf-8')
-        for target in re.findall(r'\[[^\]]*\]\(([^)]+)\)', content):
+        for target in markdown_links(content):
             if target.startswith(('http://', 'https://', 'mailto:', '#')):
                 continue
             target = target.split('#', 1)[0]

@@ -53,4 +53,4 @@
 
 最少应建立：项目章程 / 范围与非目标、关键假设、架构决策记录（若适用）、目录结构、首个可运行垂直切片、验证方式和后续任务路线。按项目规模调整；不要求为了模板完整而过度文档化。
 
-计划分两层。项目根目录的 `PLAN.md` 是**设计目标权威**：`python scripts/orchestrator.py init` 在根目录缺少该文件时从 `templates/PLAN.md` 逐字节复制一份，之后由项目所有者填写为什么做、做到什么程度、原则与边界；已存在的根 `PLAN.md` 不会被覆盖，模板只用于初始化复制。阶段目标、任务顺序与状态写入 `docs/` 的阶段计划，需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建它）。两者冲突时以 `PLAN.md` 的设计目标为准，停下对齐，不得各写一套。
+计划分两层。`docs/PLAN.md` 是**设计目标权威**：`python scripts/orchestrator.py init` 在 `docs/PLAN.md` 缺失且不存在 1.3 之前的根 `PLAN.md` 时，创建 `docs/` 并从 `templates/PLAN.md` 逐字节复制一份，之后由项目所有者填写为什么做、做到什么程度、原则与边界；既有文件不会被覆盖。发现 1.3 之前的根 `PLAN.md` 时，`init` 与 `validate_kit` 都会拒绝并提示 `git mv PLAN.md docs/PLAN.md` 迁移。阶段目标、任务顺序与状态写入 `docs/` 的阶段计划，需要时把 `templates/IMPLEMENTATION-PLAN.md` 复制到 `docs/`（`init` 不创建它）。两者冲突时以 `docs/PLAN.md` 的设计目标为准，停下对齐，不得各写一套。

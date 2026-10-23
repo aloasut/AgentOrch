@@ -10,9 +10,9 @@
 >
 > 本文出现的每条命令与每个退出码都在 2026-10-23 于 Windows 10 + Git Bash + Python 3.13 上**真实执行**过，逐条记录见第 9 节。未实测的部分会明写「未实测」。
 
-## 1. 适用对象与四条迁移路径
+## 1. 适用对象与迁移路径
 
-适用于还在 `Format version` 1.1 / 1.2、要升到 1.3 的项目，`local` 与 `github` 两种底座都适用（底座差异写在每节的「底座差异」里）。
+适用于还在 `Format version` 1.1 / 1.2、要升到 1.3 的项目，`local` 与 `github` 两种底座都适用（底座差异写在每节的「底座差异」里）。**1.3 → 1.4 的项目只看第 11 节**（根 `PLAN.md` 迁入 `docs/PLAN.md` 与图片规范），第 3–6 节不用重做。
 
 四条路径对应四种旧起点，**命中几条改几条**，彼此独立：
 
@@ -472,3 +472,26 @@ checked: 47 manifest file(s); missing 0, modified 1, unknown 0, project-profile 
 - 不猜版本、不覆盖项目文件、不"同步"上游：漂移只报告差异。
 - 不重述契约：`edition` 权威、计划分层、资源锁语义、清单分类各自由第 1 节列的文档定义，本文只引用。
 - 不改版本策略：`Format version` 由维护者按发布规则更新，升级说明不改变发布与兼容承诺。
+
+## 11. 迁移五（1.4 新增）：根 `PLAN.md` → `docs/PLAN.md` 与图片规范
+
+- **变了什么**：设计目标权威从根 `PLAN.md` 移到 `docs/PLAN.md`——放 `docs/` 是为了同目录配图：图放 `docs/images/`，正文中以相对路径引用（如 `![图 1](images/xxx.png)`）。`init` 改为：`docs/PLAN.md` 缺失且**无**根 `PLAN.md` 时创建 `docs/` 并从 `templates/PLAN.md` 逐字节复制；存在根 `PLAN.md`（1.3 及更早）时**不会自动迁移**，只打印迁移提示（防数据意外）。`validate_kit.py` 对残留的根 `PLAN.md` 直接报错——根与 docs 并存等于两个设计权威。
+- **图片规则**（定义在 `AGENTS.md` 第 8 条，本节只提醒）：**Agent 只在正文明确指向某图时才打开该图，禁止批量读取 `docs/images/`**；**图文双写**——设计意图必须能仅凭文字成立，每个图片引用都要有相邻文字说明；`docs/images/` 随公开仓库公开、不随发行包发布，截图入库前先脱敏。
+- **怎么改**（手工两条命令，`init` 不会替你动旧文件；2026-10-23 在 Windows 10 + Git Bash + Git for Windows 实测）：
+
+  ```bash
+  mkdir docs && git mv PLAN.md docs/PLAN.md        # 0；docs/ 必须先存在，git mv 不会自建目录
+  git commit -m "migrate plan into docs"           # 0；提交迁移（或随下一个提交一起走）
+  ```
+
+  然后把 `docs/PLAN.md` 文内指向仓库根文件的相对链接补上 `../`（如 `[AGENTS.md](AGENTS.md)` → `[AGENTS.md](../AGENTS.md)`）；`python scripts/validate_kit.py` 会逐个指出断链。
+- **怎么自检**：
+
+  ```bash
+  python scripts/validate_kit.py                   # 0：不再报 legacy root PLAN.md
+  python scripts/orchestrator.py init              # 0；输出 kept unchanged: <项目根>\docs\PLAN.md
+  python scripts/orchestrator.py task list         # 0；任务库不受迁移影响
+  ```
+- **底座差异**：`local` / `github` 步骤完全相同——`PLAN.md` 是项目文件，不在任务载体里；`github` 项目迁移后照常在 Issue 登记块中引用 `docs/PLAN.md`。
+- **回退**：`git mv docs/PLAN.md PLAN.md` 回到 1.3 布局；但 1.4 的 `validate_kit` 会再报 legacy——回退意味着同时回退套件版本，不要只回退文件。
+- **不要这样做**：把根 `PLAN.md` 复制（而非移动）到 `docs/`；迁移后保留两份设计目标；用 init 之外的方式让两份并存。
