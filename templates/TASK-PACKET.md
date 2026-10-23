@@ -70,15 +70,15 @@
 - **Migration cases:** N/A: no persisted data, configuration or file format changes.
 - **Integration paths:** N/A: output goes to stdout only; no other module or service consumes it.
 - **Unverified assumptions:** N/A: AC-1 and AC-2 cover the whole change; nothing is left open.
-- **Validation commands:** `python -m unittest tests.test_export`
+- **Validation commands:** `uv run python -m unittest tests.test_export`
 - **Baseline branch / commit:** `main` @ `1111111`
 - **Expected branch / Worktree:** `task/1001-dry-run` / `.worktrees/1001-dry-run`
 - **Evidence head SHA:** 1111111111111111111111111111111111111111
 - **Evidence matrix:**
   | ac_id | method | expected | actual | status | environment | commit_sha | evidence_ref | notes |
   |------|--------|----------|--------|--------|-------------|------------|--------------|-------|
-  | AC-1 | `python -m unittest tests.test_export.DryRunTests` | 4 tests pass; temporary directory stays empty | 4 tests passed; `du` on temp dir shows 0 bytes | PASS | Linux, Python 3.12, local edition, branch task/1001-dry-run | 1111111111111111111111111111111111111111 | task record: evidence log 12 | (none) |
-  | AC-2 | `python -m unittest tests.test_export` | pre-existing export tests still pass | 12 tests passed | PASS | same as above | 1111111111111111111111111111111111111111 | task record: evidence log 12 | (none) |
+  | AC-1 | `uv run python -m unittest tests.test_export.DryRunTests` | 4 tests pass; temporary directory stays empty | 4 tests passed; `du` on temp dir shows 0 bytes | PASS | Linux, Python 3.12, local edition, branch task/1001-dry-run | 1111111111111111111111111111111111111111 | task record: evidence log 12 | (none) |
+  | AC-2 | `uv run python -m unittest tests.test_export` | pre-existing export tests still pass | 12 tests passed | PASS | same as above | 1111111111111111111111111111111111111111 | task record: evidence log 12 | (none) |
 - **Risks / human decisions:** none identified; flag defaults to off.
 - **Delivery evidence:** changed paths, Diff, head SHA, command output / exit codes.
 - **Hard boundaries:** no scope expansion, no self-approval, no merge.
@@ -103,16 +103,16 @@
 - **Migration cases:** version 2 to version 3 fills the new field with its documented default; a save with no version marker is treated as version 1 and must fail closed instead of guessing; rollback keeps the original file.
 - **Integration paths:** loader is called by the CLI import path and by the autosave loop; both must surface the typed error unchanged.
 - **Unverified assumptions:** autosave retries never run while a migration is in progress. Not yet verified; if false, AC-2's no-mutation guarantee needs a lock.
-- **Validation commands:** `python -m unittest tests.saves`
+- **Validation commands:** `uv run python -m unittest tests.saves`
 - **Baseline branch / commit:** `main` @ `2222222`
 - **Expected branch / Worktree:** `task/1002-loader-versions` / `.worktrees/1002-loader-versions`
 - **Evidence head SHA:** bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 - **Evidence matrix:**
   | ac_id | method | expected | actual | status | environment | commit_sha | evidence_ref | notes |
   |------|--------|----------|--------|--------|-------------|------------|--------------|-------|
-  | AC-1 | `python -m unittest tests.saves.test_loader.LoadTests` | 6 tests pass; round-trip diff empty | 6 tests passed; round-trip diff empty | PASS | Linux, Python 3.12, github edition, branch task/1002-loader-versions | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | PR comment 1 | (none) |
-  | AC-2 | `python -m unittest tests.saves.test_loader.UnknownVersionTests` | typed error raised; source file unchanged | 3 negative tests passed; mtime and bytes unchanged | PASS | same as above | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | PR comment 1 | also covers the truncated payload |
-  | AC-3 | `python -m unittest tests.saves.test_migration.V2ToV3Tests` | version 2 fixture migrates with defaults filled | not executed: version 2 fixture not written yet | NOT_RUN | same as above | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | task record: no run recorded | AC-3 left unchecked on purpose; must not be reported as passing |
+  | AC-1 | `uv run python -m unittest tests.saves.test_loader.LoadTests` | 6 tests pass; round-trip diff empty | 6 tests passed; round-trip diff empty | PASS | Linux, Python 3.12, github edition, branch task/1002-loader-versions | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | PR comment 1 | (none) |
+  | AC-2 | `uv run python -m unittest tests.saves.test_loader.UnknownVersionTests` | typed error raised; source file unchanged | 3 negative tests passed; mtime and bytes unchanged | PASS | same as above | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | PR comment 1 | also covers the truncated payload |
+  | AC-3 | `uv run python -m unittest tests.saves.test_migration.V2ToV3Tests` | version 2 fixture migrates with defaults filled | not executed: version 2 fixture not written yet | NOT_RUN | same as above | bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb | task record: no run recorded | AC-3 left unchecked on purpose; must not be reported as passing |
 - **Risks / human decisions:** autosave assumption above may require a lock; if so the task returns to planning instead of widening scope silently.
 - **Delivery evidence:** changed paths, Diff, head SHA, command output / exit codes.
 - **Hard boundaries:** no scope expansion, no self-approval, no merge.

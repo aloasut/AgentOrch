@@ -27,14 +27,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # All Python invocations go through uv (project convention); setup-python
+      # only pins the interpreters that uv then picks up from PATH.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+
       - name: Validate kit structure
-        run: python scripts/validate_kit.py
+        run: uv run python scripts/validate_kit.py
 
       - name: Run unit tests
-        run: python -m unittest discover -s tests
+        run: uv run python -m unittest discover -s tests
 
       - name: Syntax check
-        run: python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py
+        run: uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py
 
       # Release packaging self-check. No `continue-on-error`, no `|| true`: a
       # packaging regression (missing file, broken link inside the package,
@@ -45,4 +50,4 @@ jobs:
       # self-check executes the shipped test suite inside the extracted archive,
       # so each supported version proves the artifact it would receive.
       - name: Release self-check (build_release.py)
-        run: python scripts/build_release.py
+        run: uv run python scripts/build_release.py
