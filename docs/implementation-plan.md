@@ -4,9 +4,9 @@
 > 设计目标（为什么做、做到什么程度、原则与边界）只在 [PLAN.md](PLAN.md)（1.4 起位于 `docs/`）；字段、状态取值与合并门语义只在 [kit/orchestration.md](../kit/orchestration.md) 4.1 与第 5 节，本文件只引用不重述。
 > 本文件只经任务分支 + PR 修改。与 `PLAN.md` 的设计目标冲突时，以设计目标为准并停下对齐，不得各写一套。
 
-- 版本：v2.1
-- 日期：2026-10-23
-- 状态：阶段计划；Phase A / B / C 全部交付完毕（2026-10-23）
+- 版本：v2.2（规划增补）
+- 日期：2026-10-26
+- 状态：Phase A / B / C 已交付；新增自我完善与安全更新计划，待按 Issues #46–#53 分阶段实施
 - 适用范围：AgentOrch 核心规则、local/github edition、任务模板、验证脚本与发行机制
 - 设计目标来源：[PLAN.md](PLAN.md)
 
@@ -30,7 +30,7 @@
 | [#17](https://github.com/ctrlshiftaltdel/AgentOrch/issues/17) 发布自检纳入 CI | 把 `build_release` 自检放进流水线 | #14（已满足） | 已完成 | PR #25 已合并（`53a86fc`）；CI 两档跑打包自检，`VERSION.md` 1.3 |
 | [#9](https://github.com/ctrlshiftaltdel/AgentOrch/issues/9) 合成回归与通用验收集成 | 故障注入、集成矩阵、失败演练、发布出口 | #2 / #3 / #4 / #5；最终验收等 #6–#8 | 已完成（随本 PR 合并生效） | 本 PR：`scripts/run_delivery_scenarios.py` + 场景文档 + 验收程序 I 段 |
 
-已完成只代表交付完成，不代表该阶段已验证；每条交付仍以对应 PR 的逐条验收结果、以及合并后主分支上重跑的结果为准。**Phase A / B / C 的全部任务已交付，无剩余待办**；下一次动作是按 `release/README.md` 第 4 节执行发布（登记发布任务 → 构建 → 自检留证 → Master 审查 → 合并 → 发布后清理），发布完成后本计划即可归档。
+已完成只代表交付完成，不代表该阶段已验证；每条交付仍以对应 PR 的逐条验收结果、以及合并后主分支上重跑的结果为准。Phase A / B / C 的原有任务已交付。当前新增后续工作：Epic [#46](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46)，依次推进契约冻结 [#47](https://github.com/ctrlshiftaltdel/AgentOrch/issues/47)、架构检查 [#48](https://github.com/ctrlshiftaltdel/AgentOrch/issues/48)、经验管线 [#49](https://github.com/ctrlshiftaltdel/AgentOrch/issues/49)、自我完善闭环 [#50](https://github.com/ctrlshiftaltdel/AgentOrch/issues/50)、安全更新引擎 [#51](https://github.com/ctrlshiftaltdel/AgentOrch/issues/51)、更新入口与发行包 [#52](https://github.com/ctrlshiftaltdel/AgentOrch/issues/52) 和整体验收 [#53](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53)。
 
 ## 2. 为什么要分阶段
 
@@ -182,3 +182,25 @@
 - **先计划后登记**：新任务先写进第 1 节与第 5 节顺序，再登记为 Issue / 任务；关闭或取消的任务保留行并注明结果，不删除历史。
 - **不复制定义**：字段、状态与门禁语义始终引用 `kit/orchestration.md`；发现本文件与核心文档口径不一致，先停下对齐，不在两处各写一套。
 - **冲突处理**：与本文件的设计目标来源 `PLAN.md` 冲突时，以设计目标为准并停下对齐。
+
+
+## 11. 自我完善与安全更新（新增规划，2026-10-26）
+
+详细设计唯一落点：[docs/self-improvement-and-update-plan.md](self-improvement-and-update-plan.md)。本节只维护阶段顺序、依赖和状态，不复制设计契约。
+
+| Issue | 交付重点 | 依赖 | 状态 |
+|---|---|---|---|
+| [#47](https://github.com/ctrlshiftaltdel/AgentOrch/issues/47) | 冻结来源注册表、Lesson 生命周期、Architecture Contract、更新安全与威胁模型 | Epic #46 | OPEN |
+| [#48](https://github.com/ctrlshiftaltdel/AgentOrch/issues/48) | 项目可配置架构契约与依赖边界检查器 | #47 | OPEN |
+| [#49](https://github.com/ctrlshiftaltdel/AgentOrch/issues/49) | TalkDND / AgentMgr 可配置来源、经验采集、验证与去重 | #47；可与 #48 并行 | OPEN |
+| [#50](https://github.com/ctrlshiftaltdel/AgentOrch/issues/50) | “进行自我完善”触发、计划、派发、执行与验证闭环 | #48、#49 | OPEN |
+| [#51](https://github.com/ctrlshiftaltdel/AgentOrch/issues/51) | 官方 Release 校验、三方比较、冲突分类、备份与回滚 | #47；可与 #48 / #49 并行 | OPEN |
+| [#52](https://github.com/ctrlshiftaltdel/AgentOrch/issues/52) | “更新 AgentOrch”入口、迁移指南与发行包接入 | #51 | OPEN |
+| [#53](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53) | 自我完善 / 更新流程合成回归、端到端演练与趋势报告 | #48–#52 | OPEN |
+
+执行纪律：
+- #47 契约未冻结前，不得开始依赖该契约的完整实现；隔离的只读探测可以先做，但不得形成不可逆设计承诺。
+- #48 与 #49 可并行，但必须使用已冻结的同一契约；#51 可独立于 #48 / #49 并行实现。
+- #50 依赖架构检查与经验管线；#52 依赖安全更新引擎；#53 最终验收依赖所有实现合并。
+- 每个任务都按现有任务状态、路径锁、证据矩阵、独立审查和当前 head 验证执行。Issue 关闭不等于阶段验证完成。
+- 该能力不能覆盖或弱化现有核心协作契约；涉及权限 / 安全边界、锁与状态机、数据迁移、破坏兼容或不可逆行为时，必须保留人工决策门。
