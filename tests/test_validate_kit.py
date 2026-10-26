@@ -795,6 +795,11 @@ class TreeModeTests(unittest.TestCase):
             self.emit_manifest(root)
             (root / 'AGENTS.md').write_text('# locally edited contract\n', encoding='utf-8')
             self.assertEqual(validate.check_release_manifest(root), [])
+            # AC-3 asks for the *whole* validator, not just the manifest check:
+            # a downstream project that edits a core file must still be able to
+            # run validate_kit end to end.
+            errors, _ = validate.validate_kit(root)
+            self.assertEqual(errors, [])
             # The drift tool is still the place that reports the local edit.
             manifest = self.read_manifest(root)
             self.assertTrue(any('sha256 does not match' in e
