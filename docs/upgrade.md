@@ -523,3 +523,144 @@ checked: 47 manifest file(s); missing 0, modified 1, unknown 0, project-profile 
   ```
 
 - **不要这样做**：保留旧根文件副本（validate 会报 legacy）；只改一半路径（validate 链接扫描会逐个指出断链）。
+
+## 13. 迁移七（当前版本新增）：“更新 AgentOrch”安全入口
+
+> 本节是**仓库文档**，不随发行包发布。发行包内的等义操作说明在
+> `templates/self-improvement/README.md`；更新安全的语义权威仍是
+> [update-safety.md](self-improvement/update-safety.md)，实现细节见
+> [update-engine-implementation.md](self-improvement/update-engine-implementation.md)。
+> 本节只说明**怎么触发、怎么判读、怎么回退**，不重写分类或信任规则。
+
+### 13.1 触发与不触发
+
+| 说法 | 是否启动更新 | 说明 |
+| --- | --- | --- |
+| `更新 AgentOrch` / `升级 AgentOrch` | 是 | 路由到更新引擎 |
+| `把项目中的 AgentOrch 更新到最新版` | 是 | 同上；同义表述由 `planning.route_request()` 判定 |
+| `更新一下文档` / `更新依赖` / `更新这个 Issue` | 否 | 普通请求，不碰套件 |
+| `更新 AgentOrch 的文档` / `更新 AgentOrch 版本号` | 先问一次 | 有 `AgentOrch` 指代但对象有歧义，入口返回 `NEEDS_CLARIFICATION`，不默认执行 |
+| `AgentOrch 最新版本是多少？` | 否 | 只回答版本问题 |
+| `进行自我完善` | 否（另一个闭环） | `SELF_IMPROVEMENT` 路由，不进入更新入口 |
+
+入口只做路由、环境识别与载体适配；它不重写 #51 的来源校验、逐文件分类、备份与回滚语义。默认 `PLAN` 只读；`APPLY` 只在隔离分支 / Worktree 准备变更，不提交、不合并。
+
+### 13.2 先识别，再调用
+
+```bash
+python3 -m scripts.update_agentorch.entry --project . \
+  --request "更新 AgentOrch" --mode PLAN
+```
+
+入口按顺序读取并写入报告：
+
+- `edition`：只从 `docs/PROJECT.md` 读取；缺失 / 非法时 `STOPPED_INVALID_EDITION`，不猜测、不联网。
+- 当前版本 / Format：从项目根 `MANIFEST.json` 读取 `format_version` 与 `suite`；没有清单就 `STOPPED_INVALID_BASELINE`。
+- 工作区：Git head / branch / 未提交路径；无 Git 时记录 `is_git_repo=false`，不能声称工作区干净。
+- 已安装基线：清单 SHA-256 与逐文件哈希；随后才获取并校验官方 Release。
+
+本仓库自身没有 `MANIFEST.json`，因此在本仓库执行上面命令会安全失败，实测退出码见第 14 节；这是失败关闭，不是缺陷。
+
+### 13.3 旧 Format 兼容矩阵（实测范围）
+
+自动更新的前提是项目根有**可解析且 schema 受支持**的 `MANIFEST.json`。`MANIFEST.json` 从 Format 1.3 起才随包提供，因此：
+
+| 已安装 Format | 自动更新是否可判定 | 本任务实测 | 真实已发布包 | 说明 |
+| --- | --- | --- | --- | --- |
+| `1.5` | 是 | 合成项目：`APPLIED`，项目自有文件逐字节不变 | `NOT_RUN` | 当前 Format；合成包为 v1.6，tag 与目标清单 Format 一致 |
+| `1.4` | 是 | 合成项目：`APPLIED`，根 `PLAN.md` 保持原样 | `NOT_RUN` | 1.4 已有 `MANIFEST.json`；根计划按项目自有路径处理 |
+| `1.3` | 是（清单存在时） | 合成项目：根 `README.md` 被识别为 `UPSTREAM_REMOVAL`，`STOPPED_CONFLICT` + `HD-09`，文件未删除 | `NOT_RUN` | 1.3 根文件在 1.5 布局中改名 / 迁移；入口不自动删除，需人工决策 |
+| `1.1` / `1.2` | 否 | 无清单 → `STOPPED_INVALID_BASELINE`，零写入、零网络 | `NOT_RUN` | 先按第 6 节手工登记基线，再重跑入口 |
+| 清单损坏 / schema 不支持 | 否 | `STOPPED_INVALID_BASELINE` | `NOT_RUN` | 只读诊断 + 手工迁移（`HD-08`） |
+
+**这张表只声称合成测试覆盖的行为。** 真实 GitHub Release 获取、真实已发布 1.3 / 1.4 / 1.5 包、真实项目的网络与权限均为 `NOT_RUN`；未实测的平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
+
+### 13.4 冲突、删除与重命名
+
+入口（经由 #51 引擎）逐文件分类；以下情况**默认停止并保留项目文件**：
+
+| 情况 | 报告结果 | 默认动作 | 人工决策 |
+| --- | --- | --- | --- |
+| 本地与上游都改（`THREE_WAY_CONFLICT`） | `STOPPED_CONFLICT` | 保留本地字节，零写入 | `HD-10` |
+| 上游删除仍存在的文件（`UPSTREAM_REMOVAL`） | `STOPPED_CONFLICT` | 保留旧文件，不删除 | `HD-09` |
+| 上游重命名（字节相同，`UPSTREAM_RENAME`） | `STOPPED_CONFLICT` | 保留旧路径，不创建新路径 | `HD-09` |
+| 项目自有 / 未知文件（`PROJECT_OWNED` / `UNKNOWN_FILE`） | 可以 `APPLIED` | 只报告，永不覆盖 | 无需（保持原样） |
+| 目标版本不高于已安装版本 | `BLOCKED` | 不降级、不重装 | `HD-16` |
+
+冲突逐文件出现在报告的 `classification.files` 中（含 `baseline_sha256` / `current_sha256` / `target_sha256` 与 `notes`），汇总在 `classification.counts`；没有单独的“冲突列表”字段，分类本身就是证据。
+
+### 13.5 无基线 MANIFEST
+
+没有清单时，入口在**联网之前**停止：
+
+- `baseline.baseline_status = MISSING`；
+- `result = STOPPED_INVALID_BASELINE`；
+- 报告附只读文件清点与手工迁移提示，不读取哈希差异作为覆盖许可；
+- 修复路径见第 6 节（从原发行包取回 `MANIFEST.json`，或在同版本干净 checkout 重建）。
+
+不要为了让入口“能跑”而放一份新版本清单到旧树上：那会把所有上游文件误判为本地修改，分类结果失真。
+
+### 13.6 未提交改动
+
+- `PLAN` 只记录 `workspace.dirty_paths`，不写入、不 stash、不 `checkout --`、不 `clean`。
+- `APPLY` 遇到脏工作区且能创建 Git worktree 时，隔离到 `.worktrees/update-<report_id>` 的独立分支，原工作区保持不动。
+- 无法隔离时 `STOPPED_DIRTY_WORKTREE` + `HD-12`，不冒险在脏工作区继续。
+- 无 Git 项目没有“未提交”概念；引擎仍用备份 + 回滚保护，但无法证明工作区干净，`head_sha` 为 `null`。
+
+### 13.7 网络不可用
+
+官方 Release 获取失败（无网络、DNS、超时、限流、资产缺失）时：
+
+- 报告 `result = BLOCKED`；
+- `target.verification.status = NOT_RUN`，所有未执行的检查逐条标 `NOT_RUN`；
+- 项目零写入，已安装版本保持不变；
+- 不得把 `NOT_RUN` 折算成“已检查通过”，也不得回退到本地 zip / 任意 URL / fork。
+
+真实网络路径本任务 `NOT_RUN`；合成测试只证明失败关闭行为。
+
+### 13.8 回退与回滚失败
+
+| 阶段 | 成功的证据 | 回退方式 |
+| --- | --- | --- |
+| `PLAN` | `PLANNED`，项目零写入 | 无需回退 |
+| `APPLY` 成功 | `APPLIED`，备份 `verified=true`，写后哈希通过 | 从报告 `backup.location`（项目外临时目录）恢复；或按 Git Diff 回退该分支 / Worktree |
+| 写入失败 | `ROLLED_BACK`，恢复后逐路径 presence / sha256 校验通过 | 已自动恢复；人工复核备份与报告 |
+| 回滚后校验失败 | `BLOCKED`，`rollback.result=FAILED` | `HD-11`：从备份人工恢复 / 保留现场排查 / 重新安装；**不自动重试** |
+
+回滚只用备份与逐路径哈希，不做 `git reset --hard`，也不覆盖项目自有文件。备份位于项目外系统临时目录，重启后可能被清理；需要长期保留时，在审查完成前把 `backup.location` 复制到项目外可持久位置。真实回滚失败场景本任务 `NOT_RUN`（合成测试覆盖）。
+
+### 13.9 edition 结果形态
+
+- `local`：入口返回任务包 + 分支 / Worktree 交付，`carrier=local_task_database`，`writes=[]`；入口**不写**任务库。用 `scripts/orchestrator.py task add/ready/dispatch` 登记后按 G1–G6 审查。
+- `github`：入口返回 Issue 正文 + Draft PR payload，`carrier=issue_and_draft_pr`，`writes=[]`；入口**不调用** `gh`。创建 Issue / Draft PR 并回链，走 `PR_OPEN` → `REVIEW_READY` → G1–G6。
+- 两者共用同一份 gate 记录（`requires_review=true`、`self_approval_allowed=false`、`auto_merge=false`、冲突与 `HD-*` 列表、报告契约校验结果）；差异只在载体，不在门禁。`local` 不得假装具备 GitHub 自动化，`github` 不得写本地任务库。
+
+### 13.10 自检与退出门
+
+```bash
+python3 -m scripts.update_agentorch.entry --help
+python3 -m scripts.update_agentorch.entry --project . \
+  --request "更新 AgentOrch" --mode PLAN
+python3 scripts/validate_kit.py
+python3 -m unittest discover -s tests
+python3 scripts/build_release.py
+```
+
+前两条只证明入口可导入、路由与失败关闭；真正升级命令的 `APPLY` 必须在有合法基线的项目上由 Master 派发的任务执行，并保留报告、命令、退出码与 head SHA。`build_release.py` 的包内自检覆盖入口与模板（自检 i / j），但不访问网络。
+
+## 14. 本轮“更新 AgentOrch”入口实测记录
+
+环境：Linux、Python 3.13、`github` 底座、分支 `task/52-update-entry-release`。合成项目与合成 Release 在系统临时目录中构造，未访问真实 Release、未使用凭据、未改动本仓库 `.orchestration/`。
+
+| # | 场景 | 命令 / 测试 | 实测退出码 | 结果 |
+| --- | --- | --- | --- | --- |
+| 1 | 入口帮助可导入 | `python3 -m scripts.update_agentorch.entry --help` | `0` | 打印用法 |
+| 2 | 本仓库无基线，失败关闭 | `python3 -m scripts.update_agentorch.entry --project . --request "更新 AgentOrch" --mode PLAN` | `2` | `STOPPED_INVALID_BASELINE`，零写入、零网络 |
+| 3 | 触发语 / 非触发 / 歧义路由 | `python3 -m unittest tests.test_update_entry` | `0` | 全部通过 |
+| 4 | 1.5 合成项目升级 | `python3 -m unittest tests.update_agentorch.test_entry_release` | `0` | `APPLIED`，项目自有文件逐字节不变 |
+| 5 | 1.4 合成项目升级 | 同上 | `0` | `APPLIED`，根 `PLAN.md` 保持原样 |
+| 6 | 1.3 风格根 `README.md` | 同上 | `0` | `STOPPED_CONFLICT`，文件未删除，`HD-09` |
+| 7 | 冲突 / 无基线 / 脏工作区 / 网络失败 | 同上 | `0` | 分别 `STOPPED_CONFLICT` / `STOPPED_INVALID_BASELINE` / `STOPPED_DIRTY_WORKTREE` / `BLOCKED` |
+| 8 | 真实 GitHub Release 获取 | — | `NOT_RUN` | 无网络凭据与真实 Release；不作为已验证 |
+
+`NOT_RUN` / `UNKNOWN` 项不得当作已支持；本节的通过只覆盖合成测试与失败关闭行为。

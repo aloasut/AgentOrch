@@ -52,6 +52,7 @@ jobs:
           scripts/architecture/check.py scripts/architecture/contract.py
           scripts/architecture/report.py scripts/architecture/rules.py
           scripts/architecture/adapters/python_ast.py scripts/architecture/adapters/rust.py
+          scripts/update_agentorch/*.py scripts/self_improvement/*.py
 
       # Release packaging self-check. No `continue-on-error`, no `|| true`: a
       # packaging regression (missing file, broken link inside the package,

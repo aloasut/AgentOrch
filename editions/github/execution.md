@@ -57,6 +57,14 @@
 - 按 Issue 的证据矩阵逐条取证；未运行项标 `NOT_RUN`，不得用旧 head 的 CI 或本机结果冒充当前 head。
 - 高风险改动会在规划阶段进入 `NEEDS_HUMAN_DECISION`，不会被派发；遇到范围外要求或产品歧义时停止并在 Issue 评论报告。
 
+## 更新 AgentOrch 生成的交付（github）
+
+“更新 AgentOrch”入口只准备 Issue / Draft PR payload，不调用 `gh`、不写任务库、不批准任何变更；由 Master 创建 Issue 与 Draft PR 后，它和普通任务完全一样。
+
+- 只按 Issue 正文、`locked_paths` 与引擎报告执行；入口的 `PLAN` / `PREPARED` 不是验收通过，也不代表可以 `APPLY`。
+- 不覆盖 Issue 允许路径之外的路径；冲突、上游删除 / 重命名、无基线、脏工作区按报告停止并交人工决策。
+- 按证据矩阵逐条取证；未运行项标 `NOT_RUN`，不得用旧 head 的 CI 或本机结果冒充当前 head。
+
 ## 交回
 
 实现完成且 CI 在当前 head 全绿后，把 Draft PR 转为 Ready for review，并在 PR 评论交回：

@@ -5,8 +5,8 @@
 > 威胁与剩余风险见 [`threat-model.md`](threat-model.md)。本文件只说明 #51 实际实现了什么、
 > 如何运行、有哪些限制与未验证项，不新增分类、不改写冻结语义。
 >
-> 状态：核心引擎与合成测试已实现；发行包 `REQUIRED` / `build_release.py` / CI / README 计数与
-> 自然语言入口由 **#52** 接入；真实 GitHub Release 获取为 **`NOT_RUN`**。
+> 状态：核心引擎与合成测试已实现；自然语言入口、发行包 `REQUIRED` / `build_release.py` / CI /
+> README 计数与包内测试由 **#52** 接入；真实 GitHub Release 获取为 **`NOT_RUN`**。
 
 ## 1. 能力与范围
 
@@ -267,11 +267,12 @@ T-01 / T-02 / T-03 / T-09 / T-10 / T-11 属 #49，T-12 / T-13 属 #48，本任�
 - 项目自有 denylist 是固定列表 / 前缀；未覆盖的下游扩展会成为 `UNKNOWN_FILE`（保留并报告），
   不会被覆盖。
 
-**未接入：**
+**已接入（#52）：**
 
-- 发行包 `REQUIRED`、`build_release.py` 自检、CI、`docs/README.md` 计数与自然语言入口未接入
-  （#52）；因此当前发行包不包含本引擎，也没有 `update_agentorch` 的 CI job。
-- 项目自己的验证命令未由引擎执行：`post_apply_checks` 对应项为 `NOT_RUN`。
+- 发行包 `REQUIRED`、`build_release.py` 自检（入口可导入、注册表示例可校验）、CI 与
+  `docs/README.md` 计数已覆盖 `scripts/update_agentorch/`、`scripts/self_improvement/`、
+  `templates/self-improvement/` 与随包测试；自然语言入口为 `scripts/update_agentorch/entry.py`。
+- 项目自己的验证命令仍不由引擎执行：`post_apply_checks` 对应项为 `NOT_RUN`。
 - T-07 / T-08 / T-15 的完整故障演练归 #53；本任务只覆盖合成负向场景。
 
 ## 11. 与 #52 / #53 的接口

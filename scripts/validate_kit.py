@@ -28,16 +28,48 @@ REQUIRED = [
     'templates/project-charter.md', 'templates/review-checklist.md',
     'templates/runtime-capability.md', 'templates/task-packet.md',
     'templates/gitignore.snippet',
+    'templates/self-improvement/README.md',
+    'templates/self-improvement/closure-report.md',
+    'templates/self-improvement/proposal.md',
+    'templates/self-improvement/sources.example.json',
+    'templates/self-improvement/task-packet.md',
     'scripts/architecture/__init__.py', 'scripts/architecture/check.py',
     'scripts/architecture/contract.py', 'scripts/architecture/report.py',
     'scripts/architecture/rules.py', 'scripts/architecture/adapters/__init__.py',
     'scripts/architecture/adapters/python_ast.py', 'scripts/architecture/adapters/rust.py',
     'scripts/check_drift.py', 'scripts/orchestrator.py', 'scripts/report_metrics.py',
     'scripts/run_delivery_scenarios.py', 'scripts/validate_kit.py',
+    'scripts/self_improvement/__init__.py', 'scripts/self_improvement/cli.py',
+    'scripts/self_improvement/collect.py', 'scripts/self_improvement/lessons.py',
+    'scripts/self_improvement/orchestration.py', 'scripts/self_improvement/pipeline.py',
+    'scripts/self_improvement/planning.py', 'scripts/self_improvement/sources.py',
+    'scripts/self_improvement/untrusted.py',
+    'scripts/update_agentorch/__init__.py', 'scripts/update_agentorch/__main__.py',
+    'scripts/update_agentorch/classify.py', 'scripts/update_agentorch/cli.py',
+    'scripts/update_agentorch/engine.py', 'scripts/update_agentorch/entry.py',
+    'scripts/update_agentorch/package.py', 'scripts/update_agentorch/report.py',
+    'scripts/update_agentorch/sources.py', 'scripts/update_agentorch/versions.py',
+    'scripts/update_agentorch/workspace.py',
     'tests/architecture/__init__.py', 'tests/architecture/test_architecture_checker.py',
+    'tests/self_improvement/__init__.py', 'tests/self_improvement/loop_support.py',
+    'tests/self_improvement/support.py',
+    'tests/self_improvement/test_collection.py',
+    'tests/self_improvement/test_lesson_lifecycle.py',
+    'tests/self_improvement/test_orchestration.py',
+    'tests/self_improvement/test_pipeline.py',
+    'tests/self_improvement/test_planning.py',
+    'tests/self_improvement/test_registry.py',
+    'tests/self_improvement/test_routing.py',
     'tests/test_orchestrator.py', 'tests/test_release_drift.py',
     'tests/test_report_metrics.py', 'tests/test_run_delivery_scenarios.py',
-    'tests/test_validate_kit.py',
+    'tests/test_update_entry.py', 'tests/test_validate_kit.py',
+    'tests/update_agentorch/__init__.py', 'tests/update_agentorch/support.py',
+    'tests/update_agentorch/test_classification.py',
+    'tests/update_agentorch/test_dependencies.py',
+    'tests/update_agentorch/test_engine.py',
+    'tests/update_agentorch/test_entry_release.py',
+    'tests/update_agentorch/test_package.py',
+    'tests/update_agentorch/test_versions_and_sources.py',
 ]
 
 # --- Repository-only required documents --------------------------------------
@@ -47,6 +79,11 @@ REQUIRED = [
 # self-check red. They are still required artifacts — a missing file or a
 # deleted section fails validate_kit on a checkout — and the check is skipped
 # when `docs/` is absent, which is exactly the case inside a release package.
+#
+# `tests/update_agentorch/test_report.py` is repository-only for the same
+# reason: it reads the frozen fixtures under `docs/contracts/fixtures/`, which
+# never ship. The package still tests the engine and the entry through the
+# shipped `tests/update_agentorch/` modules listed in REQUIRED above.
 REQUIRED_DOCS = {
     'docs/README.md': (),
     'docs/PROJECT.md': (),

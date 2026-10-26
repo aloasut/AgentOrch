@@ -72,12 +72,22 @@ gh pr list --state open --limit 100
 
 ### 自我完善的触发（只路由，不定义流程）
 
-用户以明确执行意图说出“进行自我完善”或其同义表述（例如“根据其他 AgentOrch 项目的经验改进本项目”“总结近期开发教训并推进改进”）时，先按本部分第一步、第二步恢复状态，再加载 `docs/self-improvement/self-improvement-loop.md` 并按其闭环执行；触发语与非触发的完整边界见 `docs/self-improvement/entrypoints-and-decisions.md` §1。
+用户以明确执行意图说出“进行自我完善”或其同义表述（例如“根据其他 AgentOrch 项目的经验改进本项目”“总结近期开发教训并推进改进”）时，先按本部分第一步、第二步恢复状态，再加载 `docs/self-improvement/self-improvement-loop.md`（仓库检出中读取；发行包内读取 `templates/self-improvement/README.md` 的操作说明）并按其闭环执行；触发语与非触发的完整边界见 `docs/self-improvement/entrypoints-and-decisions.md` §1（仓库检出中读取）。
 
 - 普通提问（如“自我完善机制是什么”“更新一下文档”）只回答，不启动闭环；`更新 AgentOrch` 属于更新引擎，不进入该闭环。
 - 本节只做路由引用：任务状态机、路径 / 资源锁、证据矩阵与合并门仍只由第二部分与 4.1 节定义，自我完善**不新增、不改写**任何状态、锁或门。
 - 触发不构成对任何具体改动的批准；权限 / 安全 / 锁 / 状态机 / 迁移 / 外部依赖 / 隐私 / 兼容 / 不可逆事项仍按第 5 节与 `docs/self-improvement/entrypoints-and-decisions.md` §5 的 `HD-*` 进入 `NEEDS_HUMAN_DECISION`。
 - 载体操作由 `editions/<edition>/` 的提示词负责：`local` 只写任务库，`github` 只写 Issue / PR，不双写。
+
+### 更新 AgentOrch 的触发（只路由，不定义流程）
+
+用户以明确执行意图说出“更新 AgentOrch”“升级 AgentOrch”或“把项目中的 AgentOrch 更新到最新版”时，先按本部分第一步、第二步恢复状态（确认 edition、当前版本 / Format、工作区状态与已安装基线），再运行 `scripts/update_agentorch/entry.py`（`python -m scripts.update_agentorch.entry --project <项目根> --request "<用户原话>"`），由它调用 #51 安全更新引擎。
+
+- **非触发**：“更新一下文档”“更新依赖”“更新这个 Issue”以及只询问版本号等普通请求不启动套件更新。措辞有歧义时先问一次“是更新套件本身还是更新项目内容”，不得默认执行。
+- 入口只做路由、环境识别与载体适配：不重写 #51 的来源校验、逐文件分类、备份 / 回滚语义；默认 `PLAN`，`APPLY` 只在隔离分支 / Worktree 中准备变更，不提交、不合并。
+- 路由规则复用 `scripts/self_improvement/planning.py` 的 `route_request()`；`更新 AgentOrch` 不进入自我完善闭环，自我完善触发也不进入本入口。
+- `local` 只准备任务包 / 分支交付，任务库写入仍由 `scripts/orchestrator.py` 完成；`github` 只准备 Issue / Draft PR，入口不调用 `gh`。两者都不双写，也不假装本地底座支持 GitHub 自动化。
+- 更新安全语义的唯一权威是 `docs/self-improvement/update-safety.md`（仓库检出中读取）；发行包内以 `templates/self-improvement/README.md` 与引擎报告为准。冲突、上游删除 / 重命名、无基线、未提交改动默认停止并交人工决策。
 
 ## 2. 引导纪律
 

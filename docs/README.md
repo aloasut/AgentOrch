@@ -130,7 +130,7 @@
 | "把 config show 和 task list 的完整输出给我看" | `uv run python scripts/orchestrator.py config show`、`task list` | 退出码 0；`edition = local`；任务库为空 |
 | "登记 ID 为 TASK-0001 的示例任务…" | `uv run python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"` | 输出 `TASK-0001: created in PLANNED` |
 | "置为 READY 再 DISPATCH" | `uv run python scripts/orchestrator.py task ready TASK-0001`、`task dispatch TASK-0001` | 退出码 0；`DISPATCHED; locks acquired for src`；任务包生成并展示 |
-| "运行结构自检并告诉我退出码" | `uv run python scripts/validate_kit.py` | 退出码 0；`Kit validation passed (45 required files checked; …)` |
+| "运行结构自检并告诉我退出码" | `uv run python scripts/validate_kit.py` | 退出码 0；`Kit validation passed (89 required files checked; …)` |
 | "把示例任务置为 CANCELED" | `uv run python scripts/orchestrator.py task status TASK-0001 CANCELED --note "冒烟结束"` | 退出码 0；路径锁释放 |
 
 ### 3.1 放入套件
@@ -173,17 +173,21 @@ uv run python -m unittest discover -s tests
 │   ├── local/                         # master.md（Master 手册）+ execution.md（执行提示词）
 │   └── github/                        # 同上 + issue/pr/active-task-registry 三个载体模板
 ├── templates/                         # 全部小写、可复制模板（任务包、设计契约、审计、清单…）
+│   └── self-improvement/              # 提案 / 任务包 / 闭环报告 / 注册表示例 / 包内操作说明
 ├── docs/                              # 项目自有文档（不随包发布；人打开的用大写）
 │   ├── README.md                      # 本文件（GitHub 仓库首页仍会渲染它）
 │   ├── PROJECT.md                     # 项目配置：edition、允许/禁改路径、验证命令
 │   ├── PLAN.md                        # 设计目标权威（init 从 templates/plan.md 生成）
 │   ├── implementation-plan.md         # 阶段计划（状态唯一落点）
 │   ├── charter.md / upgrade.md / drift.md / metrics.md
+│   ├── self-improvement/              # 自我完善与更新安全的仓库文档（不随包）
 │   ├── design/resource-locks.md       # 冻结契约
 │   ├── testing/delivery-regression-scenarios.md
 │   └── images/                        # 设计配图（按需查看、图文双写）
-├── scripts/                           # 全小写：orchestrator / validate_kit / check_drift / report_metrics / run_delivery_scenarios
-├── tests/                             # 随包自检用单元测试
+├── scripts/                           # orchestrator / validate_kit / check_drift / report_metrics / run_delivery_scenarios
+│   ├── self_improvement/              # 来源注册表、采集、Lesson、规划与闭环
+│   └── update_agentorch/              # 安全更新引擎与「更新 AgentOrch」入口
+├── tests/                             # 随包自检用单元测试（docs/ 专属用例保留为 repository-only）
 └── release/                           # 构建产物（gitignore）与发布标准 README.md
 ```
 
@@ -384,12 +388,12 @@ uv run python scripts/orchestrator.py task show TASK-0002 # 本任务的资源�
 uv run python scripts/validate_kit.py
 uv run python scripts/validate_kit.py --project-ready
 uv run python -m unittest discover -s tests
-uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/report_metrics.py scripts/check_drift.py scripts/build_release.py scripts/run_delivery_scenarios.py
+uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/report_metrics.py scripts/check_drift.py scripts/build_release.py scripts/run_delivery_scenarios.py scripts/update_agentorch/*.py scripts/self_improvement/*.py
 ```
 
 `validate_kit.py` 检查：
 
-- **45 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **89 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
 - **合约模板是否仍问对问题**：`templates/design.md`、`templates/milestone-audit.md`、`templates/contract-decision-log.md` 的必备章节缺一即失败，模板内的相对链接断链也失败（章节缺失会被静默当成“不需要回答”，因此单列一项检查）。
 - **能力登记与指标模板是否仍问对问题**：`templates/runtime-capability.md` 的身份 / 能力矩阵 / 扩展边界 / `UNKNOWN` 与重测 / 权限范围 / 证据与限制，以及 `templates/metrics.md` 的阅读规则 / 公共定义 / 指标定义 / 缺失与覆盖率 / 报告契约 / 金样本 / 限制，缺章节同样失败。
 - **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析、SHA-256 与大小；仓库根目录没有该文件，检查自动跳过，不误报。
@@ -401,7 +405,7 @@ uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scri
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `docs/PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `docs/PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）；当前 241 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）；当前 660 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -411,9 +415,9 @@ uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scri
 - **环境**：`ubuntu-latest`，Python 版本矩阵 `3.12` / `3.13`（两个版本都跑，任一失败即整体失败）。
 - **步骤**：按顺序执行且不跳过失败步骤 —— `uv run python scripts/validate_kit.py`、`uv run python -m unittest discover -s tests`、`uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py`、`uv run python scripts/build_release.py`。
 - **打包自检**：最后一步是发布构建本身。它失败即 job 失败 —— 没有 `continue-on-error`、没有 `|| true`、没有跳过开关，因此"少打包一个文件、包里断链、清单哈希对不上、包内出现禁止路径"这类回归会在 PR 上直接变红，而不是等 Master 手工构建才发现。
-  - **两个版本都跑的原因**：自检会在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`（a–f 中的 b、d），即真正检验"这一档 Python 拿到的包是否可用"；两档都证明一次，成本是本机数秒级的重复，换来不依赖版本判断的一致性（无 `if:` 条件，也就不会出现"某档静默跳过打包步骤"）。
+  - **两个版本都跑的原因**：自检会在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`（a–j 中的 b、d），即真正检验"这一档 Python 拿到的包是否可用"；两档都证明一次，成本是本机数秒级的重复，换来不依赖版本判断的一致性（无 `if:` 条件，也就不会出现"某档静默跳过打包步骤"）。
   - **产物处理**：zip 写到 runner 的 `release/`（`.gitignore` 已忽略 `release/*.zip`），不提交、不上传 artifact、不使用任何密钥。
-  - **覆盖边界**：CI 只证明"包能构建且内置自检 a–f 通过"，**不证明发布本身** —— 不校验发布命名日期、不生成 GitHub Release、不核对发布记录。发布仍需按 `release/README.md` 第 4 节由 Master 执行并留证。
+  - **覆盖边界**：CI 只证明"包能构建且内置自检 a–j 通过"，**不证明发布本身** —— 不校验发布命名日期、不生成 GitHub Release、不核对发布记录。发布仍需按 `release/README.md` 第 4 节由 Master 执行并留证。
 - **边界**：`permissions: contents: read`，不使用 `pull_request_target`，不引入第三方依赖、密钥或 `pip install`。
 
 **证据地位**：`github` 底座下，G4 以**当前 head SHA** 上的 CI 运行全绿为准 —— 本地四条命令（含打包自检）仍是可复现的补充证据，不能替代 CI；反过来，CI 绿灯也只覆盖这四条命令，不能代替 G1 的逐条验收，也不能代替对发布标准的逐条审查。head 变化后旧 head 的绿灯失效，必须在新 head 上重新运行。
@@ -467,7 +471,7 @@ uv run python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-
 
 - **构建**：`uv run python scripts/build_release.py` 产出 `release/agentorch-{YYYYMMDD}.zip`；包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`。
 - **机器可读清单**：`MANIFEST.json` 记录 `schema_version`（清单格式版本）、`suite`、`format_version`（套件格式版本）与 `files[]`；每个条目含 `path`、`category`、`sha256`、`size`。清单**不含时间戳**、条目按路径排序，分类规则只有一处实现（`scripts/check_drift.py`，构建脚本导入它），因此同一工作树两次构建得到完全相同的清单与 zip SHA256。
-- **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–f 自检，失败会删除未通过自检的产物，没有跳过开关。自检 a 现在校验「包内文件集合 == `REQUIRED` + `MANIFEST.json`」、清单中每条路径可解析、SHA-256 与大小和实际文件一致、分类合法且清单路径与 `REQUIRED` 完全一致。
+- **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–j 自检，失败会删除未通过自检的产物，没有跳过开关。自检 a 现在校验「包内文件集合 == `REQUIRED` + `MANIFEST.json`」、清单中每条路径可解析、SHA-256 与大小和实际文件一致、分类合法且清单路径与 `REQUIRED` 完全一致。
 - **可复现**：归档时间戳固定、文本文件按 LF 归一后打包，清单哈希同样按归一后的字节计算；同一仓库状态重建应得到同一 SHA256，Windows 上 `core.autocrlf=true` 的检出也不会改变结果。
 
 命名、包内容、自检清单、发布流程与发布清单以 `release/README.md` 为准；该文件与本节一致（包内容 == `REQUIRED` + `MANIFEST.json`，自检 a 同时校验文件集合与清单条目）。该自检现由 CI 在每个 PR 上执行（见 7.1 节），因此打包回归不再依赖手工构建才发现。
@@ -523,7 +527,7 @@ uv run python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON�
 
 上面每条版本变更对应的**旧项目迁移动作**见第 10 节：`edition` 旧格式行、旧 `PLAN.md` 台账、资源锁 TTL、旧包无 `MANIFEST.json`；1.4 新增第 10.6 节（根 `PLAN.md` 迁入 `docs/PLAN.md` 与图片规范）。
 
-## 10. 从旧版升级（1.1 → 1.4）
+## 10. 从旧版升级（1.1 → 1.5，含安全更新入口）
 
 已经装了 1.1 / 1.2 的项目升到 1.3 时，有四条会“先撞错、再猜原因”。下面每条按**变了什么 / 怎么改 / 怎么自检**三段写，命令可直接复制；四条互相独立，命中几条改几条。完整分步清单、报错原文、退出码与逐条回退见仓库文档 `docs/upgrade.md`（`docs/` 不随发行包发布，因此本节不依赖它：包内用户照本节即可完成四条迁移）。
 
@@ -665,6 +669,20 @@ uv run python scripts/check_drift.py .               # 0：已登记基线
 
 - **图片规则**（写入 [AGENTS.md](../AGENTS.md) 第 8 条，本节只提醒）：图放 `docs/images/`、正文相对引用；**Agent 只在正文明确指向某图时才打开它，禁止批量读取 `docs/images/`**；**图文双写**——设计意图必须文字自足，每个图引用都要有相邻文字说明；`docs/images/` 随公开仓库公开、不随发行包发布，截图先脱敏。
 - **不要这样做**：把根 `PLAN.md` 重命名成别的名字留在根目录；或迁移后仍保留一份根副本。
+
+### 10.7 “更新 AgentOrch”安全入口（当前 Format）
+
+已安装 1.3 / 1.4 / 1.5（有 `MANIFEST.json`）的项目可以用一条入口命令准备升级，不必手工比对上游文件：
+
+```bash
+uv run python -m scripts.update_agentorch.entry --project . \
+  --request "更新 AgentOrch" --mode PLAN
+```
+
+- 入口先识别 `edition`、当前 Format / 版本、工作区状态与已安装基线，再调用安全更新引擎；默认 `PLAN` 只读，`APPLY` 只在隔离分支 / Worktree 准备变更，不提交、不合并。
+- `local` 只返回任务包 + 分支交付，不写任务库；`github` 只返回 Issue / Draft PR payload，不调用 `gh`。两者门禁相同。
+- 冲突、上游删除 / 重命名、无基线、未提交改动、网络不可用都默认停止并报告；1.3 的根文件改名按 `HD-09` 交人工决策，不自动删除。
+- 1.1 / 1.2 没有 `MANIFEST.json`，先按 10.4 登记基线；不支持的情况标 `NOT_RUN` / `UNKNOWN`。完整矩阵、回退与未实测范围见仓库文档 `docs/upgrade.md` 第 13 节（`docs/` 不随包发布）。
 
 ## 11. 设计冻结与阶段收口
 
