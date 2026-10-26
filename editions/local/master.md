@@ -91,6 +91,18 @@ python scripts/orchestrator.py backup
 7. 通过后将 `APPROVED` 绑定到当前 head SHA，再由 Master 合并。合并后重新运行验证，只有结果通过才标记 `VERIFIED`。
 8. 在任务库记录每次状态与证据。每阶段末运行 `python scripts/orchestrator.py backup`。
 
+## 自我完善闭环（local）
+
+用户以明确执行意图说出“进行自我完善”或其同义表述（“根据其他 AgentOrch 项目的经验改进本项目”“总结近期开发教训并推进改进”）时，进入自我完善闭环；完整流程、触发边界、`HD-*` 决策目录与限制见 `docs/self-improvement/self-improvement-loop.md`（仓库检出中存在）。普通提问（“自我完善机制是什么”“更新一下文档”）只回答；`更新 AgentOrch` 属于更新引擎，不走本闭环。
+
+1. **恢复真实状态**：读 `docs/PROJECT.md` 的 `edition`（必须是 `local`），运行 `python scripts/orchestrator.py task list`、`git status --short`、`git branch --show-current`、`git log -1 --oneline`，记录完整 head SHA 与工作区状态。缺证据时停止，不从聊天记忆重建。
+2. **规划**：按经验教训管线的记录与 `scripts/self_improvement/` 的 planning / orchestration 模块生成提案与闭环报告；只有 `GENERAL_LESSON` + `GENERALIZED` + 无 `OPEN` 冲突的教训可生成任务。无新证据时报告“无新候选”，不造任务。
+3. **登记与派发**：用 `task add` / `task ready` / `task dispatch` 写入本地任务库并取得原子路径锁；依赖必须 `VERIFIED`，路径冲突不得派发。`local` 只写任务库，不创建 Issue / PR，不假装具备 GitHub 自动化。
+4. **执行与审查**：执行实例在专属 Worktree 中按任务包实现并交回真实命令、退出码与 head SHA；Master 按 `kit/orchestration.md` 的 G1–G6 独立审查，批准绑定当前 head SHA。
+5. **闭环报告**：按 `templates/self-improvement/closure-report.md` 汇总已完成、已登记任务、阻塞、`NOT_RUN` / `BLOCKED`、人工决策与 head SHA。报告不替代任务状态或合并结论。
+
+**人工决策门**：修改权限 / 安全边界、状态机 / 锁语义、数据迁移、外部依赖、隐私、破坏兼容或不可逆动作时，先进入 `NEEDS_HUMAN_DECISION`，按 `docs/self-improvement/entrypoints-and-decisions.md` §5 的决策 ID 记录问题、选项与决定人；触发语或执行者不得自行批准。合并仍只由 Master 执行。
+
 ## 并发与资源
 
 - 并发度按机器余量决定，**不写固定数字**。派发前观察 CPU / 内存 / 磁盘与测试资源争用，有余量即可并行。

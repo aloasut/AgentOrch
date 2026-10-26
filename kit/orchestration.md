@@ -70,6 +70,15 @@ gh pr list --state open --limit 100
 
 共享提示词固定为 `templates/project-charter.md` 与 `templates/review-checklist.md`；其余启动与 Master 提示词一律从 `editions/<edition>/` 读取，不要跨底座加载。
 
+### 自我完善的触发（只路由，不定义流程）
+
+用户以明确执行意图说出“进行自我完善”或其同义表述（例如“根据其他 AgentOrch 项目的经验改进本项目”“总结近期开发教训并推进改进”）时，先按本部分第一步、第二步恢复状态，再加载 `docs/self-improvement/self-improvement-loop.md` 并按其闭环执行；触发语与非触发的完整边界见 `docs/self-improvement/entrypoints-and-decisions.md` §1。
+
+- 普通提问（如“自我完善机制是什么”“更新一下文档”）只回答，不启动闭环；`更新 AgentOrch` 属于更新引擎，不进入该闭环。
+- 本节只做路由引用：任务状态机、路径 / 资源锁、证据矩阵与合并门仍只由第二部分与 4.1 节定义，自我完善**不新增、不改写**任何状态、锁或门。
+- 触发不构成对任何具体改动的批准；权限 / 安全 / 锁 / 状态机 / 迁移 / 外部依赖 / 隐私 / 兼容 / 不可逆事项仍按第 5 节与 `docs/self-improvement/entrypoints-and-decisions.md` §5 的 `HD-*` 进入 `NEEDS_HUMAN_DECISION`。
+- 载体操作由 `editions/<edition>/` 的提示词负责：`local` 只写任务库，`github` 只写 Issue / PR，不双写。
+
 ## 2. 引导纪律
 
 - 引导产出的是“状态与路由”汇报，它不替代 Master 的任务汇报模板（结论、用户可感知变化、验收结果、风险与下一步）。
