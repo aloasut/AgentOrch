@@ -2302,12 +2302,20 @@ def _git(root, *args):
         ['git', '-c', 'user.email=scenario@example.invalid',
          '-c', 'user.name=Scenario', *args],
         cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        encoding='utf-8', errors='replace',
         env={**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_TERMINAL_PROMPT': '0'})
     return proc
 
 
 def _git_init(root):
     _git(root, 'init', '-q')
+    # Pin line endings in the scenario repository itself, not just on the
+    # commands above: the update engine later runs `git worktree add` in this
+    # repository, so a runner-wide `core.autocrlf=true` would otherwise check
+    # the isolated worktree out with CRLF and make the byte comparison against
+    # the LF payload depend on the host git configuration.
+    _git(root, 'config', 'core.autocrlf', 'false')
+    _git(root, 'config', 'core.eol', 'lf')
     _git(root, 'add', '-A')
     _git(root, 'commit', '-qm', 'synthetic baseline')
     return _git(root, 'rev-parse', 'HEAD').stdout.strip()

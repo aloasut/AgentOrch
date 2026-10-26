@@ -38,7 +38,7 @@
 - a. 包内容文件集合 == `REQUIRED` + `MANIFEST.json`（数量与名称一致）；解压后 `MANIFEST.json` 必须能解析每条 `path`、`sha256` 与 `size` 与实际文件一致、`category` 只用合法分类，且清单列出的路径集合与 `REQUIRED` 完全一致。
 - b. 解压到临时目录后，`scripts/validate_kit.py` 退出码为 0。
 - c. 解压目录内 `scripts/validate_kit.py --project-ready` **预期失败**（退出码 1 且输出含 `FILL_IN`）。这是正确行为而非缺陷：发布的是待填模板；若它"通过"了反而要报错。
-- d. 解压目录内 `uv run python -m unittest discover -s tests` 退出码为 0。
+- d. 解压目录内用构建脚本所在的解释器（`sys.executable`，不是裸 `python`）执行 `python -m unittest discover -s tests`，退出码为 0。
 - e. 解压目录内 `scripts/orchestrator.py init` 与 `scripts/orchestrator.py task list` 冒烟退出码为 0（`init` 会在临时目录创建 `.orchestration/`，属预期）。
 - f. 非必要信息扫描零命中：对包内每个文本文件扫描个人路径与用户名、本仓库任务 ID、本仓库专有文档名与凭据痕迹；并断言包内不存在 `.orchestration/`、`release/`、`scripts/build_release.py`、`docs/` 等结构残留。命中即失败并打印文件与行号。凭据痕迹分两类：`ghp_`、`github_pat_`、`-----BEGIN`、`AKIA` 等精确子串；以及用精确形状正则匹配的 OpenAI 风格密钥——词边界 + `sk-` + 至少 16 位密钥字符（**不使用裸 `sk-` 子串**，否则会误命中 `task-id`、`risk-based`、`subtask-level` 等普通词，误拦正常发布）。此外，断言包内文本文件不含 CRLF（换行统一为 LF），保证构建对检出行尾不敏感；命中即失败并打印文件。
   - 扫描模式分层：**通用模式内置在脚本**（个人主目录、凭据形状等，任何克隆都适用）；**机器 / 本仓库相关模式放在 `.local/release-scan.json`**（`{"forbidden_patterns": [...]}`，逐条按精确子串匹配）。该文件缺失时跳过本地规则并打印 `extra scan patterns: none`；该文件永不入库、永不打包。
@@ -53,11 +53,19 @@
 
 ### 3.1 CI 与本标准的覆盖分工
 
-`.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，于 `ubuntu-latest` 的两个 Python 版本（3.12 / 3.13）上执行同一套自检：`uv run python scripts/build_release.py`。该步骤**失败即 job 失败**，没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
+`.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，用同一份步骤定义在三个 GitHub-hosted runner 上执行同一套自检：
 
-- **两档都跑的理由**：自检 b、d 在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`，即真正检验"该 Python 版本拿到的包是否可用"；两档各证明一次，成本是本机数秒级重复，换来不设 `if:` 条件、不会出现某档静默跳过打包步骤。
-- **CI 证明什么**：包能构建，且内置自检 a–l 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档 / 包内合成回归与指标口径"这类回归。
-- **CI 不证明什么**：**不证明发布本身**。CI 不校验 `{YYYYMMDD}` 命名、不生成 GitHub Release、不写发布记录，也不替你判断"这一版是否该发"。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
+| job | runner | Python |
+| --- | --- | --- |
+| `checks` | `ubuntu-latest` | 3.12 / 3.13 |
+| `checks-macos` | `macos-latest` | 3.13 |
+| `checks-windows` | `windows-latest` | 3.13 |
+
+- **包内自检在三个平台都真实执行**：`uv run python scripts/build_release.py` 在每个 job 上各跑一次，脚本用 `sys.executable`（不是裸 `python`）在解压目录里执行 `validate_kit.py` 与 `unittest discover -s tests`（自检 b、d），所以"这一平台 / Python 版本拿到的包是否可用"是实机验证的，不是从 Linux 推断的。
+- **失败即红**：没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
+- **行尾与可复现性**：Windows 检出不会破坏可复现性 —— 仓库 `.gitattributes` 统一 `eol=lf`，打包前还会把文本文件归一为 LF，自检 f 断言包内文本不含 CRLF；场景沙箱里的 git 仓库也固定 `core.autocrlf=false` / `core.eol=lf`，不依赖 runner 的全局 git 配置。
+- **CI 证明什么**：包能构建，且内置自检 a–l 在该平台 / Python 版本上通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档 / 包内合成回归与指标口径"这类回归。
+- **CI 不证明什么**：**不证明发布本身**。CI 不校验 `{YYYYMMDD}` 命名、不生成 GitHub Release、不写发布记录，也不覆盖真实安装器与用户桌面环境（这些平台承诺仍标 `UNKNOWN`）。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
 
 ## 4. 发布流程
 
