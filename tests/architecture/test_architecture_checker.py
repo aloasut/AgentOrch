@@ -673,5 +673,430 @@ class KitIntegrationTests(unittest.TestCase):
         return []
 
 
+# --- architecture alignment fixtures derived from AgentMgr lessons (#56) ----- #
+# The frozen contract already has the rule kinds these fixtures use; #56 adds no
+# new kind and no new param. What it does add is the shape a reviewer can point
+# at: a core module reaching into an adapter's *private* runtime path, a
+# transport entry point that bypasses the shared application service, a
+# declaration that must not become coverage by itself, and an unconfigured
+# project that stays diagnostic-only. See docs/architecture/agentmgr-contract-rules.md.
+
+AGM_MODULES = [
+    {
+        'module_id': 'domain',
+        'paths': ['src/domain/'],
+        'responsibilities': ['domain decisions and owned state'],
+        'public_interfaces': [{'name': 'src.domain.rules', 'kind': 'python_module',
+                               'stability': 'stable'}],
+    },
+    {
+        'module_id': 'application',
+        'paths': ['src/app/'],
+        'responsibilities': ['single application service shared by every transport'],
+        'public_interfaces': [{'name': 'src.app.service', 'kind': 'python_module',
+                               'stability': 'stable'}],
+    },
+    {
+        'module_id': 'adapter-hermes',
+        'paths': ['src/adapters/hermes/'],
+        'responsibilities': ['runtime adapter that hides its framework internals'],
+        'public_interfaces': [{'name': 'src.adapters.hermes.api', 'kind': 'python_module',
+                               'stability': 'additive_only'}],
+        'private_paths': ['src/adapters/hermes/runtime/'],
+    },
+    {
+        'module_id': 'entrypoint-api',
+        'paths': ['src/entrypoints/api/'],
+        'responsibilities': ['HTTP transport: protocol translation only'],
+        'public_interfaces': [{'name': 'plan:http', 'kind': 'http_api', 'stability': 'stable'}],
+    },
+    {
+        'module_id': 'entrypoint-mcp',
+        'paths': ['src/entrypoints/mcp/'],
+        'responsibilities': ['event transport: protocol translation only'],
+        'public_interfaces': [{'name': 'plan:event', 'kind': 'event', 'stability': 'stable'}],
+    },
+]
+
+AGM_RULES = [
+    {
+        'rule_id': 'ARCH-AGM-NO-CYCLE',
+        'kind': 'NO_CYCLE',
+        'severity': 'ERROR',
+        'enabled': True,
+        'description': 'modules must not form dependency cycles',
+    },
+    {
+        'rule_id': 'ARCH-AGM-ENTRY-SHARED',
+        'kind': 'FORBIDDEN_EDGE',
+        'severity': 'ERROR',
+        'enabled': True,
+        'description': 'transport entry points call the shared application service, '
+                       'never the domain or a concrete adapter',
+    },
+    {
+        'rule_id': 'ARCH-AGM-ADAPTER-PRIVATE',
+        'kind': 'PRIVATE_ACCESS',
+        'severity': 'ERROR',
+        'enabled': True,
+        'description': 'core modules never import an adapter private runtime path',
+    },
+]
+
+AGM_BOUNDARIES = [
+    {'boundary_id': 'BND-DOMAIN', 'kind': 'domain', 'members': ['domain']},
+    {'boundary_id': 'BND-APP', 'kind': 'application', 'members': ['application']},
+    {'boundary_id': 'BND-ADAPTER', 'kind': 'adapter', 'members': ['adapter-hermes']},
+    {'boundary_id': 'BND-TRANSPORT', 'kind': 'layer',
+     'members': ['entrypoint-api', 'entrypoint-mcp']},
+]
+
+AGM_INVARIANTS = [
+    {
+        'invariant_id': 'INV-AGM-ENTRY-EDGE',
+        'statement': 'no transport entry point reaches the domain or a concrete adapter '
+                     'directly; every request goes through the application service',
+        'checked_by': 'STATIC_RULE',
+        'severity': 'ERROR',
+        'rule_ids': ['ARCH-AGM-ENTRY-SHARED'],
+    },
+    {
+        'invariant_id': 'INV-AGM-ADAPTER-ISOLATION',
+        'statement': 'the core modules never import an adapter private runtime path',
+        'checked_by': 'STATIC_RULE',
+        'severity': 'ERROR',
+        'rule_ids': ['ARCH-AGM-ADAPTER-PRIVATE'],
+    },
+    {
+        'invariant_id': 'INV-AGM-SHARED-DECISION',
+        'statement': 'both transports return the same decision for the same request',
+        'checked_by': 'CONTRACT_TEST',
+        'severity': 'ERROR',
+        'notes': 'the checker cannot run the project test suite; the shared contract test '
+                 'result has to be attached as its own evidence',
+    },
+]
+
+# The clean tree: both transports call the application service, the adapter keeps
+# its framework session private, and nothing imports that private path.
+AGM_CLEAN_FILES = {
+    'src/domain/rules.py':
+        'def decide(request):\n'
+        '    return {"amount": request["amount"] * 2}\n',
+    'src/app/service.py':
+        'from src.domain import rules\n'
+        '\n'
+        '\n'
+        'def plan(request):\n'
+        '    return rules.decide(request)\n',
+    'src/adapters/hermes/api.py':
+        'from src.domain import rules\n'
+        '\n'
+        '\n'
+        'class HermesAdapter:\n'
+        '    def decide(self, request):\n'
+        '        return rules.decide(request)\n',
+    'src/adapters/hermes/runtime/session.py':
+        'FRAMEWORK_SESSION = object()\n',
+    'src/entrypoints/api/handler.py':
+        'from src.app import service\n'
+        '\n'
+        '\n'
+        'def handle(request):\n'
+        '    return service.plan(request)\n',
+    'src/entrypoints/mcp/handler.py':
+        'from src.app import service\n'
+        '\n'
+        '\n'
+        'def handle(request):\n'
+        '    return service.plan(request)\n',
+}
+
+
+def agm_contract(**overrides):
+    """The alignment fixture contract; keyword arguments replace top-level keys."""
+    data = {
+        'schema_version': '1.0',
+        'contract_version': '1.0.0',
+        'project_name': 'agentmgr-alignment-fixture',
+        'enforcement_mode': 'ENFORCE',
+        'modules': AGM_MODULES,
+        'dependencies': {
+            'allowed': [
+                {'from': 'entrypoint-api', 'to': 'application',
+                 'reason': 'the HTTP transport calls the shared application service'},
+                {'from': 'entrypoint-mcp', 'to': 'application',
+                 'reason': 'the event transport calls the shared application service'},
+                {'from': 'application', 'to': 'domain',
+                 'reason': 'the application service orchestrates domain rules'},
+                {'from': 'adapter-hermes', 'to': 'domain',
+                 'reason': 'the adapter implements the domain port'},
+            ],
+            'forbidden': [
+                {'from': 'entrypoint-api', 'to': 'domain',
+                 'reason': 'an entry point must not re-implement a business rule',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+                {'from': 'entrypoint-mcp', 'to': 'domain',
+                 'reason': 'an entry point must not re-implement a business rule',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+                {'from': 'entrypoint-api', 'to': 'adapter-hermes',
+                 'reason': 'an entry point must not bind a concrete adapter',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+                {'from': 'entrypoint-mcp', 'to': 'adapter-hermes',
+                 'reason': 'an entry point must not bind a concrete adapter',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+            ],
+        },
+        'boundaries': AGM_BOUNDARIES,
+        'invariants': AGM_INVARIANTS,
+        'rules': AGM_RULES,
+        'baseline': {'frozen_at': '2026-01-01T00:00:00Z', 'frozen_by': 'fixture'},
+    }
+    data.update(overrides)
+    return data
+
+
+class AgentMgrAlignmentTests(CheckerTestBase):
+    """Positive control plus the dependency shapes the six rules describe."""
+
+    def coverage(self, payload, invariant_id):
+        entries = [entry for entry in payload.get('invariants') or []
+                   if entry.get('invariant_id') == invariant_id]
+        self.assertEqual(len(entries), 1, payload.get('invariants'))
+        return entries[0]
+
+    def test_positive_control_is_clean_and_reports_its_scope(self):
+        self.build(dict(AGM_CLEAN_FILES), agm_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload['status'], 'PASS', payload['findings'])
+        self.assertEqual(payload['counts']['ERROR'], 0)
+        # Scope travels with the pass: every declared module was examined.
+        self.assertEqual(sorted(payload['examined_modules']),
+                         ['adapter-hermes', 'application', 'domain',
+                          'entrypoint-api', 'entrypoint-mcp'])
+        self.assertEqual(payload['uncovered_modules'], [])
+        self.assertEqual(self.coverage(payload, 'INV-AGM-ENTRY-EDGE')['status'], 'PASS')
+        self.assertEqual(self.coverage(payload, 'INV-AGM-ADAPTER-ISOLATION')['status'], 'PASS')
+        # A declared contract test is NOT covered by this checker.
+        self.assertEqual(self.coverage(payload, 'INV-AGM-SHARED-DECISION')['status'], 'UNKNOWN')
+
+    def test_core_importing_an_adapter_private_symbol_blocks(self):
+        files = dict(AGM_CLEAN_FILES)
+        files['src/app/service.py'] = (
+            'from src.adapters.hermes.runtime import session\n'
+            'from src.domain import rules\n'
+            '\n'
+            '\n'
+            'def plan(request):\n'
+            '    return rules.decide(request)\n')
+        self.build(files, agm_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(payload['blocking'])
+        hits = self.findings(payload, 'ARCH-AGM-ADAPTER-PRIVATE', 'ERROR')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        self.assertEqual(hits[0]['module_id'], 'application')
+        self.assertEqual(hits[0]['target_module'], 'adapter-hermes')
+        self.assertEqual(hits[0]['file'], 'src/app/service.py')
+        self.assertIn('src/adapters/hermes/runtime', hits[0]['message'])
+        self.assertEqual(self.coverage(payload, 'INV-AGM-ADAPTER-ISOLATION')['status'], 'ERROR')
+
+    def test_entry_point_bypassing_the_shared_service_blocks(self):
+        files = dict(AGM_CLEAN_FILES)
+        files['src/entrypoints/mcp/handler.py'] = (
+            'from src.domain import rules\n'
+            '\n'
+            '\n'
+            'def handle(request):\n'
+            '    return rules.decide(request)\n')
+        self.build(files, agm_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        hits = self.findings(payload, 'ARCH-AGM-ENTRY-SHARED', 'ERROR')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        self.assertEqual(hits[0]['module_id'], 'entrypoint-mcp')
+        self.assertEqual(hits[0]['target_module'], 'domain')
+        self.assertEqual(hits[0]['file'], 'src/entrypoints/mcp/handler.py')
+        self.assertEqual(self.coverage(payload, 'INV-AGM-ENTRY-EDGE')['status'], 'ERROR')
+
+    def test_entry_point_binding_a_concrete_adapter_blocks(self):
+        files = dict(AGM_CLEAN_FILES)
+        files['src/entrypoints/api/handler.py'] = (
+            'from src.adapters.hermes import api\n'
+            '\n'
+            '\n'
+            'def handle(request):\n'
+            '    return api.HermesAdapter().decide(request)\n')
+        self.build(files, agm_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        hits = self.findings(payload, 'ARCH-AGM-ENTRY-SHARED', 'ERROR')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        self.assertEqual(hits[0]['target_module'], 'adapter-hermes')
+
+    def test_project_without_a_contract_is_never_judged_by_inferred_rules(self):
+        """AC-4: the same violations, no contract: diagnostic only, nothing blocked."""
+        files = dict(AGM_CLEAN_FILES)
+        files['src/app/service.py'] = (
+            'from src.adapters.hermes.runtime import session\n'
+            '\n'
+            '\n'
+            'def plan(request):\n'
+            '    return session\n')
+        files['src/entrypoints/mcp/handler.py'] = (
+            'import src.domain.rules\n'
+            '\n'
+            '\n'
+            'def handle(request):\n'
+            '    return request\n')
+        self.build(files)
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertIsNone(payload['contract_path'])
+        self.assertEqual(payload['enforcement_mode'], 'OFF')
+        self.assertTrue(payload['diagnostic_only'])
+        self.assertFalse(payload['blocking'])
+        self.assertEqual(payload['counts']['ERROR'], 0)
+        self.assertEqual(payload['status'], 'NOT_RUN')
+        self.assertEqual(payload['invariants'], [])
+        self.assertEqual(payload['examined_modules'], [])
+        self.assertFalse([finding for finding in payload['findings']
+                          if finding['status'] in ('ERROR', 'WARNING')], payload['findings'])
+        self.assertEqual(payload['inventory']['python_files'], len(files))
+
+
+class InvariantCoverageTests(CheckerTestBase):
+    """A declared invariant is not coverage; only an executed rule result is."""
+
+    PASSING_RULE = {
+        'rule_id': 'ARCH-AGM-ENTRY-SHARED',
+        'kind': 'FORBIDDEN_EDGE',
+        'severity': 'ERROR',
+        'enabled': True,
+        'description': 'transport entry points call the shared application service',
+    }
+
+    def contract_with(self, invariants, rules=None):
+        return agm_contract(
+            invariants=invariants,
+            rules=rules if rules is not None else [self.PASSING_RULE,
+                                                   AGM_RULES[0], AGM_RULES[2]])
+
+    def invariant(self, invariant_id, checked_by, rule_ids=None, statement=None):
+        entry = {
+            'invariant_id': invariant_id,
+            'statement': statement or 'the declared property still holds across the modules',
+            'checked_by': checked_by,
+            'severity': 'ERROR',
+        }
+        if rule_ids is not None:
+            entry['rule_ids'] = rule_ids
+        return entry
+
+    def coverage(self, payload, invariant_id):
+        entries = [entry for entry in payload.get('invariants') or []
+                   if entry.get('invariant_id') == invariant_id]
+        self.assertEqual(len(entries), 1, payload.get('invariants'))
+        return entries[0]
+
+    def test_static_rule_invariant_reports_the_rule_status(self):
+        self.build(dict(AGM_CLEAN_FILES), self.contract_with([
+            self.invariant('INV-AGM-STATIC', 'STATIC_RULE', ['ARCH-AGM-ENTRY-SHARED'])]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        entry = self.coverage(payload, 'INV-AGM-STATIC')
+        self.assertEqual(entry['status'], 'PASS', entry)
+        self.assertIn('ARCH-AGM-ENTRY-SHARED=PASS', entry['message'])
+
+    def test_static_rule_invariant_over_an_unimplemented_rule_is_unknown(self):
+        custom = {'rule_id': 'ARCH-AGM-CUSTOM', 'kind': 'CUSTOM', 'severity': 'ERROR',
+                  'enabled': True, 'description': 'project specific check needs a human'}
+        self.build(dict(AGM_CLEAN_FILES), self.contract_with(
+            [self.invariant('INV-AGM-CUSTOM', 'STATIC_RULE', ['ARCH-AGM-CUSTOM'])],
+            rules=[custom, self.PASSING_RULE, AGM_RULES[0], AGM_RULES[2]]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        entry = self.coverage(payload, 'INV-AGM-CUSTOM')
+        self.assertEqual(entry['status'], 'UNKNOWN', entry)
+        self.assertIn('ARCH-AGM-CUSTOM=UNKNOWN', entry['message'])
+
+    def test_static_rule_invariant_over_a_disabled_rule_is_not_run(self):
+        disabled = dict(self.PASSING_RULE, enabled=False)
+        self.build(dict(AGM_CLEAN_FILES), self.contract_with(
+            [self.invariant('INV-AGM-DISABLED', 'STATIC_RULE', ['ARCH-AGM-ENTRY-SHARED'])],
+            rules=[disabled]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(self.coverage(payload, 'INV-AGM-DISABLED')['status'], 'NOT_RUN')
+
+    def test_static_rule_invariant_without_a_rule_id_is_unknown(self):
+        self.build(dict(AGM_CLEAN_FILES), self.contract_with([
+            self.invariant('INV-AGM-UNBOUND', 'STATIC_RULE')]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        entry = self.coverage(payload, 'INV-AGM-UNBOUND')
+        self.assertEqual(entry['status'], 'UNKNOWN', entry)
+        self.assertIn('rule_ids', entry['message'])
+
+    def test_contract_test_and_manual_review_invariants_stay_unknown(self):
+        self.build(dict(AGM_CLEAN_FILES), self.contract_with([
+            self.invariant('INV-AGM-CONTRACT', 'CONTRACT_TEST'),
+            self.invariant('INV-AGM-REVIEW', 'MANUAL_REVIEW'),
+            self.invariant('INV-AGM-DECLARED', 'UNKNOWN'),
+        ]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(self.coverage(payload, 'INV-AGM-CONTRACT')['status'], 'UNKNOWN')
+        self.assertIn('contract test', self.coverage(payload, 'INV-AGM-CONTRACT')['message'])
+        self.assertEqual(self.coverage(payload, 'INV-AGM-REVIEW')['status'], 'UNKNOWN')
+        self.assertIn('reviewer', self.coverage(payload, 'INV-AGM-REVIEW')['message'].lower())
+        self.assertEqual(self.coverage(payload, 'INV-AGM-DECLARED')['status'], 'UNKNOWN')
+
+    def test_incomplete_scan_cannot_cover_a_static_invariant(self):
+        files = dict(AGM_CLEAN_FILES)
+        files['src/app/loader.py'] = (
+            'import importlib\n'
+            '\n'
+            '\n'
+            'def load(name):\n'
+            '    return importlib.import_module(name)\n')
+        self.build(files, self.contract_with([
+            self.invariant('INV-AGM-STATIC', 'STATIC_RULE', ['ARCH-AGM-ENTRY-SHARED'])]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertTrue(self.findings(payload, status='UNKNOWN'), payload['findings'])
+        entry = self.coverage(payload, 'INV-AGM-STATIC')
+        self.assertEqual(entry['status'], 'UNKNOWN', entry)
+        self.assertIn('scan is incomplete', entry['message'])
+
+    def test_coverage_is_additive_and_changes_no_finding_or_blocking(self):
+        violating = dict(AGM_CLEAN_FILES)
+        violating['src/app/service.py'] = (
+            'from src.adapters.hermes.runtime import session\n'
+            'from src.domain import rules\n'
+            '\n'
+            '\n'
+            'def plan(request):\n'
+            '    return rules.decide(request)\n')
+        self.build(dict(violating), agm_contract(invariants=[]))
+        code_without, without = self.result()
+        self.build(dict(violating), agm_contract())
+        code_with, with_invariants = self.result()
+        self.assertEqual((code_without, code_with), (1, 1))
+        self.assertEqual(with_invariants['counts'], without['counts'])
+        self.assertEqual(with_invariants['blocking'], without['blocking'])
+        self.assertEqual(with_invariants['status'], without['status'])
+        self.assertEqual(len(with_invariants['findings']), len(without['findings']))
+        self.assertTrue(with_invariants['invariants'])
+
+    def test_off_mode_reports_not_run_coverage(self):
+        self.build(dict(AGM_CLEAN_FILES), agm_contract(enforcement_mode='OFF'))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(self.coverage(payload, 'INV-AGM-ENTRY-EDGE')['status'], 'NOT_RUN')
+        self.assertEqual(self.coverage(payload, 'INV-AGM-SHARED-DECISION')['status'], 'UNKNOWN')
+
+
 if __name__ == '__main__':
     unittest.main()

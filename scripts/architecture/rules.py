@@ -458,6 +458,96 @@ def apply_waivers(finding, rule, today=None):
             return
 
 
+# --- invariant coverage -----------------------------------------------------
+
+def _rule_statuses(findings):
+    """rule_id -> worst reported status for that rule."""
+    statuses = {}
+    for finding in findings:
+        rule_id = finding.get('rule_id')
+        status = finding.get('status')
+        if not rule_id or status is None:
+            continue
+        current = statuses.get(rule_id)
+        if current is None or STATUS_ORDER.get(status, 9) < STATUS_ORDER.get(current, 9):
+            statuses[rule_id] = status
+    return statuses
+
+
+def invariant_coverage(contract_data, findings):
+    """Per-invariant coverage derived from the rules that actually ran.
+
+    A declared invariant is not evidence by itself. For `checked_by:
+    STATIC_RULE` the reported status is the worst status of the rules it names,
+    so a missing, disabled, skipped or unparsable rule can never be read as
+    coverage. `CONTRACT_TEST` and `MANUAL_REVIEW` are reported as `UNKNOWN`:
+    this checker runs neither the project test suite nor a human review, and
+    claiming otherwise would turn a declaration into a pass.
+
+    This is additive report data. It does not create findings, does not change
+    `blocking`, and does not alter the four report statuses of the frozen
+    contract (docs/architecture/architecture-contract.md §4.2).
+    """
+    statuses = _rule_statuses(findings)
+    # An UNKNOWN that belongs to no rule (dynamic import, unparsable file,
+    # import target outside the declared modules) means at least one file was
+    # never proven. A rule that "found nothing" over an incomplete scan is not
+    # coverage, so a static-rule invariant degrades to UNKNOWN instead of PASS.
+    unattributed = [finding for finding in findings
+                    if finding.get('rule_id') is None and finding.get('status') != 'PASS']
+    entries = []
+    for invariant in contract_data.get('invariants') or []:
+        if not isinstance(invariant, dict):
+            continue
+        invariant_id = invariant.get('invariant_id')
+        checked_by = invariant.get('checked_by')
+        rule_ids = [rule_id for rule_id in invariant.get('rule_ids') or []
+                    if isinstance(rule_id, str)]
+        entry = {'invariant_id': invariant_id, 'checked_by': checked_by,
+                 'rule_ids': rule_ids, 'status': 'UNKNOWN', 'message': ''}
+        if checked_by == 'STATIC_RULE':
+            if not rule_ids:
+                entry['message'] = ('checked_by=STATIC_RULE with an empty rule_ids: no rule can '
+                                    'prove it, so it is not covered')
+            else:
+                observed = {rule_id: statuses[rule_id] for rule_id in rule_ids
+                            if rule_id in statuses}
+                missing = [rule_id for rule_id in rule_ids if rule_id not in statuses]
+                if missing or not observed:
+                    entry['message'] = ('no executed result for rule(s) ' + ', '.join(missing)
+                                        + ': the invariant is not covered')
+                else:
+                    worst = None
+                    for status in observed.values():
+                        if worst is None or STATUS_ORDER.get(status, 9) < STATUS_ORDER.get(worst, 9):
+                            worst = status
+                    detail = ', '.join(f'{rule_id}={observed[rule_id]}'
+                                       for rule_id in sorted(observed))
+                    if unattributed:
+                        entry['status'] = 'UNKNOWN'
+                        entry['message'] = (
+                            f'worst status of {detail}, but {len(unattributed)} finding(s) '
+                            'belong to no rule (dynamic import, unparsable file or target '
+                            'outside the declared modules); the scan is incomplete, so this is '
+                            'not coverage')
+                    else:
+                        entry['status'] = worst
+                        entry['message'] = f'worst status of {detail}'
+        elif checked_by == 'CONTRACT_TEST':
+            entry['message'] = ('checked_by=CONTRACT_TEST: this checker does not run the project '
+                                'test suite, so the shared contract test result has to be attached '
+                                'as its own evidence; not covered here')
+        elif checked_by == 'MANUAL_REVIEW':
+            entry['message'] = ('checked_by=MANUAL_REVIEW: a reviewer must record the outcome; '
+                                'the checker cannot cover it')
+        else:
+            entry['message'] = (f'checked_by={checked_by!r}: no automatic check is declared, so '
+                                'the invariant is not covered (never read as PASS)')
+        entries.append(entry)
+    entries.sort(key=lambda item: item['invariant_id'] or '')
+    return entries
+
+
 # --- entry point ------------------------------------------------------------
 
 def run(contract_data, project_root, adapters_enabled=('python', 'rust')):
@@ -479,6 +569,7 @@ def run(contract_data, project_root, adapters_enabled=('python', 'rust')):
                        'notes': [f'not executed: enforcement_mode=OFF']}
                 for name in ('python', 'rust')
             },
+            'invariants': invariant_coverage(contract_data, findings),
             'uncovered_modules': [],
             'examined_modules': [],
         }
@@ -555,6 +646,7 @@ def run(contract_data, project_root, adapters_enabled=('python', 'rust')):
         'findings': findings,
         'edges': edges,
         'capabilities': collected['capabilities'],
+        'invariants': invariant_coverage(contract_data, findings),
         'uncovered_modules': uncovered,
         'examined_modules': collected['examined_modules'],
     }

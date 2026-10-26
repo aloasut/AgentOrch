@@ -8,6 +8,12 @@ binds:
 - `contract_version` and the contract path actually used;
 - one of `ERROR` / `WARNING` / `UNKNOWN` / `NOT_RUN` / `PASS` per finding, with
   per-status counts so `UNKNOWN` and `NOT_RUN` can never be read as passing;
+- `examined_modules` / `uncovered_modules`, so a `PASS` carries the scope it
+  actually examined instead of an unqualified claim;
+- `invariants[]`: per-invariant coverage derived from the rules that ran, never
+  from the declaration itself (a `STATIC_RULE` invariant whose rule was skipped,
+  disabled or unparsable is not coverage, and `CONTRACT_TEST` / `MANUAL_REVIEW`
+  stay `UNKNOWN` here);
 - `blocking`, computed from `enforcement_mode` and the findings, separately from
   `status` (a `DIAGNOSTIC_ONLY` run can report `ERROR` findings while blocking
   nothing).
@@ -62,9 +68,17 @@ def build_report(project_root, loaded, executed, head_sha, head_sha_source,
 
     findings = []
     capabilities = {}
+    invariants = []
+    examined_modules, uncovered_modules = [], []
     if executed is not None:
         findings = list(executed['findings'])
         capabilities = executed['capabilities']
+        # Scope evidence: a rule only means what it examined. `examined_modules`
+        # empty / `uncovered_modules` non-empty is why a rule can be NOT_RUN, and
+        # both are surfaced so a `PASS` never travels without its scope.
+        invariants = list(executed.get('invariants') or [])
+        examined_modules = list(executed.get('examined_modules') or [])
+        uncovered_modules = list(executed.get('uncovered_modules') or [])
     elif contract is None and not errors:
         findings = [_no_contract_finding(notes)]
 
@@ -127,6 +141,9 @@ def build_report(project_root, loaded, executed, head_sha, head_sha_source,
         'counts': counts,
         'contract_errors': errors,
         'findings': findings,
+        'invariants': invariants,
+        'examined_modules': examined_modules,
+        'uncovered_modules': uncovered_modules,
         'capabilities': capabilities,
         'adapters': list(adapters_enabled),
         'notes': notes,
@@ -163,6 +180,14 @@ def render_text(report):
     summary = ', '.join(f'{status} {counts.get(status, 0)}' for status in STATUSES)
     lines.append(f'status: {report["status"]} (blocking: {report["blocking"]}; {summary}; '
                  f'waived: {counts.get("waived", 0)})')
+    examined = report.get('examined_modules') or []
+    uncovered = report.get('uncovered_modules') or []
+    if examined or uncovered:
+        lines.append('scope: examined modules: ' + (', '.join(examined) or '(none)')
+                     + '; uncovered modules: ' + (', '.join(uncovered) or '(none)'))
+    for invariant in report.get('invariants') or []:
+        lines.append(f'[coverage {invariant["status"]}] {invariant["invariant_id"]} '
+                     f'({invariant["checked_by"]}): {invariant["message"]}')
     for note in report.get('notes') or []:
         lines.append(f'note: {note}')
     return '\n'.join(lines)
