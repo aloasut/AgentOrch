@@ -1,0 +1,677 @@
+"""Behavioural tests for the optional Architecture Contract checker.
+
+Every test materialises a throwaway project tree, runs the real CLI in a child
+process and asserts on the exit code plus the machine-readable report. The
+fixtures are declarative (a contract dict + a source tree), so #53 can reuse the
+same shapes for synthetic regression without copying directories around.
+
+Hard rules (NO_CYCLE / FORBIDDEN_EDGE / LAYER_DIRECTION / PRIVATE_ACCESS) each
+have a positive and a negative fixture: the positive fixture must not block and
+the negative one must exit non-zero and point at rule id, module and file.
+"""
+import ast
+import importlib.util
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+CHECK = ROOT / 'scripts' / 'architecture' / 'check.py'
+
+MODULES = [
+    {
+        'module_id': 'app',
+        'paths': ['src/app/'],
+        'responsibilities': ['application entry points and wiring'],
+        'public_interfaces': [{'name': 'src.app.main', 'kind': 'python_module',
+                               'stability': 'stable'}],
+    },
+    {
+        'module_id': 'domain',
+        'paths': ['src/domain/'],
+        'responsibilities': ['domain rules and state ownership'],
+        'public_interfaces': [{'name': 'src.domain.model', 'kind': 'python_module',
+                               'stability': 'stable'}],
+    },
+    {
+        'module_id': 'infra',
+        'paths': ['src/infra/'],
+        'responsibilities': ['database and filesystem adapters'],
+        'public_interfaces': [{'name': 'src.infra.db', 'kind': 'python_module',
+                               'stability': 'additive_only'}],
+    },
+]
+
+NO_CYCLE = {
+    'rule_id': 'ARCH-NO-CYCLE',
+    'kind': 'NO_CYCLE',
+    'severity': 'ERROR',
+    'enabled': True,
+    'description': 'modules must not form dependency cycles',
+}
+
+
+def contract(**overrides):
+    """A valid contract; keyword arguments replace top-level keys."""
+    data = {
+        'schema_version': '1.0',
+        'contract_version': '1.0.0',
+        'project_name': 'fixture',
+        'enforcement_mode': 'ENFORCE',
+        'modules': MODULES,
+        'dependencies': {
+            'allowed': [{'from': 'app', 'to': 'domain',
+                         'reason': 'app orchestrates domain rules'}],
+            'forbidden': [],
+        },
+        'rules': [NO_CYCLE],
+        'baseline': {'frozen_at': '2026-01-01T00:00:00Z', 'frozen_by': 'fixture'},
+    }
+    data.update(overrides)
+    return data
+
+
+class CheckerTestBase(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+
+    def build(self, files, contract_data=None, project_md=None):
+        """Write a project tree; a contract dict goes to the default path."""
+        if contract_data is not None:
+            files = dict(files)
+            files['docs/architecture/contract.json'] = json.dumps(contract_data, indent=2)
+        if project_md is not None:
+            files = dict(files)
+            files['docs/PROJECT.md'] = project_md
+        for rel, text in files.items():
+            path = self.root / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding='utf-8')
+        return self.root
+
+    def run_check(self, *args):
+        proc = subprocess.run(
+            [sys.executable, str(CHECK), '--project', str(self.root), '--json', *args],
+            capture_output=True, text=True)
+        payload = None
+        if proc.stdout.strip():
+            try:
+                payload = json.loads(proc.stdout)
+            except ValueError:
+                payload = None
+        return proc.returncode, payload, proc
+
+    def result(self, *args):
+        code, payload, proc = self.run_check(*args)
+        self.assertIsNotNone(payload, f'no JSON report on stdout\n{proc.stdout}\n{proc.stderr}')
+        return code, payload
+
+    @staticmethod
+    def findings(payload, rule_id=None, status=None):
+        found = payload.get('findings', [])
+        if rule_id is not None:
+            found = [f for f in found if f.get('rule_id') == rule_id]
+        if status is not None:
+            found = [f for f in found if f.get('status') == status]
+        return found
+
+
+class ContractOptionalityTests(CheckerTestBase):
+    def test_no_contract_is_diagnostic_only_and_exit_zero(self):
+        """AC-3: an unconfigured project gets a read-only diagnosis, never a gate."""
+        self.build({'src/app/main.py': 'x = 1\n', 'src/domain/model.py': 'y = 2\n'})
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertIsNone(payload['contract_path'])
+        self.assertEqual(payload['enforcement_mode'], 'OFF')
+        self.assertTrue(payload['diagnostic_only'])
+        self.assertFalse(payload['blocking'])
+        self.assertEqual(payload['counts']['ERROR'], 0)
+        self.assertEqual(payload['status'], 'NOT_RUN')
+        self.assertTrue(any('no architecture contract' in note for note in payload['notes']),
+                        payload['notes'])
+
+    def test_declared_contract_that_is_missing_fails_closed(self):
+        """A declared path that does not resolve is a config error, not OFF."""
+        self.build(
+            {'src/app/main.py': 'x = 1\n'},
+            project_md='- `edition`: `github`\n'
+                       '- `architecture_contract_path`: `docs/architecture/contract.json`\n')
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(payload['blocking'])
+        self.assertTrue(any('contract.json' in e and 'missing' in e
+                            for e in payload['contract_errors']), payload['contract_errors'])
+
+    def test_project_md_override_path_is_used(self):
+        files = {'src/app/main.py': 'x = 1\n',
+                 'config/arch/contract.json': json.dumps(contract(), indent=2)}
+        self.build(files, project_md='- `architecture_contract_path`: `config/arch/contract.json`\n')
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload['contract_path'], 'config/arch/contract.json')
+        self.assertEqual(payload['contract_version'], '1.0.0')
+
+    def test_contract_path_outside_the_project_is_rejected(self):
+        self.build({'src/app/main.py': 'x = 1\n'},
+                   project_md='- `architecture_contract_path`: `../escape.json`\n')
+        (self.root.parent / 'escape.json').write_text(json.dumps(contract()), encoding='utf-8')
+        self.addCleanup((self.root.parent / 'escape.json').unlink)
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(any('outside the project' in e for e in payload['contract_errors']),
+                        payload['contract_errors'])
+
+    def test_diagnostic_only_never_blocks_even_with_a_violation(self):
+        files = {
+            'src/app/a.py': 'from src.domain import b\n',
+            'src/domain/b.py': 'from src.app import a\n',
+        }
+        self.build(files, contract(enforcement_mode='DIAGNOSTIC_ONLY'))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertFalse(payload['blocking'])
+        self.assertEqual(payload['status'], 'ERROR')  # the violation stays visible
+        self.assertTrue(self.findings(payload, 'ARCH-NO-CYCLE', 'ERROR'))
+
+
+class ContractValidationTests(CheckerTestBase):
+    def assert_contract_error(self, bad_contract, needle):
+        self.build({'src/app/main.py': 'x = 1\n'}, bad_contract)
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(any(needle in error for error in payload['contract_errors']),
+                        payload['contract_errors'])
+        self.assertNotEqual(payload['status'], 'PASS')
+        self.assertFalse(self.findings(payload, status='PASS'),
+                         'a broken contract must never produce a PASS finding')
+
+    def test_missing_required_field_is_a_config_error(self):
+        bad = contract()
+        del bad['rules']
+        self.assert_contract_error(bad, 'rules')
+
+    def test_unsupported_schema_version_fails_closed(self):
+        self.assert_contract_error(contract(schema_version='0.9'), 'unsupported')
+
+    def test_illegal_enum_is_a_config_error(self):
+        self.assert_contract_error(contract(enforcement_mode='SOMETIMES'), 'enforcement_mode')
+
+    def test_duplicate_module_id_is_a_semantic_error(self):
+        modules = MODULES + [dict(MODULES[0])]
+        self.assert_contract_error(contract(modules=modules), 'duplicate module_id')
+
+    def test_module_path_traversal_is_rejected(self):
+        modules = [dict(MODULES[0], paths=['../outside/'])] + MODULES[1:]
+        self.assert_contract_error(contract(modules=modules), 'relative path')
+
+    def test_forbidden_edge_referencing_an_unknown_rule_id_is_rejected(self):
+        bad = contract(dependencies={
+            'allowed': [],
+            'forbidden': [{'from': 'app', 'to': 'infra', 'reason': 'no direct access',
+                           'rule_id': 'ARCH-MISSING'}],
+        })
+        self.assert_contract_error(bad, 'unknown rule_id')
+
+    def test_unknown_rule_param_is_not_silently_ignored(self):
+        rule = dict(NO_CYCLE, params={'bogus': True})
+        self.assert_contract_error(contract(rules=[rule]), 'unsupported param')
+
+    def test_invalid_contract_in_diagnostic_mode_exits_zero_but_reports(self):
+        bad = contract(enforcement_mode='DIAGNOSTIC_ONLY')
+        del bad['rules']
+        self.build({'src/app/main.py': 'x = 1\n'}, bad)
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertFalse(payload['blocking'])
+        self.assertTrue(payload['contract_errors'])
+        self.assertEqual(payload['status'], 'UNKNOWN')
+
+
+class NoCycleRuleTests(CheckerTestBase):
+    POSITIVE = {
+        'src/app/main.py': 'from src.domain import model\n',
+        'src/domain/model.py': 'VALUE = 1\n',
+    }
+    NEGATIVE = {
+        'src/app/a.py': 'from src.domain import b\n',
+        'src/domain/b.py': 'from src.app import a\n',
+    }
+
+    def test_positive_fixture_does_not_block(self):
+        self.build(self.POSITIVE, contract())
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload['counts']['ERROR'], 0)
+        self.assertEqual(payload['status'], 'PASS')
+
+    def test_negative_fixture_blocks_and_locates_module_file_and_rule(self):
+        self.build(self.NEGATIVE, contract())
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(payload['blocking'])
+        hits = self.findings(payload, 'ARCH-NO-CYCLE', 'ERROR')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        hit = hits[0]
+        self.assertEqual(sorted(hit['modules']), ['app', 'domain'])
+        self.assertIn(hit['file'], self.NEGATIVE)
+        self.assertGreaterEqual(hit['line'], 1)
+        self.assertIn('cycle', hit['message'])
+
+    def test_human_output_names_the_rule_module_and_file(self):
+        self.build(self.NEGATIVE, contract())
+        proc = subprocess.run(
+            [sys.executable, str(CHECK), '--project', str(self.root)],
+            capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+        self.assertIn('ARCH-NO-CYCLE', proc.stdout)
+        self.assertIn('app', proc.stdout)
+        self.assertIn('src/', proc.stdout)
+
+
+class ForbiddenEdgeRuleTests(CheckerTestBase):
+    RULE = {
+        'rule_id': 'ARCH-FORBID-INFRA',
+        'kind': 'FORBIDDEN_EDGE',
+        'severity': 'ERROR',
+        'enabled': True,
+        'description': 'application code must not reach infrastructure directly',
+    }
+
+    def forbidden_contract(self, forbidden=None):
+        return contract(
+            dependencies={
+                'allowed': [],
+                'forbidden': forbidden if forbidden is not None else [
+                    {'from': 'app', 'to': 'infra',
+                     'reason': 'route through the domain module',
+                     'rule_id': 'ARCH-FORBID-INFRA'}],
+            },
+            rules=[self.RULE])
+
+    def test_positive_fixture_does_not_block(self):
+        files = {'src/app/main.py': 'from src.domain import model\n',
+                 'src/domain/model.py': 'from src.infra import db\n',
+                 'src/infra/db.py': 'CONN = None\n'}
+        self.build(files, self.forbidden_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+
+    def test_negative_fixture_blocks_with_edge_location(self):
+        files = {'src/app/main.py': 'from src.infra import db\n',
+                 'src/infra/db.py': 'CONN = None\n'}
+        self.build(files, self.forbidden_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        hits = self.findings(payload, 'ARCH-FORBID-INFRA', 'ERROR')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        self.assertEqual(hits[0]['module_id'], 'app')
+        self.assertEqual(hits[0]['target_module'], 'infra')
+        self.assertEqual(hits[0]['file'], 'src/app/main.py')
+        self.assertEqual(hits[0]['line'], 1)
+
+    def test_wildcard_forbidden_edge_matches_any_target(self):
+        bad = self.forbidden_contract(forbidden=[
+            {'from': '*', 'to': 'infra',
+             'reason': 'infrastructure is adapter-only',
+             'rule_id': 'ARCH-FORBID-INFRA'}])
+        files = {'src/domain/model.py': 'from src.infra import db\n',
+                 'src/infra/db.py': 'CONN = None\n'}
+        self.build(files, bad)
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(self.findings(payload, 'ARCH-FORBID-INFRA', 'ERROR'))
+
+
+class LayerDirectionRuleTests(CheckerTestBase):
+    RULE = {
+        'rule_id': 'ARCH-LAYERS',
+        'kind': 'LAYER_DIRECTION',
+        'severity': 'ERROR',
+        'enabled': True,
+        'description': 'dependencies may only point from outer to inner layers',
+        'params': {'order': ['app', 'domain', 'infra'], 'direction': 'downward'},
+    }
+
+    def test_positive_fixture_does_not_block(self):
+        files = {'src/app/main.py': 'from src.domain import model\n',
+                 'src/domain/model.py': 'from src.infra import db\n',
+                 'src/infra/db.py': 'CONN = None\n'}
+        self.build(files, contract(rules=[self.RULE]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+
+    def test_negative_fixture_blocks_on_reverse_layer(self):
+        files = {'src/domain/model.py': 'from src.app import main\n',
+                 'src/app/main.py': 'VALUE = 1\n'}
+        self.build(files, contract(rules=[self.RULE]))
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        hits = self.findings(payload, 'ARCH-LAYERS', 'ERROR')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        self.assertEqual(hits[0]['module_id'], 'domain')
+        self.assertEqual(hits[0]['target_module'], 'app')
+        self.assertEqual(hits[0]['file'], 'src/domain/model.py')
+        self.assertIn('layer', hits[0]['message'])
+
+    def test_missing_order_param_is_reported_as_unknown_not_pass(self):
+        rule = dict(self.RULE)
+        rule.pop('params')
+        self.build({'src/app/main.py': 'x = 1\n'}, contract(rules=[rule]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        hits = self.findings(payload, 'ARCH-LAYERS', 'UNKNOWN')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        self.assertIn('order', hits[0]['message'])
+
+
+class PrivateAccessRuleTests(CheckerTestBase):
+    RULE = {
+        'rule_id': 'ARCH-PRIVATE',
+        'kind': 'PRIVATE_ACCESS',
+        'severity': 'ERROR',
+        'enabled': True,
+        'description': 'other modules must not import private implementation paths',
+    }
+
+    def private_contract(self):
+        modules = [dict(m) for m in MODULES]
+        modules[1]['private_paths'] = ['src/domain/internal/']
+        return contract(modules=modules, rules=[self.RULE],
+                        dependencies={'allowed': [], 'forbidden': []})
+
+    def test_positive_fixture_imports_a_public_path(self):
+        files = {'src/app/main.py': 'from src.domain import model\n',
+                 'src/domain/model.py': 'from src.domain.internal import helper\n',
+                 'src/domain/internal/helper.py': 'def h():\n    return 1\n'}
+        self.build(files, self.private_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+
+    def test_negative_fixture_blocks_cross_module_private_import(self):
+        files = {'src/app/main.py': 'from src.domain.internal import helper\n',
+                 'src/domain/internal/helper.py': 'def h():\n    return 1\n'}
+        self.build(files, self.private_contract())
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        hits = self.findings(payload, 'ARCH-PRIVATE', 'ERROR')
+        self.assertEqual(len(hits), 1, payload['findings'])
+        self.assertEqual(hits[0]['module_id'], 'app')
+        self.assertEqual(hits[0]['target_module'], 'domain')
+        self.assertEqual(hits[0]['file'], 'src/app/main.py')
+        self.assertIn('src/domain/internal', hits[0]['message'])
+
+
+class CapabilityHonestyTests(CheckerTestBase):
+    def test_dynamic_import_is_unknown_not_pass(self):
+        files = {
+            'src/app/main.py': (
+                'import importlib\n\n'
+                'def load(name):\n'
+                '    return importlib.import_module(name)\n'
+            ),
+            'src/domain/model.py': 'VALUE = 1\n',
+        }
+        self.build(files, contract())
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        unknowns = self.findings(payload, status='UNKNOWN')
+        self.assertTrue(any(f['file'] == 'src/app/main.py' for f in unknowns),
+                        payload['findings'])
+        self.assertNotEqual(payload['status'], 'PASS')
+
+    def test_unparsable_python_file_is_unknown(self):
+        files = {'src/app/broken.py': 'def broken(:\n', 'src/domain/model.py': 'VALUE = 1\n'}
+        self.build(files, contract())
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertTrue(any(f['file'] == 'src/app/broken.py' and f['status'] == 'UNKNOWN'
+                            for f in payload['findings']), payload['findings'])
+
+    def test_rust_adapter_reports_not_run_when_toolchain_is_unavailable(self):
+        rust_contract = contract(modules=[
+            {'module_id': 'rustcore', 'paths': ['crates/core/'],
+             'responsibilities': ['rust core crate'],
+             'public_interfaces': [{'name': 'core', 'kind': 'python_module'}]},
+        ], dependencies={'allowed': [], 'forbidden': []})
+        files = {'crates/core/lib.rs': 'use crate::util::Thing;\n',
+                 'crates/core/util.rs': 'pub struct Thing;\n'}
+        self.build(files, rust_contract)
+        code, payload = self.result('--disable-adapter', 'rust')
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload['capabilities']['rust']['status'], 'UNKNOWN')
+        not_run = [f for f in payload['findings'] if f['status'] == 'NOT_RUN']
+        self.assertTrue(not_run, payload['findings'])
+        self.assertTrue(all(f['status'] != 'PASS' for f in payload['findings']))
+        self.assertEqual(payload['status'], 'NOT_RUN')
+
+    def test_unimplemented_rule_kind_is_unknown_not_pass(self):
+        rule = {'rule_id': 'ARCH-CUSTOM', 'kind': 'CUSTOM', 'severity': 'ERROR',
+                'enabled': True, 'description': 'project specific check needs a human'}
+        self.build({'src/app/main.py': 'x = 1\n'}, contract(rules=[rule]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        hits = self.findings(payload, 'ARCH-CUSTOM')
+        self.assertEqual([f['status'] for f in hits], ['UNKNOWN'])
+
+
+class SoftMetricTests(CheckerTestBase):
+    def test_soft_metrics_only_warn_even_when_declared_error(self):
+        rule = {'rule_id': 'ARCH-SIZE', 'kind': 'MODULE_SIZE', 'severity': 'ERROR',
+                'enabled': True, 'description': 'module size budget',
+                'params': {'max_lines': 3}}
+        files = {'src/app/main.py': ''.join(f'V{i} = {i}\n' for i in range(20)),
+                 'src/domain/model.py': 'VALUE = 1\n'}
+        self.build(files, contract(rules=[rule]))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        hits = self.findings(payload, 'ARCH-SIZE')
+        self.assertEqual([f['status'] for f in hits], ['WARNING'], payload['findings'])
+        self.assertIn('static metric', hits[0]['message'])
+        self.assertEqual(payload['counts']['ERROR'], 0)
+
+    def test_fan_out_and_interface_growth_are_warning_only(self):
+        rules = [
+            {'rule_id': 'ARCH-FANOUT', 'kind': 'MODULE_FAN_OUT', 'severity': 'WARNING',
+             'enabled': True, 'description': 'outgoing module fan-out budget',
+             'params': {'max': 0}},
+            {'rule_id': 'ARCH-GROWTH', 'kind': 'INTERFACE_GROWTH', 'severity': 'ERROR',
+             'enabled': True, 'description': 'public interface growth budget',
+             'params': {'baseline': {'app': 0}}},
+        ]
+        files = {'src/app/main.py': 'from src.domain import model\n',
+                 'src/domain/model.py': 'VALUE = 1\n'}
+        self.build(files, contract(rules=rules))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        for rule_id in ('ARCH-FANOUT', 'ARCH-GROWTH'):
+            hits = self.findings(payload, rule_id)
+            self.assertTrue(hits, rule_id)
+            self.assertTrue(all(f['status'] == 'WARNING' for f in hits), hits)
+
+
+class WaiverTests(CheckerTestBase):
+    def waiver_contract(self, status):
+        rule = {
+            'rule_id': 'ARCH-FORBID-INFRA',
+            'kind': 'FORBIDDEN_EDGE',
+            'severity': 'ERROR',
+            'enabled': True,
+            'description': 'application code must not reach infrastructure directly',
+            'waivers': [{
+                'waiver_id': 'WVR-INFRA',
+                'reason': 'legacy call site is being removed next sprint',
+                'owner': 'fixture-owner',
+                'expires_at': '2099-01-01',
+                'status': status,
+                'scope': ['app'],
+            }],
+        }
+        return contract(
+            dependencies={'allowed': [], 'forbidden': [
+                {'from': 'app', 'to': 'infra', 'reason': 'route through the domain module',
+                 'rule_id': 'ARCH-FORBID-INFRA'}]},
+            rules=[rule])
+
+    FILES = {'src/app/main.py': 'from src.infra import db\n',
+             'src/infra/db.py': 'CONN = None\n'}
+
+    def test_active_waiver_downgrades_to_warning(self):
+        self.build(self.FILES, self.waiver_contract('ACTIVE'))
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        hits = self.findings(payload, 'ARCH-FORBID-INFRA')
+        self.assertEqual([f['status'] for f in hits], ['WARNING'], payload['findings'])
+        self.assertEqual(hits[0]['waiver_id'], 'WVR-INFRA')
+        self.assertFalse(payload['blocking'])
+
+    def test_expired_waiver_restores_blocking(self):
+        self.build(self.FILES, self.waiver_contract('EXPIRED'))
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        hits = self.findings(payload, 'ARCH-FORBID-INFRA')
+        self.assertEqual([f['status'] for f in hits], ['ERROR'], payload['findings'])
+        self.assertIsNone(hits[0]['waiver_id'])
+
+    def test_active_waiver_with_wildcard_scope_is_rejected(self):
+        bad = self.waiver_contract('ACTIVE')
+        bad['rules'][0]['waivers'][0]['scope'] = ['*']
+        self.build(self.FILES, bad)
+        code, payload = self.result()
+        self.assertEqual(code, 1, payload)
+        self.assertTrue(any('scope' in error for error in payload['contract_errors']),
+                        payload['contract_errors'])
+
+
+class ReportBindingTests(CheckerTestBase):
+    def git(self, *args):
+        return subprocess.run(['git', *args], cwd=self.root, capture_output=True, text=True)
+
+    def test_report_binds_head_sha_and_contract_version(self):
+        self.build({'src/app/main.py': 'from src.domain import model\n',
+                    'src/domain/model.py': 'VALUE = 1\n'}, contract())
+        self.assertEqual(self.git('init', '-q').returncode, 0)
+        self.git('config', 'user.email', 'fixture@example.invalid')
+        self.git('config', 'user.name', 'fixture')
+        self.assertEqual(self.git('add', '-A').returncode, 0)
+        self.assertEqual(self.git('commit', '-q', '-m', 'fixture').returncode, 0)
+        expected = self.git('rev-parse', 'HEAD').stdout.strip()
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload['head_sha'], expected)
+        self.assertEqual(payload['head_sha_source'], 'git')
+        self.assertEqual(payload['contract_version'], '1.0.0')
+
+    def test_head_sha_key_is_present_and_marked_unavailable_outside_git(self):
+        self.build({'src/app/main.py': 'x = 1\n'})
+        code, payload = self.result()
+        self.assertEqual(code, 0, payload)
+        self.assertIn('head_sha', payload)
+        self.assertIsNone(payload['head_sha'])
+        self.assertEqual(payload['head_sha_source'], 'unavailable')
+
+    def test_explicit_head_sha_override_is_validated(self):
+        self.build({'src/app/main.py': 'x = 1\n'})
+        code, payload = self.result('--head-sha', 'a' * 40)
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload['head_sha'], 'a' * 40)
+        self.assertEqual(payload['head_sha_source'], 'explicit')
+        code, payload, proc = self.run_check('--head-sha', 'not-a-sha')
+        self.assertEqual(code, 2, (payload, proc.stdout, proc.stderr))
+        self.assertIsNone(payload)
+
+
+
+
+class KitIntegrationTests(unittest.TestCase):
+    """The architecture artifacts are part of the release manifest.
+
+    `scripts/validate_kit.py:REQUIRED` is simultaneously the release payload, so
+    a module that `check.py` imports but REQUIRED omits would ship a checker that
+    crashes inside the package (and self-check h would fail). This test pins
+    both directions: every file on disk ships, and every intra-package import
+    resolves to a file that ships. It deliberately does not care *which* module
+    layout is used, only that there is exactly one, complete one.
+    """
+
+    @staticmethod
+    def manifest():
+        path = ROOT / 'scripts' / 'validate_kit.py'
+        spec = importlib.util.spec_from_file_location('validate_kit_for_architecture', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.REQUIRED
+
+    def architecture_files(self):
+        shipped = []
+        for directory in (ROOT / 'scripts' / 'architecture',
+                          ROOT / 'templates' / 'architecture'):
+            shipped += [p.relative_to(ROOT).as_posix() for p in directory.rglob('*')
+                        if p.is_file() and '__pycache__' not in p.parts]
+        shipped += [p.relative_to(ROOT).as_posix()
+                    for p in (ROOT / 'tests' / 'architecture').glob('*.py')]
+        return sorted(shipped)
+
+    def test_every_architecture_artifact_ships_in_the_release(self):
+        required = set(self.manifest())
+        missing = [rel for rel in self.architecture_files() if rel not in required]
+        self.assertEqual(missing, [],
+                         f'architecture artifacts missing from REQUIRED: {missing}')
+
+    def test_every_intra_package_import_resolves_to_a_shipped_file(self):
+        base = ROOT / 'scripts' / 'architecture'
+        required = set(self.manifest())
+        problems = []
+        for path in sorted(base.rglob('*.py')):
+            tree = ast.parse(path.read_text(encoding='utf-8'))
+            for node in ast.walk(tree):
+                for candidates in self.import_groups(node):
+                    resolved = next((candidate for candidate in candidates
+                                     if (base / candidate).is_file()), None)
+                    if resolved is None:
+                        problems.append(f'{path.relative_to(ROOT)} imports missing module '
+                                        f'{candidates[0]}')
+                        continue
+                    relative = (Path('scripts') / 'architecture' / resolved).as_posix()
+                    if relative not in required:
+                        problems.append(f'{path.relative_to(ROOT)} imports unshipped module '
+                                        f'{relative}')
+        self.assertEqual(problems, [], problems)
+
+    @staticmethod
+    def import_groups(node):
+        """Candidate file groups a single import statement needs, in `architecture`."""
+        if isinstance(node, ast.Import):
+            groups = []
+            for alias in node.names:
+                if alias.name == 'architecture' or alias.name.startswith('architecture.'):
+                    tail = alias.name[len('architecture'):].lstrip('.').replace('.', '/')
+                    groups.append([f'{tail}.py', f'{tail}/__init__.py'] if tail
+                                  else ['__init__.py'])
+            return groups
+        if not isinstance(node, ast.ImportFrom):
+            return []
+        module = (node.module or '')
+        if node.level:  # relative: `from . import x` / `from .adapters import y`
+            if not module:
+                groups = []
+                for alias in node.names:
+                    groups.append([f'{alias.name}.py', f'{alias.name}/__init__.py'])
+                return groups
+            tail = module.replace('.', '/')
+            return [[f'{tail}.py', f'{tail}/__init__.py']]
+        if module == 'architecture':
+            return [[f'{alias.name}.py', f'{alias.name}/__init__.py'] for alias in node.names]
+        if module.startswith('architecture.'):
+            tail = module[len('architecture.'):].replace('.', '/')
+            return [[f'{tail}.py', f'{tail}/__init__.py']]
+        return []
+
+
+if __name__ == '__main__':
+    unittest.main()

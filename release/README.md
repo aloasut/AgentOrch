@@ -40,6 +40,7 @@
 - e. 解压目录内 `scripts/orchestrator.py init` 与 `scripts/orchestrator.py task list` 冒烟退出码为 0（`init` 会在临时目录创建 `.orchestration/`，属预期）。
 - f. 非必要信息扫描零命中：对包内每个文本文件扫描个人路径与用户名、本仓库任务 ID、本仓库专有文档名与凭据痕迹；并断言包内不存在 `.orchestration/`、`release/`、`scripts/build_release.py`、`docs/` 等结构残留。命中即失败并打印文件与行号。凭据痕迹分两类：`ghp_`、`github_pat_`、`-----BEGIN`、`AKIA` 等精确子串；以及用精确形状正则匹配的 OpenAI 风格密钥——词边界 + `sk-` + 至少 16 位密钥字符（**不使用裸 `sk-` 子串**，否则会误命中 `task-id`、`risk-based`、`subtask-level` 等普通词，误拦正常发布）。此外，断言包内文本文件不含 CRLF（换行统一为 LF），保证构建对检出行尾不敏感；命中即失败并打印文件。
   - 扫描模式分层：**通用模式内置在脚本**（个人主目录、凭据形状等，任何克隆都适用）；**机器 / 本仓库相关模式放在 `.local/release-scan.json`**（`{"forbidden_patterns": [...]}`，逐条按精确子串匹配）。该文件缺失时跳过本地规则并打印 `extra scan patterns: none`；该文件永不入库、永不打包。
+- h. 解压目录内 `scripts/architecture/check.py --project <包根> --json` 退出码为 0，且报告为 `enforcement_mode: OFF`、`blocking: false`、`head_sha_source: "unavailable"`：发行包不含契约与 `docs/`，可选架构检查器必须降级为只读诊断，而不是猜模块边界、静默失败或声称已检查。
 - g. 结束时打印摘要：包内文件数、zip 路径、zip 大小（字节）与 zip 的校验和（校验和用于复核：同一仓库状态下重建应得到同一值）。
 
 自检失败时，脚本会**删除刚生成的、未通过自检的 zip**，并在失败信息中说明"已删除未通过自检的产物"（若删除失败则如实打印该产物路径），确保 `release/` 不会留下被误当发布物的半成品。
@@ -49,7 +50,7 @@
 `.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，于 `ubuntu-latest` 的两个 Python 版本（3.12 / 3.13）上执行同一套自检：`uv run python scripts/build_release.py`。该步骤**失败即 job 失败**，没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
 
 - **两档都跑的理由**：自检 b、d 在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`，即真正检验"该 Python 版本拿到的包是否可用"；两档各证明一次，成本是本机数秒级重复，换来不设 `if:` 条件、不会出现某档静默跳过打包步骤。
-- **CI 证明什么**：包能构建，且内置自检 a–f 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档"这类回归。
+- **CI 证明什么**：包能构建，且内置自检 a–h 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档"这类回归。
 - **CI 不证明什么**：**不证明发布本身**。CI 不校验 `{YYYYMMDD}` 命名、不生成 GitHub Release、不写发布记录，也不替你判断"这一版是否该发"。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
 
 ## 4. 发布流程
@@ -57,7 +58,7 @@
 1. 在任务库登记发布任务（唯一 ID、单一目标、允许路径与验收）。
 2. 从最新本地主分支创建独立分支 / Worktree；不在共享工作区直接构建。
 3. 构建：运行 `uv run python scripts/build_release.py` 生成 `release/agentorch-{YYYYMMDD}.zip`。
-4. 自检：确认脚本内置 a–f 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
+4. 自检：确认脚本内置 a–h 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
 5. Master 独立审查（逐条对照本文件的自检清单与验收标准）。
 6. 合并到本地主分支；合并后重新运行验证并记录结果。
 7. 发布后清理本任务分支 / Worktree（独立记账，清理由此与"合并成功"分开记录）。
@@ -68,6 +69,7 @@
   - **根目录瘦身至 3 文件**：根只保留 `AGENTS.md`、`LICENSE.md`、`VERSION.md`（原 txt→md）；`README.md`→`docs/README.md`（GitHub 仍渲染仓库首页）、`ORCHESTRATION-PROJECT.md`→`docs/PROJECT.md`（配置权威，旧根位置 fail-closed）。
   - **Agent 权威合并**：`AGENT-BOOTSTRAP.md` + `AGENT-ORCHESTRATION.md` + `AGENT-ORCHESTRATION-ACCEPTANCE.md` 三合一为 `kit/orchestration.md`（随包分发）；editions 每底座 6 份合并为 `master.md`（+`execution.md`）；`prompts/` 并入对应模板后删除；全部模板/底座文件小写命名。
   - **REQUIRED 49→33**（包 34 = 33 + MANIFEST）；分类规则同步（`docs/PROJECT.md`/`docs/PLAN.md` 归 project-profile）。
+  - **可选 Architecture Contract 检查器（#48）**：新增 `scripts/architecture/`（纯标准库，Python AST + 受工具链门控的 Rust 词法适配器）与 `templates/architecture/` 模板；`REQUIRED` 33→45（包 46）。无契约项目保持 `OFF` 只读诊断，CI 以诊断模式回归，自检 h 验证包内降级行为。
   - **统一 uv**：全部命令 `uv run python` 前缀，CI 加 setup-uv。
   - 迁移步骤见仓库 `docs/upgrade.md` 第 12 节。
 - **1.4** 相对 1.3：

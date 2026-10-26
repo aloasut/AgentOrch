@@ -47,6 +47,10 @@ Self-checks (see release/README.md for the published standard):
      to LF before archiving (see normalize_line_endings), so a surviving CRLF
      means normalization missed a file and reproducibility across checkouts is
      no longer guaranteed.
+  h. inside the extracted archive: `scripts/architecture/check.py` exits 0 with
+     a JSON report marked `enforcement_mode: OFF` and `blocking: false` (the
+     package ships no contract, so the checker must degrade to read-only
+     diagnosis instead of guessing boundaries or failing)
   g. final manifest: package file count, zip path, zip size in bytes, SHA256
 
 Scan patterns are layered on purpose. FORBIDDEN_PATTERNS holds only *generic*
@@ -237,7 +241,7 @@ def indent(text, prefix='      '):
 
 
 def run_self_check(zip_path, required, top_dir, extra_patterns=()):
-    """Run checks a-f and return a list of human-readable failure strings."""
+    """Run checks a-h and return a list of human-readable failure strings."""
     failures = []
 
     with zipfile.ZipFile(zip_path) as archive:
@@ -324,6 +328,33 @@ def run_self_check(zip_path, required, top_dir, extra_patterns=()):
             for name, lineno, display, line in scan_text(rel, text, extra_patterns):
                 failures.append(f'(f) {name}:{lineno}: forbidden pattern {display}: {line}')
 
+        # (h) the optional architecture checker must import and degrade to
+        # diagnostic mode inside a package that carries no contract (docs/ is
+        # never packaged). A non-zero exit, a guessed ENFORCE mode or a report
+        # without a bound head_sha would mean the shipped checker lies about
+        # what it checked.
+        checker = pkg_root / 'scripts' / 'architecture' / 'check.py'
+        rc, out = run([sys.executable, str(checker), '--project', str(pkg_root), '--json'],
+                      pkg_root)
+        if rc != 0:
+            failures.append(f'(h) architecture checker failed inside package (exit {rc}):\n'
+                            f'{indent(out)}')
+        else:
+            try:
+                architecture_report = json.loads(out)
+            except ValueError as exc:
+                failures.append(f'(h) architecture checker emitted no JSON report: {exc}')
+            else:
+                if architecture_report.get('enforcement_mode') != 'OFF':
+                    failures.append('(h) architecture checker must run in OFF without a contract, '
+                                    f'got {architecture_report.get("enforcement_mode")!r}')
+                if architecture_report.get('blocking'):
+                    failures.append('(h) architecture checker blocked a contract-less package')
+                if 'head_sha' not in architecture_report \
+                        or architecture_report.get('head_sha_source') != 'unavailable':
+                    failures.append('(h) architecture checker report does not bind head_sha '
+                                    '(expected an explicit "unavailable" inside the extracted zip)')
+
         # (f) line-ending assertion: no packaged *text* file may contain CRLF.
         # Text is the same rule normalize_line_endings() uses (no NUL byte and
         # valid UTF-8); binary payloads ship verbatim and are exempt. A CRLF here
@@ -388,7 +419,7 @@ def main():
 
     size = zip_path.stat().st_size
     sha256 = sha256_file(zip_path)
-    print('Release self-check passed (checks a-f).')
+    print('Release self-check passed (checks a-h).')
     print(f'  package files : {len(files)} ({len(required)} REQUIRED + {MANIFEST_NAME})')
     print(f'  manifest      : schema {manifest["schema_version"]}, suite {manifest["suite"]!r}, '
           f'format {manifest["format_version"]}')

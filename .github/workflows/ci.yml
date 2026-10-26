@@ -35,11 +35,23 @@ jobs:
       - name: Validate kit structure
         run: uv run python scripts/validate_kit.py
 
+      # This repository ships the checker but no Architecture Contract, so the
+      # run is a read-only regression: it must exit 0 in diagnostic mode and
+      # must not invent module boundaries. A project that adds a contract runs
+      # the same command and gets a non-zero exit only under ENFORCE.
+      - name: Architecture contract check (diagnostic)
+        run: uv run python scripts/architecture/check.py --project . --json
+
       - name: Run unit tests
         run: uv run python -m unittest discover -s tests
 
       - name: Syntax check
-        run: uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py
+        run: >-
+          uv run python -m py_compile
+          scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py
+          scripts/architecture/check.py scripts/architecture/contract.py
+          scripts/architecture/report.py scripts/architecture/rules.py
+          scripts/architecture/adapters/python_ast.py scripts/architecture/adapters/rust.py
 
       # Release packaging self-check. No `continue-on-error`, no `|| true`: a
       # packaging regression (missing file, broken link inside the package,

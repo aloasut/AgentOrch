@@ -15,6 +15,7 @@
 | [threat-model.md](threat-model.md) | 18 条威胁记录（威胁 / 影响 / 缓解 / 负向测试 / 剩余风险）与未接受的剩余风险 |
 | [../architecture/architecture-contract.md](../architecture/architecture-contract.md) | Architecture Contract 的模块、接口、依赖、严重级别、豁免与未配置语义 |
 | [../contracts/README.md](../contracts/README.md) | schema / fixture 索引、零依赖验证方案、CI 可选验证器边界、下游依赖、开放高风险事项 |
+| [architecture-checker.md](architecture-checker.md) | **实现记录（#48）**：检查器入口、规则与参数、适配器能力边界、接入点；非冻结设计 |
 
 ## 2. 单一权威规则
 
