@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "suite": "Agent-Orchestration Starter Kit",
+  "format_version": "1.5",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "category": "core",
+      "sha256": "4ec4b7e784da379bdaea73c0f5ff01b82dc2768aec521b9ba9024cedc0f01f0e",
+      "size": 9027
+    },
+    {
+      "path": "editions/github/master.md",
+      "category": "edition",
+      "sha256": "54dbbeb4f14729657dcd7e3586f38efeaccbf9ed9fc7b5f5d36e67c8a7d64d30",
+      "size": 18691
+    },
+    {
+      "path": "templates/task-packet.md",
+      "category": "template",
+      "sha256": "6f1c2b9a0d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcd",
+      "size": 4321
+    }
+  ]
+}

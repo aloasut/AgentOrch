@@ -1,0 +1,640 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentorch.example/schemas/update-report.schema.json",
+  "title": "AgentOrch Update Report (v1)",
+  "description": "“更新 AgentOrch”每次运行（计划或应用）的唯一机器报告定义。逐文件分类、信任、失败关闭与回滚语义见 docs/self-improvement/update-safety.md；摘要值算法见该文件 §5。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "generated_at",
+    "operation",
+    "baseline",
+    "target",
+    "workspace",
+    "classification",
+    "backup",
+    "rollback",
+    "result",
+    "post_apply_checks"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "report_id": {
+      "type": "string",
+      "pattern": "^UPD-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{6}$",
+      "description": "稳定报告 ID（UTC 时间 + 短指纹）；同一次运行重试使用新 ID，不覆盖旧报告。"
+    },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "operation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command", "edition", "mode"],
+      "properties": {
+        "command": { "const": "update_agentorch" },
+        "edition": { "enum": ["local", "github"] },
+        "mode": {
+          "enum": ["PLAN", "APPLY"],
+          "description": "PLAN 只下载 / 校验 / 分类并输出计划，不写项目文件；APPLY 才在隔离分支 / Worktree 落变更。"
+        },
+        "branch": { "type": ["string", "null"], "maxLength": 200 },
+        "worktree": { "type": ["string", "null"], "maxLength": 500 }
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["installed_version", "installed_format_version", "manifest_sha256", "head_sha", "baseline_status"],
+      "properties": {
+        "installed_version": { "type": ["string", "null"], "maxLength": 100 },
+        "installed_format_version": { "type": ["string", "null"], "pattern": "^[0-9]+\\.[0-9]+$" },
+        "manifest_sha256": {
+          "description": "当前已安装清单文件自身的 SHA-256；缺失 / 不可读为 null。",
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            { "type": "null" }
+          ]
+        },
+        "head_sha": {
+          "description": "更新前项目 head SHA；非 Git 项目为 null。",
+          "anyOf": [
+            { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+            { "type": "null" }
+          ]
+        },
+        "baseline_status": {
+          "enum": ["VALID", "INVALID_BASELINE", "MISSING"],
+          "description": "VALID 才允许三方比较；MISSING / INVALID_BASELINE 只做只读诊断并提供手工迁移路线。"
+        },
+        "notes": { "type": ["string", "null"], "maxLength": 1000 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "baseline_status": { "const": "VALID" } },
+            "required": ["baseline_status"]
+          },
+          "then": {
+            "required": ["installed_version", "installed_format_version", "manifest_sha256"],
+            "properties": {
+              "installed_version": { "type": "string", "minLength": 1 },
+              "installed_format_version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$" },
+              "manifest_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+            }
+          }
+        }
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "release_tag", "version", "asset_name", "asset_sha256", "manifest_sha256", "retrieved_at", "verification"],
+      "properties": {
+        "repository": { "const": "ctrlshiftaltdel/AgentOrch" },
+        "release_tag": {
+          "type": ["string", "null"],
+          "pattern": "^v[0-9]+\\.[0-9]+(\\.[0-9]+)?$",
+          "description": "官方 Release tag。接受 `v<major>.<minor>` 与 `v<major>.<minor>.<patch>`（本仓库现有 tag 形如 v1.5）；比较时缺失的 patch 按 0 归一，显示保留原 tag。"
+        },
+        "version": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$",
+          "description": "规范化的套件版本；由 tag / 清单归一得到，缺失 patch 时按 0 比较。"
+        },
+        "asset_name": {
+          "type": ["string", "null"],
+          "pattern": "^[A-Za-z0-9._-]+\\.zip$",
+          "description": "官方 Release 资产名；不得接受任意 URL 或分支构建产物。"
+        },
+        "asset_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "manifest_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "retrieved_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "资产下载时间；未联网 / 未下载为 null。"
+        },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "checks"],
+          "properties": {
+            "status": {
+              "enum": ["VERIFIED", "UNSAFE_PACKAGE", "NOT_RUN"],
+              "description": "VERIFIED 要求全部校验项 PASS；任一 FAIL 为 UNSAFE_PACKAGE；未执行为 NOT_RUN（不得折算为通过）。"
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["check", "result"],
+                "properties": {
+                  "check": {
+                    "enum": [
+                      "SOURCE_ALLOWLIST",
+                      "RELEASE_CHANNEL",
+                      "ASSET_SHA256",
+                      "MANIFEST_SCHEMA",
+                      "MANIFEST_SHA256",
+                      "MEMBER_PATHS",
+                      "SYMLINKS",
+                      "FILE_SET",
+                      "EXPECTED_LAYOUT",
+                      "VERSION_MATCH"
+                    ]
+                  },
+                  "result": { "enum": ["PASS", "FAIL", "NOT_RUN"] },
+                  "detail": { "type": ["string", "null"], "maxLength": 1000 }
+                }
+              }
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": { "status": { "const": "VERIFIED" } },
+                "required": ["status"]
+              },
+              "then": {
+                "properties": {
+                  "checks": {
+                    "minItems": 1,
+                    "not": {
+                      "contains": {
+                        "properties": { "result": { "enum": ["FAIL", "NOT_RUN"] } },
+                        "required": ["result"]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "if": {
+                "properties": { "status": { "const": "UNSAFE_PACKAGE" } },
+                "required": ["status"]
+              },
+              "then": {
+                "properties": {
+                  "checks": {
+                    "contains": {
+                      "properties": { "result": { "const": "FAIL" } },
+                      "required": ["result"]
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "workspace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dirty", "dirty_paths", "action"],
+      "properties": {
+        "dirty": { "type": "boolean" },
+        "dirty_paths": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "description": "未提交 / 未跟踪路径清单。只列出与保全，不得自动 stash、丢弃或覆盖。"
+        },
+        "action": {
+          "enum": ["NONE", "ISOLATED_BRANCH", "STOPPED_DIRTY_WORKTREE"],
+          "description": "脏工作区优先隔离到任务分支 / Worktree；无法安全隔离时 STOPPED_DIRTY_WORKTREE。"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "dirty": { "const": true } },
+            "required": ["dirty"]
+          },
+          "then": {
+            "properties": { "dirty_paths": { "minItems": 1 } },
+            "required": ["dirty_paths"]
+          }
+        },
+        {
+          "if": {
+            "properties": { "dirty": { "const": false } },
+            "required": ["dirty"]
+          },
+          "then": {
+            "properties": { "dirty_paths": { "maxItems": 0 } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "action": { "const": "STOPPED_DIRTY_WORKTREE" } },
+            "required": ["action"]
+          },
+          "then": {
+            "properties": { "dirty": { "const": true } }
+          }
+        }
+      ]
+    },
+    "classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["counts", "files"],
+      "properties": {
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "UPSTREAM_UNCHANGED",
+            "ALREADY_CURRENT",
+            "LOCAL_MODIFICATION",
+            "THREE_WAY_CONFLICT",
+            "PROJECT_OWNED",
+            "UNKNOWN_FILE",
+            "UPSTREAM_REMOVAL",
+            "UPSTREAM_RENAME",
+            "UNSAFE_PACKAGE",
+            "INVALID_BASELINE"
+          ],
+          "properties": {
+            "UPSTREAM_UNCHANGED": { "type": "integer", "minimum": 0 },
+            "ALREADY_CURRENT": { "type": "integer", "minimum": 0 },
+            "LOCAL_MODIFICATION": { "type": "integer", "minimum": 0 },
+            "THREE_WAY_CONFLICT": { "type": "integer", "minimum": 0 },
+            "PROJECT_OWNED": { "type": "integer", "minimum": 0 },
+            "UNKNOWN_FILE": { "type": "integer", "minimum": 0 },
+            "UPSTREAM_REMOVAL": { "type": "integer", "minimum": 0 },
+            "UPSTREAM_RENAME": { "type": "integer", "minimum": 0 },
+            "UNSAFE_PACKAGE": { "type": "integer", "minimum": 0 },
+            "INVALID_BASELINE": { "type": "integer", "minimum": 0 }
+          },
+          "description": "分类计数。各项之和必须等于 files 长度（语义检查，标准 JSON Schema 无法表达）。"
+        },
+        "files": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/file_classification" }
+        }
+      }
+    },
+    "backup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "location", "created_at", "verified"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "location": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "项目外或 Git 忽略目录中的可恢复备份位置；必须可定位，不得只写 \"backed up\"。"
+        },
+        "created_at": { "type": ["string", "null"], "format": "date-time" },
+        "verified": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "required": { "const": true } },
+            "required": ["required"]
+          },
+          "then": {
+            "required": ["location", "created_at"],
+            "properties": {
+              "location": { "type": "string", "minLength": 1 },
+              "created_at": { "type": "string", "format": "date-time" }
+            }
+          }
+        }
+      ]
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "attempted", "result"],
+      "properties": {
+        "required": { "type": "boolean" },
+        "attempted": { "type": "boolean" },
+        "result": {
+          "enum": ["NOT_NEEDED", "SUCCEEDED", "FAILED", "NOT_RUN"],
+          "description": "FAILED 时必须整体 BLOCKED；回滚结论必须有可定位证据，不得声称已回滚而未验证。"
+        },
+        "evidence": { "type": ["string", "null"], "maxLength": 1000 }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "attempted": { "const": true } },
+            "required": ["attempted"]
+          },
+          "then": {
+            "properties": { "required": { "const": true } }
+          }
+        }
+      ]
+    },
+    "result": {
+      "enum": [
+        "PLANNED",
+        "APPLIED",
+        "STOPPED_CONFLICT",
+        "STOPPED_UNSAFE_PACKAGE",
+        "STOPPED_INVALID_BASELINE",
+        "STOPPED_DIRTY_WORKTREE",
+        "ROLLED_BACK",
+        "BLOCKED"
+      ],
+      "description": "运行终局。只有 APPLIED 表示无冲突变更集已落盘；其余均为未应用或需人工决定。"
+    },
+    "post_apply_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1, "maxLength": 300 },
+          "command": { "type": ["string", "null"], "maxLength": 500 },
+          "exit_code": { "type": ["integer", "null"] },
+          "status": { "enum": ["PASS", "FAIL", "NOT_RUN"] }
+        }
+      },
+      "description": "应用后的规则包校验 / 单测 / 漂移诊断 / 项目验证命令结果；未执行的每项写 NOT_RUN 并说明原因。"
+    },
+    "commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "exit_code"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "exit_code": { "type": "integer" },
+          "ran_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      }
+    },
+    "human_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["decision_id", "question", "options", "status"],
+        "properties": {
+          "decision_id": { "type": "string", "pattern": "^HD-[A-Z0-9-]{2,24}$" },
+          "question": { "type": "string", "minLength": 8, "maxLength": 500 },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": { "type": "string", "minLength": 1, "maxLength": 300 }
+          },
+          "status": { "enum": ["OPEN", "DECIDED"] },
+          "decided_by": { "type": ["string", "null"], "maxLength": 120 },
+          "decided_at": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "description": "本次运行触及的人工决策点。OPEN 存在时整体不得 APPLIED。"
+    },
+    "head_sha_before": {
+      "anyOf": [
+        { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        { "type": "null" }
+      ]
+    },
+    "head_sha_after": {
+      "anyOf": [
+        { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "$defs": {
+    "sha256_or_null": {
+      "anyOf": [
+        { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        { "type": "null" }
+      ]
+    },
+    "file_classification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "class", "baseline_sha256", "current_sha256", "target_sha256", "decision"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512,
+          "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$",
+          "not": { "pattern": "(^|/)\\.\\.(/|$)" }
+        },
+        "class": {
+          "enum": [
+            "UPSTREAM_UNCHANGED",
+            "ALREADY_CURRENT",
+            "LOCAL_MODIFICATION",
+            "THREE_WAY_CONFLICT",
+            "PROJECT_OWNED",
+            "UNKNOWN_FILE",
+            "UPSTREAM_REMOVAL",
+            "UPSTREAM_RENAME",
+            "UNSAFE_PACKAGE",
+            "INVALID_BASELINE"
+          ],
+          "description": "逐文件分类唯一枚举，与 docs/self-improvement/update-safety.md §3 一致；Issue #51 的全部分类都在此。" 
+        },
+        "baseline_sha256": { "$ref": "#/$defs/sha256_or_null" },
+        "current_sha256": { "$ref": "#/$defs/sha256_or_null" },
+        "target_sha256": { "$ref": "#/$defs/sha256_or_null" },
+        "decision": {
+          "enum": ["APPLIED", "KEPT_LOCAL", "CONFLICT_REPORTED", "DEFERRED", "BLOCKED", "NOT_APPLICABLE"],
+          "description": "实际动作。冲突 / 上游删除 / 未知文件默认 KEPT_LOCAL 或 CONFLICT_REPORTED，绝不 APPLIED。"
+        },
+        "notes": { "type": ["string", "null"], "maxLength": 1000 }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "result": { "const": "APPLIED" } },
+        "required": ["result"]
+      },
+      "then": {
+        "properties": {
+          "operation": {
+            "type": "object",
+            "properties": { "mode": { "const": "APPLY" } },
+            "required": ["mode"]
+          },
+          "target": {
+            "type": "object",
+            "properties": {
+              "verification": {
+                "type": "object",
+                "properties": { "status": { "const": "VERIFIED" } },
+                "required": ["status"]
+              }
+            },
+            "required": ["verification"]
+          },
+          "workspace": {
+            "type": "object",
+            "properties": {
+              "action": { "enum": ["NONE", "ISOLATED_BRANCH"] }
+            }
+          },
+          "classification": {
+            "type": "object",
+            "properties": {
+              "files": {
+                "not": {
+                  "contains": {
+                    "properties": {
+                      "class": {
+                        "enum": [
+                          "THREE_WAY_CONFLICT",
+                          "UPSTREAM_REMOVAL",
+                          "UPSTREAM_RENAME",
+                          "UNSAFE_PACKAGE",
+                          "INVALID_BASELINE"
+                        ]
+                      }
+                    },
+                    "required": ["class"]
+                  }
+                }
+              },
+              "counts": {
+                "properties": {
+                  "THREE_WAY_CONFLICT": { "const": 0 },
+                  "UPSTREAM_REMOVAL": { "const": 0 },
+                  "UPSTREAM_RENAME": { "const": 0 },
+                  "UNSAFE_PACKAGE": { "const": 0 },
+                  "INVALID_BASELINE": { "const": 0 }
+                }
+              }
+            }
+          },
+          "backup": {
+            "type": "object",
+            "properties": {
+              "required": { "const": true },
+              "verified": { "const": true }
+            },
+            "required": ["required", "verified"]
+          },
+          "human_decisions": {
+            "type": "array",
+            "not": {
+              "contains": {
+                "properties": { "status": { "const": "OPEN" } },
+                "required": ["status"]
+              }
+            }
+          }
+        },
+        "required": [
+          "operation",
+          "target",
+          "workspace",
+          "classification",
+          "backup",
+          "human_decisions"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": { "result": { "const": "STOPPED_UNSAFE_PACKAGE" } },
+        "required": ["result"]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "type": "object",
+            "properties": {
+              "verification": {
+                "type": "object",
+                "properties": { "status": { "const": "UNSAFE_PACKAGE" } },
+                "required": ["status"]
+              }
+            },
+            "required": ["verification"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": { "result": { "const": "STOPPED_DIRTY_WORKTREE" } },
+        "required": ["result"]
+      },
+      "then": {
+        "properties": {
+          "workspace": {
+            "type": "object",
+            "properties": { "action": { "const": "STOPPED_DIRTY_WORKTREE" } },
+            "required": ["action"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "rollback": {
+            "type": "object",
+            "properties": { "result": { "const": "FAILED" } },
+            "required": ["result"]
+          }
+        },
+        "required": ["rollback"]
+      },
+      "then": {
+        "properties": { "result": { "const": "BLOCKED" } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "baseline": {
+            "type": "object",
+            "properties": { "baseline_status": { "const": "INVALID_BASELINE" } },
+            "required": ["baseline_status"]
+          }
+        },
+        "required": ["baseline"]
+      },
+      "then": {
+        "properties": { "result": { "enum": ["STOPPED_INVALID_BASELINE", "BLOCKED"] } }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "classification": {
+            "type": "object",
+            "properties": {
+              "files": {
+                "contains": {
+                  "properties": { "class": { "const": "UNSAFE_PACKAGE" } },
+                  "required": ["class"]
+                }
+              }
+            },
+            "required": ["files"]
+          }
+        },
+        "required": ["classification"]
+      },
+      "then": {
+        "properties": { "result": { "enum": ["STOPPED_UNSAFE_PACKAGE", "BLOCKED"] } }
+      }
+    }
+  ]
+}

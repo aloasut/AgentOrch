@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "registry_updated_at": "2026-10-26T00:00:00Z",
+  "sources": [
+    {
+      "source_id": "talkdnd",
+      "repository": "ctrlshiftaltdel/TalkDND",
+      "enabled": true,
+      "source_type": "downstream_project",
+      "access_mode": "public",
+      "evidence_scope": ["pull_request", "issue", "review", "ci_run"],
+      "lookback_days": 90,
+      "scan_cursor": {
+        "last_scan_status": "OK",
+        "last_scan_started_at": "2026-10-25T12:00:00Z",
+        "last_successful_scan_at": "2026-10-25T12:04:00Z",
+        "last_scanned_commit": "0123456789abcdef0123456789abcdef01234567",
+        "blocked_reason": null
+      },
+      "trust": {
+        "content_trust": "untrusted_data",
+        "allowed_use": ["evidence_only", "synthetic_fixture_source"],
+        "redaction_required": true,
+        "may_override_rules": false,
+        "notes": "合成 fixture 只能独立编写，不得整段复制来源代码。"
+      },
+      "inclusion_filters": ["label:regression"],
+      "exclusion_filters": ["label:private"]
+    },
+    {
+      "source_id": "agentmgr",
+      "repository": "ctrlshiftaltdel/AgentMgr",
+      "enabled": false,
+      "source_type": "downstream_project",
+      "access_mode": "authorized_private",
+      "evidence_scope": ["pull_request", "issue", "ci_run"],
+      "lookback_days": 30,
+      "scan_cursor": null,
+      "trust": {
+        "content_trust": "untrusted_data",
+        "allowed_use": ["evidence_only"],
+        "redaction_required": true,
+        "may_override_rules": false
+      },
+      "owner_approved_notes": "停用后不再扫描；已形成的通用教训与决策记录保留。"
+    }
+  ]
+}

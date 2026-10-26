@@ -1,0 +1,87 @@
+{
+  "schema_version": "1.0",
+  "report_id": "UPD-20261026T040000Z-4d5e6f",
+  "generated_at": "2026-10-26T04:00:00Z",
+  "operation": {
+    "command": "update_agentorch",
+    "edition": "local",
+    "mode": "APPLY",
+    "branch": "task/update-agentorch",
+    "worktree": "project/external/worktree"
+  },
+  "baseline": {
+    "installed_version": "1.5",
+    "installed_format_version": "1.5",
+    "manifest_sha256": "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc55dd66",
+    "head_sha": "0123456789abcdef0123456789abcdef01234567",
+    "baseline_status": "VALID",
+    "notes": null
+  },
+  "target": {
+    "repository": "ctrlshiftaltdel/AgentOrch",
+    "release_tag": "v1.6",
+    "version": "1.6",
+    "asset_name": "agentorch-20261101.zip",
+    "asset_sha256": "bb11cc22dd33ee44ff55aa66bb77cc88dd99ee00ff11aa22bb33cc44dd55ee66",
+    "manifest_sha256": "cc11dd22ee33ff44aa55bb66cc77dd88ee99ff00aa11bb22cc33dd44ee55ff66",
+    "retrieved_at": "2026-10-26T03:58:00Z",
+    "verification": {
+      "status": "VERIFIED",
+      "checks": [
+        { "check": "SOURCE_ALLOWLIST", "result": "PASS", "detail": null },
+        { "check": "ASSET_SHA256", "result": "PASS", "detail": null },
+        { "check": "MEMBER_PATHS", "result": "PASS", "detail": null }
+      ]
+    }
+  },
+  "workspace": {
+    "dirty": true,
+    "dirty_paths": ["docs/PROJECT.md"],
+    "action": "ISOLATED_BRANCH"
+  },
+  "classification": {
+    "counts": {
+      "UPSTREAM_UNCHANGED": 0,
+      "ALREADY_CURRENT": 0,
+      "LOCAL_MODIFICATION": 0,
+      "THREE_WAY_CONFLICT": 1,
+      "PROJECT_OWNED": 0,
+      "UNKNOWN_FILE": 0,
+      "UPSTREAM_REMOVAL": 0,
+      "UPSTREAM_RENAME": 0,
+      "UNSAFE_PACKAGE": 0,
+      "INVALID_BASELINE": 0
+    },
+    "files": [
+      {
+        "path": "kit/orchestration.md",
+        "class": "THREE_WAY_CONFLICT",
+        "baseline_sha256": "dd11ee22ff33aa44bb55cc66dd77ee88ff99aa00bb11cc22dd33ee44ff55aa66",
+        "current_sha256": "ee11ff22aa33bb44cc55dd66ee77ff88aa99bb00cc11dd22ee33ff44aa55bb66",
+        "target_sha256": "ff11aa22bb33cc44dd55ee66ff77aa88bb99cc00dd11ee22ff33aa44bb55cc66",
+        "decision": "CONFLICT_REPORTED",
+        "notes": "双边修改必须停止，不得自动应用。"
+      }
+    ]
+  },
+  "backup": {
+    "required": true,
+    "location": "/tmp/agentorch-backup-20261026",
+    "created_at": "2026-10-26T03:59:00Z",
+    "verified": true
+  },
+  "rollback": {
+    "required": false,
+    "attempted": false,
+    "result": "NOT_NEEDED",
+    "evidence": null
+  },
+  "result": "APPLIED",
+  "post_apply_checks": [
+    { "name": "validate_kit", "command": "python3 scripts/validate_kit.py", "exit_code": 0, "status": "PASS" }
+  ],
+  "commands": [],
+  "human_decisions": [],
+  "head_sha_before": "0123456789abcdef0123456789abcdef01234567",
+  "head_sha_after": "fedcba9876543210fedcba9876543210fedcba98"
+}

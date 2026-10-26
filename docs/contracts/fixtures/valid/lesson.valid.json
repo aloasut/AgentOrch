@@ -1,0 +1,64 @@
+{
+  "schema_version": "1.0",
+  "lesson_id": "LSN-TALKDND-001",
+  "title": "跨模块共享状态的写入点缺少统一锁保护",
+  "content_class": "GENERAL_LESSON",
+  "status": "GENERALIZED",
+  "evidence_level": "E3_FIXED_WITH_TEST",
+  "source": {
+    "source_id": "talkdnd",
+    "evidence_kind": "pull_request",
+    "evidence_urls": [
+      "https://github.com/ctrlshiftaltdel/TalkDND/pull/1234"
+    ],
+    "observed_at": "2026-09-18T09:00:00Z",
+    "captured_at": "2026-10-25T12:04:00Z",
+    "source_commit": "0123456789abcdef0123456789abcdef01234567"
+  },
+  "observation": {
+    "observed_fact": "同一存档状态被两个入口读改写，修复 PR 补上了锁与复现测试。",
+    "repro_conditions": "两个入口并发写入同一状态目录时，最终状态丢失其中一次更新。",
+    "root_cause": "写入路径绕过统一状态服务，直接改写共享可变状态。",
+    "impact": "并发下数据丢失，且普通单线程测试无法发现。",
+    "why_missed": "既有测试只覆盖单入口顺序写入，没有跨模块写入点清单。"
+  },
+  "fingerprint": {
+    "algorithm": "sha256-normalized-v1",
+    "value": "6f1c2b9a0d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcd",
+    "normalized_fields": ["root_cause", "impact", "affected_surface", "suggested_action_target"]
+  },
+  "duplicate_of": null,
+  "conflicts_with": [
+    {
+      "lesson_id": "LSN-AGENTMGR-003",
+      "conflict_type": "OVERLAPS",
+      "resolution": "RESOLVED_BY_OWNER",
+      "resolution_evidence": "Issue #56 的规则范围划界：两条教训分别适用于不同层。"
+    }
+  ],
+  "applicability": {
+    "scope": "agentorch_general",
+    "applies_to": ["kit/orchestration.md", "跨模块不变量检查"],
+    "excluded_contexts": ["纯函数式无共享状态的项目"]
+  },
+  "suggested_action": {
+    "target": "TEST",
+    "summary": "在任务包负向场景中要求列出共享可变状态的全部写入点并给出并发交错测试。",
+    "cost": "MEDIUM",
+    "risk": "LOW",
+    "validation_command": null
+  },
+  "links": {
+    "issues": [55],
+    "pull_requests": [],
+    "modules": ["state"]
+  },
+  "decision": {
+    "decided_by": "project-owner",
+    "decided_at": "2026-10-26T00:00:00Z",
+    "outcome": "ADOPT",
+    "rationale": "该根因可泛化到任意有共享可变状态的项目，且已有修复与测试证据。"
+  },
+  "created_at": "2026-10-25T12:10:00Z",
+  "updated_at": "2026-10-26T00:00:00Z"
+}

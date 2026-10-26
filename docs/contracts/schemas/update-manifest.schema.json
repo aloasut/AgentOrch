@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentorch.example/schemas/update-manifest.schema.json",
+  "title": "AgentOrch Release Manifest (v1)",
+  "description": "官方发行包内 MANIFEST.json 的唯一冻结定义。字段与 scripts/check_drift.py 的 build_manifest / validate 规则一致，本契约不新增字段、不改分类。信任与校验流程见 docs/self-improvement/update-safety.md。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "suite", "format_version", "files"],
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "清单格式版本。实现只接受已知版本；未知版本必须失败关闭（INVALID_BASELINE / UNSAFE_PACKAGE），不得按默认值猜读。"
+    },
+    "suite": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "套件名（来自 VERSION.md）。"
+    },
+    "format_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "套件 Format 版本（如 1.5）。旧 Format 的兼容矩阵由升级指南负责，不在本 schema 内扩展。"
+    },
+    "files": {
+      "type": "array",
+      "description": "包内文件条目，按 path 排序。MANIFEST.json 不得列出自身。",
+      "items": { "$ref": "#/$defs/file_entry" }
+    }
+  },
+  "$defs": {
+    "package_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$",
+      "not": { "pattern": "(^|/)\\.\\.(/|$)" },
+      "description": "包内相对路径：禁止绝对路径、盘符、反斜杠、`.` / `..` 段与路径穿越。"
+    },
+    "file_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "category", "sha256", "size"],
+      "properties": {
+        "path": {
+          "allOf": [
+            { "$ref": "#/$defs/package_path" },
+            {
+              "not": { "const": "MANIFEST.json" }
+            }
+          ]
+        },
+        "category": {
+          "enum": ["core", "edition", "template", "project-profile"],
+          "description": "上游分类，与 scripts/check_drift.py 的 classify_upstream 一致。project-extension / unknown 是下游诊断分类，不得出现在官方清单中。"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "包内实际字节（文本已按 LF 归一）的 SHA-256，小写十六进制。"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "包内实际字节数。必须与 sha256 指向同一份字节。"
+        }
+      }
+    }
+  }
+}

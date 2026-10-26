@@ -1,0 +1,186 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentorch.example/schemas/source-registry.schema.json",
+  "title": "Experience Source Registry (v1)",
+  "description": "可配置经验来源注册表的唯一机器定义。字段语义与信任规则见 docs/self-improvement/sources-and-trust.md；来源取值（TalkDND / AgentMgr）由实现任务 #49 填写，不在本 schema 中。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "sources"],
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "description": "注册表格式版本。不支持的版本必须失败关闭，不得按默认值读取。"
+    },
+    "registry_updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "注册表最后一次人工变更时间（UTC，RFC 3339）。"
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 0,
+      "description": "已登记来源；空数组合法，表示当前没有可扫描来源（不是错误，也不得凭空补默认来源）。source_id 在数组内必须唯一；唯一性为语义检查（标准 JSON Schema 无法表达跨项唯一键），见 docs/contracts/README.md §4。移除来源 = 删除条目（可删至空）；停用来源 = 保留条目并置 enabled=false。两种操作都不删除已形成的 Lesson 与历史决策记录。",
+      "items": { "$ref": "#/$defs/source" }
+    }
+  },
+  "$defs": {
+    "sha1": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{40}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "repository",
+        "enabled",
+        "source_type",
+        "access_mode",
+        "evidence_scope",
+        "lookback_days",
+        "scan_cursor",
+        "trust"
+      ],
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{1,31}$",
+          "description": "稳定 ID（小写字母开头，1–32 字符）。一旦登记不得复用为其它仓库；停用只改 enabled。"
+        },
+        "repository": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$",
+          "description": "规范化 GitHub owner/repo。不得写 URL、分支、CLI 参数或凭据。"
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "false 表示停用：不再扫描，不删除已形成的教训与历史决策记录。"
+        },
+        "source_type": {
+          "enum": ["downstream_project", "upstream_release", "documentation"],
+          "description": "来源类别只影响可读取的证据范围说明，不改变信任等级（全部为不可信数据）。"
+        },
+        "access_mode": {
+          "enum": ["public", "authorized_private"],
+          "description": "authorized_private 必须已有项目所有者授权的访问机制；无权访问时标 BLOCKED，不得绕过权限。"
+        },
+        "evidence_scope": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["pull_request", "issue", "review", "commit", "ci_run"] },
+          "description": "允许采集的证据种类；默认最小必要范围，不得整仓镜像。"
+        },
+        "lookback_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365,
+          "description": "首次扫描或游标丢失时的回溯窗口（天）。"
+        },
+        "scan_cursor": {
+          "description": "增量扫描游标。null 表示从未成功扫描；状态语义见 docs/self-improvement/sources-and-trust.md §4。",
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/scan_cursor" }
+          ]
+        },
+        "trust": { "$ref": "#/$defs/trust" },
+        "inclusion_filters": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": "可选的正向过滤（标签、路径前缀等），由实现任务解释；不得把过滤条件写成程序分支。"
+        },
+        "exclusion_filters": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": "可选的排除过滤；命中即不采集，且必须在扫描报告中计数。"
+        },
+        "owner_approved_notes": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "项目所有者批准的适用范围说明。不得包含凭据、个人路径或私有数据。"
+        }
+      }
+    },
+    "scan_cursor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["last_scan_status", "last_scan_started_at"],
+      "properties": {
+        "last_scan_status": {
+          "enum": ["OK", "PARTIAL", "BLOCKED", "UNKNOWN"],
+          "description": "最近一次扫描终局。OK 才可推进增量水位；PARTIAL / BLOCKED / UNKNOWN 不得被当作已扫描完成。scan_cursor 为 null 表示从未扫描，不使用额外的 NEVER 值。"
+        },
+        "last_scan_started_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "最近一次扫描开始时间（UTC）；时间戳必须单调递增，倒退视为状态不明。"
+        },
+        "last_successful_scan_at": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "最后一次 OK 扫描完成时间；从未成功为 null。"
+        },
+        "last_scanned_commit": {
+          "description": "最后一次 OK 扫描覆盖到的来源提交；从未成功为 null。",
+          "anyOf": [
+            { "$ref": "#/$defs/sha1" },
+            { "type": "null" }
+          ]
+        },
+        "blocked_reason": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "BLOCKED / UNKNOWN 的机器可读理由类别（如 not_found、forbidden、rate_limited、network_unavailable）。缺失时不得写 BLOCKED。"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "last_scan_status": { "const": "OK" } },
+            "required": ["last_scan_status"]
+          },
+          "then": {
+            "required": ["last_successful_scan_at", "last_scanned_commit"],
+            "properties": {
+              "last_successful_scan_at": { "type": "string", "format": "date-time" },
+              "last_scanned_commit": { "$ref": "#/$defs/sha1" }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "last_scan_status": { "enum": ["BLOCKED", "UNKNOWN"] } },
+            "required": ["last_scan_status"]
+          },
+          "then": {
+            "required": ["blocked_reason"],
+            "properties": { "blocked_reason": { "type": "string", "minLength": 1 } }
+          }
+        }
+      ]
+    },
+    "trust": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["content_trust", "allowed_use", "redaction_required", "may_override_rules"],
+      "description": "来源信任声明。所有取值均由契约固定，不允许按来源放宽。",
+      "properties": {
+        "content_trust": { "const": "untrusted_data" },
+        "allowed_use": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["evidence_only", "synthetic_fixture_source"] },
+          "description": "evidence_only：只能作为证据；synthetic_fixture_source：可据此独立编写合成 fixture。"
+        },
+        "redaction_required": { "const": true },
+        "may_override_rules": { "const": false },
+        "notes": { "type": "string", "maxLength": 500 }
+      }
+    }
+  }
+}

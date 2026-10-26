@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "suite": "Agent-Orchestration Starter Kit",
+  "format_version": "1.5",
+  "files": [
+    {
+      "path": "../secrets.env",
+      "category": "core",
+      "sha256": "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc55dd66",
+      "size": 12
+    }
+  ]
+}

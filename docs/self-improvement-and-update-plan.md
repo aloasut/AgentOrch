@@ -1,7 +1,7 @@
 # 自我完善与安全更新机制规划
 
-- 文档版本：v1.0（规划基线）
-- 状态：待契约冻结；未实现的能力不得对外宣称已支持
+- 文档版本：v1.1（契约冻结状态说明更新）
+- 状态：S0 设计契约已由 Issue #47 冻结（schema / fixtures 见 [contracts/README.md](contracts/README.md)，语义见 [self-improvement/README.md](self-improvement/README.md)、[architecture/architecture-contract.md](architecture/architecture-contract.md)）；实现任务 #48–#53 只能引用冻结结论，尚未有任何检查器、更新脚本或运行时，未实现的能力不得对外宣称已支持
 - 适用仓库：AgentOrch；首批经验来源为 TalkDND、AgentMgr
 - 上位设计目标：[PLAN.md](PLAN.md)
 - 阶段计划：[implementation-plan.md](implementation-plan.md)
