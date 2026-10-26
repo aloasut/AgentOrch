@@ -16,6 +16,7 @@
 | [../architecture/architecture-contract.md](../architecture/architecture-contract.md) | Architecture Contract 的模块、接口、依赖、严重级别、豁免与未配置语义 |
 | [../contracts/README.md](../contracts/README.md) | schema / fixture 索引、零依赖验证方案、CI 可选验证器边界、下游依赖、开放高风险事项 |
 | [architecture-checker.md](architecture-checker.md) | **实现记录（#48）**：检查器入口、规则与参数、适配器能力边界、接入点；非冻结设计 |
+| [self-improvement-loop.md](self-improvement-loop.md) | **实现记录（#50）**：触发边界、恢复 → 采集 → 规划 → 派发 → 审查 → 闭环报告、人工决策门、双 edition 载体与限制；非冻结设计 |
 
 ## 2. 单一权威规则
 

@@ -12,6 +12,9 @@ Four modules, one direction of dependency:
               machine, the ``sha256-normalized-v1`` fingerprint, dedup and
               conflict handling, and report rendering.
 ``pipeline``  wires the three together for one scan; ``cli`` is the command line.
+``planning``  routes a user trigger and gates improvement proposals (#50).
+``orchestration``  runs one trigger → restore → scan → plan → register → report
+              pass, with an injected carrier and no approval / merge step (#50).
 
 Every string that comes from a source is *data*. It is carried in explicit data
 fields (``title``, ``labels`` ...), never rendered as an instruction, and never
@@ -23,4 +26,4 @@ Frozen semantics are defined in ``docs/self-improvement/sources-and-trust.md``,
 them. Standard library only.
 """
 
-__all__ = ['sources', 'collect', 'lessons', 'pipeline']
+__all__ = ['sources', 'collect', 'lessons', 'pipeline', 'planning', 'orchestration']
