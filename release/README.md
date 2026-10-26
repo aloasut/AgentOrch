@@ -22,7 +22,7 @@
 - **`check_drift.py` 的只读边界**：该脚本随包发布，供下游项目做漂移诊断。它只读取（`read_bytes` / `read_text`）、列目录，**从不创建、重命名、删除或写入项目根下的任何文件**；诊断只报告差异与建议，是否对齐由项目所有者决定。
 - 发布时 `docs/PROJECT.md` 自动替换为待填模板 `templates/project.md`，即分发包总是随附 FILL_IN 模板，首次使用时填写。
 - **自我完善与安全更新资产**：`scripts/self_improvement/`（来源注册表、采集、Lesson、规划与闭环）、`scripts/update_agentorch/`（#51 安全更新引擎与 #52「更新 AgentOrch」自然语言入口 `entry.py`）、`templates/self-improvement/`（提案 / 任务包 / 闭环报告模板、`sources.example.json` 注册表示例与包内操作说明 `README.md`）全部进入 `REQUIRED`，随包发布。包内说明与测试只读模板 / 脚本路径，不读 `docs/`。
-- **仓库专属测试（不随包）**：`tests/update_agentorch/test_report.py` 读取冻结 fixture `docs/contracts/fixtures/`，因此保留为 repository-only，不加入 `REQUIRED`；包内仍通过随包发布的 `tests/update_agentorch/`（引擎、分类、依赖、入口合成升级）与 `tests/self_improvement/` 测试已发布入口和引擎。
+- **仓库专属测试（不随包）**：`tests/update_agentorch/test_report.py` 读取冻结 fixture `docs/contracts/fixtures/`，因此保留为 repository-only，不加入 `REQUIRED`；包内仍通过随包发布的 `tests/update_agentorch/`（引擎、分类、依赖、入口合成升级）与 `tests/self_improvement/` 测试已发布入口和引擎。`tests/self_improvement/test_acceptance_report.py` 反过来**随包发布**：它只在存在 `docs/` 的仓库检出时校验场景目录（`skipUnless`，与 `tests/test_run_delivery_scenarios.py` 的既有做法一致），包内的其余断言只读随包发布的 `scripts/` 与 `templates/`，因此发行包里也能真实运行最终场景集与指标口径。
 - 明确排除（不得出现在包内）：
   - `docs/`：本仓库自有章程与验收记录；
   - `release/`：发布目录本身（含本文件与历史分发包）；
@@ -44,6 +44,8 @@
   - 扫描模式分层：**通用模式内置在脚本**（个人主目录、凭据形状等，任何克隆都适用）；**机器 / 本仓库相关模式放在 `.local/release-scan.json`**（`{"forbidden_patterns": [...]}`，逐条按精确子串匹配）。该文件缺失时跳过本地规则并打印 `extra scan patterns: none`；该文件永不入库、永不打包。
 - i. 解压目录内 `python -m scripts.update_agentorch.entry --help` 退出码为 0：证明自然语言入口及其依赖（`scripts/self_improvement/planning.py`、更新引擎）在无 `docs/` 的包内可导入。
 - j. 解压目录内用随包发布的 `scripts/self_improvement/sources.py` 校验 `templates/self-improvement/sources.example.json`：必须无 schema 错误，证明包内注册表示例与实际校验器一致。
+- k. 解压目录内 `scripts/run_delivery_scenarios.py --json` 退出码为 0，报告 `errors: 0`、`negative_passed == negative`（负向组通过表示拦截真的发生）且至少一个正向控制组通过：证明包内的合成回归场景集没有因内部实现被裁掉而静默失效。
+- l. 解压目录内 `scripts/report_metrics.py --gold-sample --since … --until … --json` 退出码为 0，报告含七项指标、显式窗口与每项的样本量 / 缺失率 / coverage；同一脚本对空输入必须报 `no data` 而不是 0：证明指标口径随包发布且未被改写。
 - h. 解压目录内 `scripts/architecture/check.py --project <包根> --json` 退出码为 0，且报告为 `enforcement_mode: OFF`、`blocking: false`、`head_sha_source: "unavailable"`：发行包不含契约与 `docs/`，可选架构检查器必须降级为只读诊断，而不是猜模块边界、静默失败或声称已检查。
 - g. 结束时打印摘要：包内文件数、zip 路径、zip 大小（字节）与 zip 的校验和（校验和用于复核：同一仓库状态下重建应得到同一值）。
 
@@ -54,7 +56,7 @@
 `.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，于 `ubuntu-latest` 的两个 Python 版本（3.12 / 3.13）上执行同一套自检：`uv run python scripts/build_release.py`。该步骤**失败即 job 失败**，没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
 
 - **两档都跑的理由**：自检 b、d 在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`，即真正检验"该 Python 版本拿到的包是否可用"；两档各证明一次，成本是本机数秒级重复，换来不设 `if:` 条件、不会出现某档静默跳过打包步骤。
-- **CI 证明什么**：包能构建，且内置自检 a–j 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档"这类回归。
+- **CI 证明什么**：包能构建，且内置自检 a–l 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档 / 包内合成回归与指标口径"这类回归。
 - **CI 不证明什么**：**不证明发布本身**。CI 不校验 `{YYYYMMDD}` 命名、不生成 GitHub Release、不写发布记录，也不替你判断"这一版是否该发"。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
 
 ## 4. 发布流程
@@ -62,7 +64,7 @@
 1. 在任务库登记发布任务（唯一 ID、单一目标、允许路径与验收）。
 2. 从最新本地主分支创建独立分支 / Worktree；不在共享工作区直接构建。
 3. 构建：运行 `uv run python scripts/build_release.py` 生成 `release/agentorch-{YYYYMMDD}.zip`。
-4. 自检：确认脚本内置 a–j 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
+4. 自检：确认脚本内置 a–l 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
 5. Master 独立审查（逐条对照本文件的自检清单与验收标准）。
 6. 合并到本地主分支；合并后重新运行验证并记录结果。
 7. 发布后清理本任务分支 / Worktree（独立记账，清理由此与"合并成功"分开记录）。
