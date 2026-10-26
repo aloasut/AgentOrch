@@ -13,7 +13,7 @@
 | [`scripts/self_improvement/untrusted.py`](../../scripts/self_improvement/untrusted.py) | 来源文本的数据化处理：脱敏、指令形态识别（只计数，不执行）、Markdown `data:` 渲染 |
 | [`scripts/self_improvement/pipeline.py`](../../scripts/self_improvement/pipeline.py) | 一次扫描的编排：注册表 → 采集 → 教训 → 报告；扫描不持久化游标，调用方决定是否保存 |
 | [`scripts/self_improvement/cli.py`](../../scripts/self_improvement/cli.py) | 命令行：`registry show/validate/add/disable/enable/remove`、`scan`、`lesson list/validate` |
-| [`docs/self-improvement/sources.json`](sources.json) | 默认来源注册表：`talkdnd`、`agentmgr`，均为 `enabled=true`、`scan_cursor=null`（**从未扫描**） |
+| [`docs/self-improvement/sources.json`](sources.json) | 默认来源注册表：`talkdnd`、`agentmgr`，均为 `enabled=true`；2026-10-26 首轮真实扫描后 `scan_cursor` 为 `PARTIAL`（未推进成功水位，见 §10） |
 | [`tests/self_improvement/test_registry.py`](../../tests/self_improvement/test_registry.py) | 注册表结构 / 配置操作 / 游标与窗口的正负 fixture |
 | [`tests/self_improvement/test_collection.py`](../../tests/self_improvement/test_collection.py) | 合成 `gh` 响应：不可达、403 / 404 / 429、超时、坏 JSON、注入、脱敏、过滤、CI 缺口 |
 
@@ -126,7 +126,7 @@ python3 scripts/self_improvement/cli.py registry remove --source-id acme
 
 ## 8. 限制与未验证项（不得当作已通过）
 
-- **未对 TalkDND / AgentMgr 做真实扫描。** `sources.json` 中两个来源 `scan_cursor=null`，本任务没有联网运行采集，也没有声称读过任何来源证据。“来源可达性 / 证据范围 / 速率限制”仍是未验证假设。
+- **首轮真实扫描已完成，但覆盖不完整（2026-10-26）。** 两个来源都返回 `PARTIAL`，没有 `OK` 水位：`talkdnd` 的 `issue` / `commit` / `ci_run` 与 `agentmgr` 的 `commit` / `ci_run` 达到分页上限，`agentmgr` 的 `issue` 类别在扫描时因一次瞬时 EOF 未读取（`unexpected_command_failure`）。`scan_cursor` 已记录 `PARTIAL`，但 `last_successful_scan_at` / `last_scanned_commit` 仍为 `null`。因此本次不能写“已完整扫描”或“无新经验”；详见 §10 与脱敏报告 [`live-scan-2026-10-26.md`](live-scan-2026-10-26.md)。来源可达性、速率限制与真实语义质量仍需后续扫描验证。
 - `gh` CLI 的实际版本、认证状态与 CI 环境可用性未探测；适配器只保证“缺失时降级为 `BLOCKED:tool_unavailable`”。
 - `review` 端点只读取 review comment 列表，不含 PR review 汇总；CI 只读 Actions run 列表，不读 job / step 日志。
 - 分页默认最多 3 页 × 30 条，超出即 `PARTIAL`；不实现断点续采。
@@ -147,3 +147,24 @@ python3 scripts/self_improvement/cli.py registry show       # 退出码 0
 ```
 
 上述命令在提交前的 head 上真实执行；具体输出与退出码见 PR 评论的证据矩阵。CI 结果以当前 head 的运行链接为准，未运行即 `NOT_RUN`。
+
+## 10. 首轮真实扫描（#74，2026-10-26）
+
+命令与退出码（在本任务 Worktree 中真实执行）：
+
+```bash
+python3 scripts/self_improvement/cli.py registry validate    # 退出码 0
+python3 scripts/self_improvement/cli.py registry show --json # 退出码 0；扫描前两来源 enabled/public/cursor null
+python3 scripts/self_improvement/cli.py scan --json          # 退出码 0；两来源均 PARTIAL
+python3 scripts/self_improvement/cli.py lesson list          # 退出码 0；no lessons recorded
+```
+
+- 窗口：`talkdnd` `2026-07-28T14:06:20Z` → `2026-10-26T14:06:20Z`（90 天，`first_scan`）；`agentmgr` `2026-08-27T14:06:20Z` → `2026-10-26T14:06:20Z`（60 天，`first_scan`）。
+- 结果：两个来源都是 `PARTIAL`，没有 `OK`，所以 `last_successful_scan_at` / `last_scanned_commit` 仍为 `null`，cursor 未推进。
+  - `talkdnd`：316 条证据（PR 85 / issue 51 / commit 90 / ci_run 90 / review 0）；`issue`、`commit`、`ci_run` 达到分页上限（3 × 30）。
+  - `agentmgr`：223 条证据（PR 43 / issue 0 / commit 90 / ci_run 90）；`issue` 类别在扫描时因一次瞬时 EOF 未读取（`unexpected_command_failure`），`commit`、`ci_run` 达到分页上限。
+- 排除 / 可疑指令形态 / 无效链接 / 脱敏命中均为 0；没有下载 PR / Issue 正文、diff、review 正文、CI 日志或提示词。
+- 报告：`.local/self-improvement/reports/scan-20261026T140620Z.{json,md}`（本地、git-ignored、不入库）；脱敏摘要见 [`live-scan-2026-10-26.md`](live-scan-2026-10-26.md)。
+- 本次没有提供显式分析，lesson store 仍为 0 条；管线不会从标题推断根因（[lesson-lifecycle.md](lesson-lifecycle.md) §9）。结论是“本次无候选”，不是“来源无新经验”。
+- 仍未验证：窗口前段因分页上限未读；`agentmgr` issue 元数据未进入本次报告；CI 结论在扫描后可能变化；`gh` 限速与认证状态只按本次命令结果记录。
+- 测试已拆分（Master 决定，方案 1）：默认注册表测试允许 `null` 或 schema 合法游标（非 `OK` 可保留历史成功水位），`test_fresh_registry_does_not_claim_a_scan` 保留 fresh-registry 语义；真实 `PARTIAL` 游标保留。修复后 `python3 -m unittest discover -s tests` 退出码 `0`（674 个测试）。详见 [`live-scan-2026-10-26.md`](live-scan-2026-10-26.md) §10。

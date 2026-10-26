@@ -62,3 +62,9 @@
 | #53 | [threat-model.md](threat-model.md) 全部负向测试列 | 把未执行的场景写成通过 |
 
 完整依赖点与开放事项见 [`docs/contracts/README.md`](../contracts/README.md) §5–§6。
+
+## 6. 真实扫描报告索引
+
+| 报告 | 内容 |
+|---|---|
+| [live-scan-2026-10-26.md](live-scan-2026-10-26.md) | #74 首轮真实经验扫描（TalkDND / AgentMgr）：窗口、来源状态、计数、证据链接、去重结论与未验证项 |
