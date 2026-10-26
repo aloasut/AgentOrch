@@ -8,6 +8,7 @@
 ```text
 docs/contracts/
 ├── README.md                       # 本文件：索引、验证方案、CI 边界、下游依赖、开放事项
+├── decision-log.md                 # 契约决策记录（含 `HD-62-B` 的 T10 前置条件）
 ├── schemas/                        # 四类契约的 JSON Schema 草案（draft 2020-12）
 │   ├── source-registry.schema.json
 │   ├── lesson.schema.json
@@ -127,8 +128,9 @@ PY
 7. 游标 `last_scan_started_at` / `last_successful_scan_at` 不得倒退；`OK` 之外不得推进水位。
 8. Lesson 指纹必须由 §4 算法与 `normalized_fields` 重算一致。
 9. `PROJECT_OWNED` / `UNKNOWN_FILE` / `UPSTREAM_REMOVAL` / `UPSTREAM_RENAME` 不得出现 `APPLIED`。
+10. Lesson 的 T10 前置条件（`HD-62-B` / B1）：`GENERAL_LESSON` 在 `REGRESSION_WATCH` 观察到回归时，不得直接进入 `NEEDS_VERIFICATION`；必须先执行 T12 语义的 `reclassify`（`content_class` → `SOURCE_SPECIFIC_EXPERIENCE` / `CONFIRMED_FACT`、`scope=source_only`、记录 `decision`），再执行 T10。T12 表格边仍为 `GENERALIZED → VERIFIED`，不得为 `REGRESSION_WATCH` 新增 T12 边；详见 [`lesson-lifecycle.md`](../self-improvement/lesson-lifecycle.md) §3.2.1 与 [`decision-log.md`](decision-log.md)。
 
-这些检查属于后续实现任务；本阶段只冻结“必须检查什么”。
+这些检查属于后续实现任务；本阶段只冻结“必须检查什么”。第 10 条由 `HD-62-B` 决议，`#50` / `#53` 直接引用本节即可，不得各自改写 T10 语义。
 
 ## 6. 下游依赖点
 
@@ -136,10 +138,10 @@ PY
 |---|---|---|
 | **#48** 架构契约与检查器 | `architecture-contract.schema.json`、[`architecture-contract.md`](../architecture/architecture-contract.md)（严重级别、报告状态、豁免、未配置语义） | 新增严重级别 / 报告状态；对无契约项目硬失败；改 `docs/PROJECT.md` 之外的契约位置而不记录 |
 | **#49** 来源与 Lesson 管线 | `source-registry.schema.json`、`lesson.schema.json`、[`sources-and-trust.md`](../self-improvement/sources-and-trust.md)、[`lesson-lifecycle.md`](../self-improvement/lesson-lifecycle.md) | 在代码里写死来源；新增 Lesson 状态；放宽证据等级；跳过指纹 |
-| **#50** 自我完善闭环 | [`entrypoints-and-decisions.md`](../self-improvement/entrypoints-and-decisions.md) 的触发 / 授权 / 停止条件 / `HD-*`；核心契约引用 | 复制状态机或门禁；自动合并 / 自批；用报告替代证据矩阵 |
+| **#50** 自我完善闭环 | [`entrypoints-and-decisions.md`](../self-improvement/entrypoints-and-decisions.md) 的触发 / 授权 / 停止条件 / `HD-*`；核心契约引用；本文件 §5 第 10 条 | 复制状态机或门禁；自动合并 / 自批；用报告替代证据矩阵；在 T10 场景绕过 `HD-62-B` 的 `reclassify` 前置 |
 | **#51** 更新引擎 | [`update-safety.md`](../self-improvement/update-safety.md) 全部分类与失败关闭；`update-manifest` / `update-report` schema | 新增分类；放宽校验；把哈希差异当覆盖许可；静默删除 |
 | **#52** 更新入口与发行包 | `update-safety.md` §2、§8 与 `entrypoints-and-decisions.md` §1.2；[`threat-model.md`](../self-improvement/threat-model.md) T-14 | 只把入口放 `docs/`；声称 local 支持 GitHub 自动化 |
-| **#53** 合成回归 | `threat-model.md` 的负向测试列、本文件 §3 预期错误、§5 语义清单 | 把未执行场景写成通过；用真实凭据 / 私有数据 |
+| **#53** 合成回归 | `threat-model.md` 的负向测试列、本文件 §3 预期错误、§5 语义清单（含第 10 条） | 把未执行场景写成通过；用真实凭据 / 私有数据；假设 `GENERAL_LESSON` 可跳过 `reclassify` 直接 T10 |
 | **#55 / #56** 首批经验 | [`lesson-lifecycle.md`](../self-improvement/lesson-lifecycle.md) 的分类与泛化门槛 | 把来源业务假设写成核心规则 |
 
 依赖顺序与状态以 [`docs/implementation-plan.md`](../implementation-plan.md) 为准，本文件不重复任务状态。
@@ -161,6 +163,6 @@ PY
 
 ## 8. 变更方式
 
-- 任何 schema 字段、枚举或语义改动都必须新开 Issue 重新冻结，并记录到 [`templates/contract-decision-log.md`](../../templates/contract-decision-log.md)。
+- 任何 schema 字段、枚举或语义改动都必须新开 Issue 重新冻结，并记录到本项目的 [`decision-log.md`](decision-log.md)（记录格式参考 [`templates/contract-decision-log.md`](../../templates/contract-decision-log.md)）。
 - 实现任务不得在实现 PR 中顺手改契约；发现契约缺陷时先停，登记 Issue，再按新版本修订。
 - 新增 fixture 必须同时提供合法 / 非法成对样例，并在 §3 登记预期错误。

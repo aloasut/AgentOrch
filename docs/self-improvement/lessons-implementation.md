@@ -114,7 +114,8 @@ lessons.demote(record, reason='来源证据链接已失效', decided_by='project
 
 - **没有任何真实教训记录。** 验收用一个合成 fixture 覆盖四类内容与状态转换；本任务没有从 TalkDND / AgentMgr 提炼出真实教训，也不声称已提炼。
 - 状态机的“语义守卫”只覆盖可机器判定的部分：根因是否真的成立、结论是否真的与来源业务无关、`E2` 复现是否可靠，仍需审查者判断（lesson-lifecycle.md §3.3 也这么规定）。
-- **T10 与 schema 存在一处张力**：`GENERAL_LESSON` 的允许状态不含 `NEEDS_VERIFICATION`，因此对通用教训执行 `REGRESSION_WATCH → NEEDS_VERIFICATION` 会被校验拒绝。当前实现要求先按 T12 退回 `CONFIRMED_FACT` / `SOURCE_SPECIFIC_EXPERIENCE` 再进入 `NEEDS_VERIFICATION`；这是对冻结契约的解释，不是新状态，已登记为审查注意项。
+- **T10 与 `GENERAL_LESSON` 的边界已由 `HD-62-B` 决议（B1）**：`GENERAL_LESSON` 的允许状态不含 `NEEDS_VERIFICATION`，因此 `GENERAL_LESSON + REGRESSION_WATCH` 不能直接 T10。按 B1，先执行 T12 语义的显式分类变更 `reclassify(record, 'SOURCE_SPECIFIC_EXPERIENCE' | 'CONFIRMED_FACT', decision=...)`（状态保持 `REGRESSION_WATCH`；`SOURCE_SPECIFIC_EXPERIENCE` 自动 `scope=source_only`，选 `CONFIRMED_FACT` 时须显式传 `scope='source_only'`），再 `transition(record, 'NEEDS_VERIFICATION', new_evidence_urls=[...])`。T12 表格边仍只覆盖 `GENERALIZED → VERIFIED`；§2.1 状态表、`lesson.schema.json` 与本实现代码均未修改，也无需修改。历史与决策：Issue #47 → #49 → #62，决策评论 [#6410056128](https://github.com/ctrlshiftaltdel/AgentOrch/issues/62#issuecomment-6410056128) 与 B1 澄清 [#6410191880](https://github.com/ctrlshiftaltdel/AgentOrch/issues/62#issuecomment-6410191880)。
+- **测试覆盖边界**：`test_t10_needs_new_evidence` 覆盖 `CONFIRMED_FACT + REGRESSION_WATCH → NEEDS_VERIFICATION`；`test_t12_walks_a_general_lesson_back` 覆盖 `GENERALIZED → VERIFIED` 的撤销泛化。现有测试**没有**直接覆盖 `GENERAL_LESSON + REGRESSION_WATCH` 的端到端组合；该组合由已覆盖的 `reclassify`（分类变更）与 T10 两步组合保证，端到端核对按 `lesson-lifecycle.md` §3.2.1 的示例由 Reviewer / 手工执行。本任务不新增测试。
 - `decision.decided_by` 必须是具体决策人 / 角色（不能写 `team`），但实现无法验证字符串背后是否真有其人；这是流程约束，不是代码保证。
 - 指纹只做规范化后的精确匹配：同义改写会产生不同指纹（契约有意的保守选择）。近似重复仍需人工按 `OVERLAPS` 处理，本实现不自动合并。
 - 教训库是本地 JSON（`.local/self-improvement/`），不是数据库；并发写入未实现，同一工作区同一时刻只应有一个写入者。

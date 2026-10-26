@@ -72,21 +72,59 @@
 | T7 | `VERIFIED` → `REJECTED` | 复核后不采纳 | `decision` 必填 |
 | T8 | `GENERALIZED` → `IMPLEMENTED` | 对应任务已合并并按核心契约验收 | 任务 Issue / PR 编号写入 `links`；`decision` 保留 |
 | T9 | `IMPLEMENTED` → `REGRESSION_WATCH` | 需要观察回归 | 指定观察窗口与检查方式（写入 `notes` / 关联测试） |
-| T10 | `REGRESSION_WATCH` → `NEEDS_VERIFICATION` | 观察到回归 | 新增证据链接；不得直接改回 `VERIFIED` |
+| T10 | `REGRESSION_WATCH` → `NEEDS_VERIFICATION` | 观察到回归 | 新增证据链接；不得直接改回 `VERIFIED`；`GENERAL_LESSON` 必须先按 T12 语义撤销泛化（见 §3.2.1） |
 | T11 | `VERIFIED` / `SOURCE_SPECIFIC_EXPERIENCE` → 降级 | 证据被撤回或失效 | `content_class` 改为 `UNVERIFIED_ASSUMPTION`，`evidence_level` 降为 `E0/E1`，记录原因 |
 | T12 | `GENERALIZED` → `VERIFIED` | 泛化被撤销（仍成立但不通用） | `content_class` 改回 `CONFIRMED_FACT` 或 `SOURCE_SPECIFIC_EXPERIENCE`；`decision` 记录 |
+
+#### 3.2.1 T10 与 `GENERAL_LESSON` 的前置步骤（`HD-62-B` / B1）
+
+§2.1 的状态表不变：`GENERAL_LESSON` 的允许状态不含 `NEEDS_VERIFICATION`，因此 `GENERAL_LESSON` 不能直接执行 T10。T12 的表格边同样不变，只覆盖 `GENERALIZED → VERIFIED`，不覆盖 `REGRESSION_WATCH`；不得把 T12 写成从 `REGRESSION_WATCH` 出发的边。
+
+`GENERAL_LESSON` 处于 `REGRESSION_WATCH` 并观察到回归时，按以下顺序处理：
+
+1. 记录回归证据（可定位链接）。
+2. **先撤销泛化（T12 语义）**：用 §2.1 规则 3 的显式分类变更把 `content_class` 退回 `SOURCE_SPECIFIC_EXPERIENCE` 或 `CONFIRMED_FACT`，`applicability.scope` 回到 `source_only`，并记录 `decision`（决定人 + 理由）。此时 `status` 仍是 `REGRESSION_WATCH`。
+3. **再执行 T10**：`REGRESSION_WATCH → NEEDS_VERIFICATION`，把上一步的回归证据加入 `source.evidence_urls`。
+4. 直接对 `GENERAL_LESSON + REGRESSION_WATCH` 执行 T10 必须被拒绝；跳过第 2 步的任何写法都非法。
+
+示例（`LSN-EXAMPLE-012`，合成值，仅示意字段变化）：
+
+```text
+初始：content_class=GENERAL_LESSON, status=REGRESSION_WATCH,
+      evidence_level=E4_REGRESSION_COVERED, applicability.scope=agentorch_general,
+      links.issues=[#49]
+
+1) 观察到回归，新增证据 https://example.com/talkdnd/issues/99
+2) 撤销泛化（T12 语义；reclassify 是 §2.1 规则 3 的显式分类变更，不新增表格边）：
+   reclassify(record, 'SOURCE_SPECIFIC_EXPERIENCE',
+              decision=make_decision('project-owner', 'DEFER',
+                                     '观察到回归，撤销泛化并重新验证'))
+   → content_class=SOURCE_SPECIFIC_EXPERIENCE, applicability.scope=source_only,
+     status=REGRESSION_WATCH（不变）, decision 已记录
+3) T10：
+   transition(record, 'NEEDS_VERIFICATION',
+              new_evidence_urls=['https://example.com/talkdnd/issues/99'])
+   → status=NEEDS_VERIFICATION（content_class 保持 SOURCE_SPECIFIC_EXPERIENCE）
+
+反例：跳过第 2 步，直接 transition(record, 'NEEDS_VERIFICATION', ...) 被校验拒绝：
+  GENERAL_LESSON allows only VERIFIED, GENERALIZED, IMPLEMENTED, REJECTED, REGRESSION_WATCH
+```
+
+如果第 2 步选择 `CONFIRMED_FACT`，必须显式传 `scope='source_only'`；`reclassify()` 只为 `SOURCE_SPECIFIC_EXPERIENCE` 自动设置该 scope，不显式传会保留 `agentorch_general`（语义错误，虽然 schema 不拒绝）。#49 的 `reclassify()` + `transition()` 已实现上述组合；本任务未改代码、未改 T12 表格边。
 
 ### 3.3 非法转换（必须被拒绝）
 
 - `OBSERVED` / `NEEDS_VERIFICATION` → `GENERALIZED` / `IMPLEMENTED`（跳过验证与泛化）。
 - `UNVERIFIED_ASSUMPTION` → `VERIFIED` / `GENERALIZED` / `IMPLEMENTED`。
 - `SOURCE_SPECIFIC_EXPERIENCE` → `GENERALIZED` / `IMPLEMENTED`（必须先显式分类改为 `GENERAL_LESSON` 并记录决策）。
+- `GENERAL_LESSON` 在 `REGRESSION_WATCH` 直接 `NEEDS_VERIFICATION`（必须先按 §3.2.1 撤销泛化；`GENERAL_LESSON` 的允许状态已排除 `NEEDS_VERIFICATION`）。
+- 在 `REGRESSION_WATCH` 上执行 T12 表格边（T12 只从 `GENERALIZED` 出发；`REGRESSION_WATCH` 的撤销泛化按 §3.2.1 用显式分类变更完成）。
 - `REJECTED` → 任何其它状态（拒绝是终局；重新评估必须新建 Lesson 并引用旧 ID）。
 - 任一带 `OPEN` 冲突的 Lesson → `GENERALIZED` / `IMPLEMENTED`。
 - 任何没有 `decision` 的 `REJECTED` / `GENERALIZED` / `IMPLEMENTED`。
 - 任何把 `NOT_RUN` / `UNKNOWN` 证据当作“已验证”的转换。
 
-schema 能机器判定的部分（证据等级下限、分类与状态匹配、决策必填、`GENERALIZED` 无 `OPEN` 冲突）已在 `lesson.schema.json` 的 `allOf` 中强制；其余为语义检查，由 #49 的校验器与审查共同保证。
+schema 能机器判定的部分（证据等级下限、分类与状态匹配、决策必填、`GENERALIZED` 无 `OPEN` 冲突）已在 `lesson.schema.json` 的 `allOf` 中强制；其余为语义检查，由 #49 的校验器与审查共同保证。§3.2.1 的 `GENERAL_LESSON` 前置属于语义检查；跳过撤销泛化直接 T10 的最终状态会被 `GENERAL_LESSON` 的允许状态拒绝。
 
 ## 4. 去重指纹
 
