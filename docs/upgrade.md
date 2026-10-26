@@ -665,6 +665,21 @@ python3 scripts/build_release.py
 
 前两条只证明入口可导入、路由与失败关闭；真正升级命令的 `APPLY` 必须在有合法基线的项目上由 Master 派发的任务执行，并保留报告、命令、退出码与 head SHA。`build_release.py` 的包内自检覆盖入口与模板（自检 i / j），但不访问网络。
 
+### 13.11 下游项目的 validate_kit 模式
+
+手工迁移（1.1 / 1.2 没有 `MANIFEST.json`，见 §13.3）之后，下游项目会同时拥有自己的 `docs/` 与官方 `MANIFEST.json`。`scripts/validate_kit.py` 按树自动选择严格度，汇总行会打印 `tree mode`：
+
+| 树 | 判定依据 | 仓库文档 | `MANIFEST.json` |
+| --- | --- | --- | --- |
+| 纯净包 | 没有 `docs/` | 跳过 | 结构 + 分类 + 路径 + `REQUIRED` 集合 + SHA-256 / 大小 |
+| 下游项目 | 有 `docs/`，没有 `docs/upgrade.md` | 只要求 `docs/PROJECT.md` 与 `docs/PLAN.md`（后者仍需“设计目标”章节） | 结构 + 分类 + 路径 + `REQUIRED` 集合 + 列出文件存在；**不比较哈希** |
+| 上游 checkout | 有 `docs/upgrade.md` | 全部仓库文档 | 结构 + 分类 + 路径 + `REQUIRED` 集合 + SHA-256 / 大小 |
+
+- **`docs/upgrade.md` 是上游标记**：它只存在于上游仓库，不随包发布。下游项目**不要**创建同名文件；一旦出现，`validate_kit.py` 会按上游 checkout 要求全部仓库文档，并把本地修改当哈希漂移报错。
+- **下游放宽的只有哈希**：清单结构非法、分类错误、路径非法、`REQUIRED` 少列 / 多列、清单列出的文件缺失，在三种树下都是失败。
+- **本地修改仍要记账**：下游自己的改动由 `python3 scripts/check_drift.py <项目根>` 报告（`modified` / `missing` / `unknown`，退出码 `2`），`validate_kit.py` 不再因这些改动失败。两者分工见 `docs/README.md` 第 7、8 节（仓库文档）。
+- **升级前先确认模式**：如果 `validate_kit.py` 报出大量上游文档缺失，先检查树里是否误放了 `docs/upgrade.md`，而不是去补齐上游文档。
+
 ## 14. “更新 AgentOrch”入口实测记录
 
 ### 14.1 真实 Release 下载（#71，2026-10-26 UTC）

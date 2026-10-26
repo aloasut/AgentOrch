@@ -84,6 +84,11 @@ UPSTREAM_NAMESPACES = ('editions/', 'templates/', 'scripts/', 'prompts/', 'tests
 SKIP_DIRS = frozenset({
     '.git', '.orchestration', '.local', '.worktrees', '.workbuddy',
     '__pycache__', 'release', 'node_modules', '.venv', '.idea', '.vscode',
+    # Build output and tool caches. A project that vendors a Rust crate, runs
+    # pytest, or indexes itself with codegraph / opencode would otherwise report
+    # thousands of generated files as `extension` (or `unknown` when the cache
+    # sits inside an upstream namespace) and drown the real drift.
+    'target', '.pytest_cache', '.codegraph', '.opencode',
 })
 # A manifest carrying any of these keys is rejected: a timestamp would make two
 # builds of one tree differ and destroy byte-level reproducibility.
@@ -169,7 +174,7 @@ def classify_local(path):
 # --- version + manifest generation -----------------------------------------
 
 def read_version(root):
-    """Parse VERSION.txt -> (suite, format_version). Raises DriftError if unreadable."""
+    """Parse VERSION.md -> (suite, format_version). Raises DriftError if unreadable."""
     path = Path(root) / VERSION_FILE
     try:
         text = path.read_text(encoding='utf-8')

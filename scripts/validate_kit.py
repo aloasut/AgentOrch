@@ -78,17 +78,33 @@ REQUIRED = [
 # scripts/build_release.py refuses to package any path containing a `docs`
 # segment (FORBIDDEN_SEGMENTS), so listing them above would turn every release
 # self-check red. They are still required artifacts — a missing file or a
-# deleted section fails validate_kit on a checkout — and the check is skipped
-# when `docs/` is absent, which is exactly the case inside a release package.
+# deleted section fails validate_kit on a checkout.
 #
 # `tests/update_agentorch/test_report.py` is repository-only for the same
 # reason: it reads the frozen fixtures under `docs/contracts/fixtures/`, which
 # never ship. The package still tests the engine and the entry through the
 # shipped `tests/update_agentorch/` modules listed in REQUIRED above.
-REQUIRED_DOCS = {
-    'docs/README.md': (),
+#
+# The document set has two layers, and which one is enforced depends on the tree
+# (see `tree_mode`):
+#
+#   * `PROJECT_DOCS`  — every project that keeps a `docs/` directory must have
+#     them. A downstream project fills them in after unzipping the kit, so they
+#     are the only documents it can be asked for.
+#   * `UPSTREAM_DOCS` — this repository's own documents. They never ship, so a
+#     downstream project must not be forced to copy them.
+#
+# `docs/upgrade.md` is the upstream marker: it is repository-only, so its
+# presence means "this is an upstream checkout" and the full set is enforced.
+# A `docs/` directory without it is a downstream project tree; no `docs/` at all
+# is a pristine release package. A downstream project must not create its own
+# `docs/upgrade.md` — that would switch the tree to upstream mode.
+PROJECT_DOCS = {
     'docs/PROJECT.md': (),
     'docs/PLAN.md': ('设计目标',),
+}
+UPSTREAM_DOCS = {
+    'docs/README.md': (),
     'docs/implementation-plan.md': ('当前状态',),
     'docs/charter.md': (),
     'docs/upgrade.md': ('升级',),
@@ -99,6 +115,14 @@ REQUIRED_DOCS = {
         '场景矩阵', '运行方式', 'Fixture 规则', '正负组', '未验证范围', '清理',
     ),
 }
+# Union kept under the historical name: existing callers and tests read it as
+# "every repository-only document", independent of the tree being validated.
+REQUIRED_DOCS = {**PROJECT_DOCS, **UPSTREAM_DOCS}
+UPSTREAM_MARKER_DOC = 'docs/upgrade.md'
+
+TREE_PACKAGE = 'package'
+TREE_DOWNSTREAM = 'downstream'
+TREE_UPSTREAM = 'upstream'
 
 # --- Milestone-audit closeout contract ---------------------------------------
 # A filled audit record may only be read as "stage complete" when no verdict
@@ -170,7 +194,7 @@ EXTERNAL_LINK_PREFIXES = ('http://', 'https://', 'mailto:', '#')
 
 # --- Evidence matrix contract -------------------------------------------------
 # The field names, the status enum and the G1 rules are defined once, in
-# AGENT-ORCHESTRATION.md 4.1. This module reads that definition back (it does not
+# kit/orchestration.md 4.1. This module reads that definition back (it does not
 # restate it) and enforces it on the local/github task templates. If the doc drifts
 # away from the contract floor below, validation fails instead of silently
 # accepting a second definition.
@@ -188,7 +212,7 @@ NOT_RUN_MARKERS = re.compile(
     r'\bnot[ _-]?run\b|\bnot executed\b|\bnot verified\b|未执行|未运行|未验证|blocked by|被阻塞', re.I)
 SHA_RE = re.compile(r'^[0-9a-f]{40}$')
 # Fields every task packet must carry, on top of the structured scenario fields
-# read from AGENT-ORCHESTRATION.md. Names are the template labels, lower-cased.
+# read from kit/orchestration.md. Names are the template labels, lower-cased.
 PACKET_REQUIRED_FIELDS = (
     'task id', 'title', 'goal / user-visible result', 'context', 'allowed paths',
     'forbidden paths', 'dependencies (must be verified)', 'acceptance criteria',
@@ -418,17 +442,36 @@ def audit_conclusion_errors(text, label='milestone audit'):
     return errors
 
 
-def required_doc_errors(root=ROOT):
-    """Missing or structurally incomplete repository-only documents.
+def tree_mode(root=ROOT):
+    """Which of the three supported trees *root* is.
 
-    Skipped when the tree has no `docs/` directory: a release package never ships
-    one, and these documents are repository artifacts, not release payload.
+    `package`    - a pristine release package: no `docs/` at all.
+    `downstream` - a project tree: `docs/` exists, `docs/upgrade.md` does not.
+    `upstream`   - this repository: `docs/upgrade.md` marks an upstream checkout.
     """
     root = Path(root)
     if not (root / 'docs').is_dir():
+        return TREE_PACKAGE
+    if (root / UPSTREAM_MARKER_DOC).is_file():
+        return TREE_UPSTREAM
+    return TREE_DOWNSTREAM
+
+
+def required_doc_errors(root=ROOT):
+    """Missing or structurally incomplete repository-only documents.
+
+    The required set follows the tree (see `tree_mode`): a release package has no
+    `docs/` and is skipped; a downstream project only has to provide
+    `docs/PROJECT.md` and `docs/PLAN.md`; an upstream checkout must provide every
+    document in `REQUIRED_DOCS`.
+    """
+    root = Path(root)
+    mode = tree_mode(root)
+    if mode == TREE_PACKAGE:
         return []
+    documents = REQUIRED_DOCS if mode == TREE_UPSTREAM else PROJECT_DOCS
     errors = []
-    for rel, sections in REQUIRED_DOCS.items():
+    for rel, sections in documents.items():
         path = root / rel
         if not path.is_file():
             errors.append(f'missing required document: {rel}')
@@ -582,13 +625,32 @@ def _drift_module():
     return module
 
 
+def _listed_manifest_paths(manifest):
+    """Paths a manifest lists, tolerating a malformed `files` value.
+
+    Structure errors are reported separately; this helper only has to stay
+    iterable so the REQUIRED-set comparison cannot raise on a broken manifest.
+    """
+    files = manifest.get('files') if isinstance(manifest, dict) else None
+    if not isinstance(files, list):
+        return []
+    return [entry.get('path') for entry in files
+            if isinstance(entry, dict) and isinstance(entry.get('path'), str)]
+
+
 def check_release_manifest(root):
     """Validate MANIFEST.json when the tree carries one (a built package does).
 
     The repository root has no MANIFEST.json, so this returns no errors there and
-    the pre-release workflow keeps working on a raw checkout. A present manifest
-    must be well-formed, list exactly the REQUIRED files with legal categories,
-    and match every hash/size on disk.
+    the pre-release workflow keeps working on a raw checkout.
+
+    Strictness follows the tree (see `tree_mode`). A pristine package and an
+    upstream checkout must match every hash and size. A downstream project keeps
+    the official manifest as its baseline while its own files legitimately
+    diverge, so only the manifest contract is enforced there — structure,
+    categories, path legality, the REQUIRED set and the presence of every listed
+    file. Byte drift is reported by `scripts/check_drift.py` instead, so a local
+    fix does not make `validate_kit` unusable.
     """
     manifest_path = Path(root) / MANIFEST_DOC
     if not manifest_path.is_file():
@@ -601,13 +663,25 @@ def check_release_manifest(root):
         manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
     except (OSError, ValueError) as exc:
         return [f'{MANIFEST_DOC} is not valid JSON: {exc}']
-    errors = [f'{MANIFEST_DOC}: {reason}' for reason in drift.validate_manifest(Path(root), manifest)]
-    listed = [entry.get('path') for entry in manifest.get('files', [])
-              if isinstance(entry, dict)] if isinstance(manifest, dict) else []
+    root = Path(root)
+    downstream = tree_mode(root) == TREE_DOWNSTREAM
+    if downstream:
+        errors = [f'{MANIFEST_DOC}: {reason}'
+                  for reason in drift.manifest_structure_errors(manifest)]
+    else:
+        errors = [f'{MANIFEST_DOC}: {reason}'
+                  for reason in drift.validate_manifest(root, manifest)]
+    listed = _listed_manifest_paths(manifest)
     for rel in sorted(set(REQUIRED) - set(listed)):
         errors.append(f'{MANIFEST_DOC} does not list required file: {rel}')
     for rel in sorted(set(listed) - set(REQUIRED)):
         errors.append(f'{MANIFEST_DOC} lists a file that is not in REQUIRED: {rel}')
+    if downstream:
+        # Hashes are not compared here, but the manifest must still describe the
+        # file set of this tree: a listed path that is gone is a broken baseline.
+        for rel in sorted(set(listed)):
+            if not (root / rel).is_file():
+                errors.append(f'{MANIFEST_DOC} lists a file that is missing on disk: {rel}')
     return errors
 
 
@@ -660,11 +734,14 @@ def validate_kit(root=ROOT, project_ready=False):
 
     errors.extend(template_structure_errors(root))
 
-    # Repository-only documents (scenario catalogue). Skipped inside a package,
-    # which never carries docs/.
+    # Repository-only documents. Which ones are required depends on the tree:
+    # a package carries no docs/, a downstream project only fills in
+    # docs/PROJECT.md + docs/PLAN.md, an upstream checkout has the full set.
     errors.extend(required_doc_errors(root))
 
     # A built package also carries MANIFEST.json; validate it when present.
+    # Hashes are strict in a package and in an upstream checkout, structural
+    # only in a downstream project (see check_release_manifest).
     errors.extend(check_release_manifest(root))
 
     # The two editions must expose the same public file set; github additionally
@@ -854,9 +931,13 @@ def main(argv=None):
         print('VALIDATION FAILED')
         print('\n'.join(f'- {e}' for e in errors))
         return 1
+    mode = tree_mode(ROOT)
+    documents = 0 if mode == TREE_PACKAGE else len(
+        REQUIRED_DOCS if mode == TREE_UPSTREAM else PROJECT_DOCS)
     print(f'Kit validation passed ({len(REQUIRED)} required files checked; '
+          f'tree mode {mode}; '
           f'editions local/github share 2 files, github adds 3 templates; '
-          f'{len(REQUIRED_DOCS)} repository-only document(s) checked; '
+          f'{documents} repository-only document(s) checked; '
           f'{sample_count} task packet samples validated).')
     return 0
 

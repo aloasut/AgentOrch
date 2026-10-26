@@ -72,6 +72,22 @@
 - **CI 证明什么**：包能构建，且内置自检 a–l 在该平台 / Python 版本上通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档 / 包内合成回归与指标口径"这类回归。
 - **CI 不证明什么**：**不证明发布本身**。CI 不校验发布命名（`AgentOrch-<X.Y>.zip` 或 `agentorch-{YYYYMMDD}.zip`）、不生成 GitHub Release、不写发布记录，也不覆盖真实安装器与用户桌面环境（这些平台承诺仍标 `UNKNOWN`）。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
 
+### 3.2 包内自检在三种树下的行为
+
+自检 b / d 在**解压后的纯净包**里执行：没有 `docs/`，因此 `validate_kit.py` 跳过仓库专属文档，`MANIFEST.json` 的 SHA-256 与大小严格比较。这是发布物本身的证据，不受下游用法影响。
+
+同一个 `validate_kit.py` 会按树切换模式（汇总行打印 `tree mode`）：
+
+| 树 | 判定依据 | 仓库文档 | `MANIFEST.json` |
+| --- | --- | --- | --- |
+| 纯净包 | 没有 `docs/` | 跳过 | 结构 + 分类 + 路径 + `REQUIRED` 集合 + SHA-256 / 大小 |
+| 下游项目 | 有 `docs/`，没有 `docs/upgrade.md` | 只要求 `docs/PROJECT.md` 与 `docs/PLAN.md` | 结构 + 分类 + 路径 + `REQUIRED` 集合 + 列出文件存在；不比较哈希 |
+| 上游 checkout | 有 `docs/upgrade.md` | 全部仓库文档 | 结构 + 分类 + 路径 + `REQUIRED` 集合 + SHA-256 / 大小 |
+
+- 下游项目解压后补上自己的 `docs/PROJECT.md` 与 `docs/PLAN.md` 即可通过 `validate_kit.py` 与包内 `unittest`；本地修改由 `check_drift.py` 报告，不阻断校验。
+- **下游不要创建 `docs/upgrade.md`**：它是上游标记，出现后校验会按上游 checkout 要求全部仓库文档，并把本地修改当哈希漂移报错。
+- 下游放宽的只有哈希：清单结构非法、分类错误、路径非法、`REQUIRED` 少列 / 多列、列出文件缺失，在三种树下都失败。完整说明见 `docs/README.md` 第 7 节（仓库文档，不随包发布）。
+
 ## 4. 发布流程
 
 1. 在任务载体登记发布任务（唯一 ID、单一目标、允许路径与验收）。
