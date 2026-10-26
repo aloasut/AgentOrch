@@ -7,6 +7,8 @@ fixture downloads anything, and none contains real project data.
 from __future__ import annotations
 
 import hashlib
+import importlib
+import importlib.util
 import io
 import json
 import os
@@ -17,10 +19,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPTS = ROOT / 'scripts'
-if str(SCRIPTS) not in sys.path:  # tests import the package the same way a caller does
-    sys.path.insert(0, str(SCRIPTS))
+_ENGINE_DIR = SCRIPTS / 'update_agentorch'
+# Load the engine under a private alias: when `unittest discover -s tests` runs,
+# the test package itself is imported as top-level `update_agentorch`, so the
+# production package cannot be addressed by that name in every invocation.
+_ENGINE_ALIAS = 'agentorch_update_engine_under_test'
 
-from update_agentorch import sources  # noqa: E402  (path bootstrap above)
+
+def _load_engine():
+    if _ENGINE_ALIAS in sys.modules:
+        return sys.modules[_ENGINE_ALIAS]
+    spec = importlib.util.spec_from_file_location(
+        _ENGINE_ALIAS, _ENGINE_DIR / '__init__.py',
+        submodule_search_locations=[str(_ENGINE_DIR)])
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[_ENGINE_ALIAS] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+_load_engine()
+sources = importlib.import_module(f'{_ENGINE_ALIAS}.sources')
+versions = importlib.import_module(f'{_ENGINE_ALIAS}.versions')
+package = importlib.import_module(f'{_ENGINE_ALIAS}.package')
+classify = importlib.import_module(f'{_ENGINE_ALIAS}.classify')
+workspace = importlib.import_module(f'{_ENGINE_ALIAS}.workspace')
+report = importlib.import_module(f'{_ENGINE_ALIAS}.report')
+engine = importlib.import_module(f'{_ENGINE_ALIAS}.engine')
+cli = importlib.import_module(f'{_ENGINE_ALIAS}.cli')
 
 SUITE = 'Agent-Orchestration Starter Kit'
 PROFILE_PATHS = (

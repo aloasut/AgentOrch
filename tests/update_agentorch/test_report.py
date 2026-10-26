@@ -11,7 +11,9 @@ import json
 import unittest
 from pathlib import Path
 
-from update_agentorch import report as report_module
+from . import support
+
+report_module = support.report
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = ROOT / 'docs' / 'contracts' / 'fixtures'

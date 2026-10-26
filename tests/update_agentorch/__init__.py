@@ -10,10 +10,14 @@ repository-wide ``unittest discover -s tests`` finds the modules directly.
 """
 from __future__ import annotations
 
+import sys
 import unittest
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[2]
+_SCRIPTS = _ROOT / 'scripts'
+if str(_SCRIPTS) not in sys.path:  # `python -m unittest tests.update_agentorch...`
+    sys.path.insert(0, str(_SCRIPTS))
 
 
 def load_tests(loader, tests, pattern):

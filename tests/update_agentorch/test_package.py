@@ -9,8 +9,9 @@ import io
 import unittest
 import zipfile
 
-from tests.update_agentorch import support
-from update_agentorch import package
+from . import support
+
+package = support.package
 
 
 UPSTREAM = {
@@ -26,9 +27,12 @@ def results(result) -> dict[str, str]:
 
 class PackageVerificationTests(unittest.TestCase):
     def verify(self, files=None, manifest=None, *, tag='v1.6', digest='auto',
-               expected_suite=None, limits=package.DEFAULT_LIMITS, **zip_kwargs):
+               manifest_format=None, expected_suite=None,
+               limits=package.DEFAULT_LIMITS, **zip_kwargs):
         files = dict(UPSTREAM if files is None else files)
-        manifest = support.build_manifest(files) if manifest is None else manifest
+        if manifest is None:
+            format_version = manifest_format or '.'.join(tag.lstrip('v').split('.')[:2])
+            manifest = support.build_manifest(files, format_version=format_version)
         payload = support.make_zip(files, manifest, **zip_kwargs)
         release = support.release_info(tag, payload, digest=digest)
         return package.verify_package(release, payload, expected_suite=expected_suite,
@@ -178,8 +182,11 @@ class PackageVerificationTests(unittest.TestCase):
         self.assertEqual(results(result)['EXPECTED_LAYOUT'], 'FAIL')
 
     def test_flat_archive_without_single_top_directory_is_unsafe(self):
+        # The manifest location itself pins the single top-level directory, so a
+        # flat package fails closed at MANIFEST_SCHEMA (no later check is reached).
         result, _, _ = self.verify(top=None)
-        self.assertEqual(results(result)['EXPECTED_LAYOUT'], 'FAIL')
+        self.assertFalse(result.ok)
+        self.assertEqual(results(result)['MANIFEST_SCHEMA'], 'FAIL')
 
     def test_case_colliding_members_are_unsafe(self):
         files = {'kit/A.md': b'a\n', 'kit/a.md': b'b\n'}
@@ -209,7 +216,7 @@ class PackageVerificationTests(unittest.TestCase):
         self.assertEqual(results(result)['MEMBER_PATHS'], 'FAIL')
 
     def test_version_must_match_manifest_format(self):
-        result, _, _ = self.verify(tag='v1.7')
+        result, _, _ = self.verify(tag='v1.7', manifest_format='1.6')
         self.assertEqual(results(result)['VERSION_MATCH'], 'FAIL')
 
     def test_suite_must_match_baseline(self):

@@ -13,8 +13,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from tests.update_agentorch import support
-from update_agentorch import engine, report as report_module
+from . import support
+
+engine = support.engine
+report_module = support.report
 
 
 NOW = datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
@@ -81,13 +83,16 @@ class CleanUpgradeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             project, source, target, manifest = prepare(tmp)
             before = project.hashes()
+            before_project_files = {path: project.read(path) for path in PROJECT_FILES}
             result = run(project, source)
 
             self.assertEqual(result['result'], 'APPLIED')
             for path, data in target.items():
                 self.assertEqual(project.read(path), data, path)
-            for path in PROJECT_FILES:
-                self.assertEqual(project.read(path), before[path], path)
+            for path, data in before_project_files.items():
+                self.assertEqual(project.read(path), data, path)
+            self.assertEqual({path: project.hashes()[path] for path in PROJECT_FILES},
+                             {path: before[path] for path in PROJECT_FILES})
             self.assertEqual(json.loads(project.read('MANIFEST.json')), manifest)
             self.assertEqual(file_entry(result, 'AGENTS.md')['class'], 'UPSTREAM_UNCHANGED')
             self.assertEqual(file_entry(result, 'AGENTS.md')['decision'], 'APPLIED')
@@ -100,6 +105,9 @@ class CleanUpgradeTests(unittest.TestCase):
             self.assertIsNotNone(result['backup']['location'])
             self.assertEqual(result['rollback']['result'], 'NOT_NEEDED')
             self.assertEqual(report_module.validate_report(result), [])
+            commands = {entry['command']: entry['exit_code'] for entry in result['commands']}
+            self.assertEqual(commands.get('github:releases/latest ctrlshiftaltdel/AgentOrch'), 0)
+            self.assertEqual(commands.get('github:release-asset agentorch-20260101.zip'), 0)
 
     def test_plan_mode_writes_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -215,6 +223,7 @@ class ClassificationBlockTests(unittest.TestCase):
 
             self.assertEqual(result['result'], 'STOPPED_INVALID_BASELINE')
             self.assertEqual(result['baseline']['baseline_status'], 'MISSING')
+            self.assertIn('inventory', result['baseline']['notes'])
             self.assertEqual(source.fetch_count, 0)
             self.assertEqual(project.snapshot(), before)
             self.assertEqual(report_module.validate_report(result), [])
@@ -307,6 +316,21 @@ class UnsafePackageTests(unittest.TestCase):
             checks = {c['check']: c['result'] for c in result['target']['verification']['checks']}
             self.assertEqual(checks['SOURCE_ALLOWLIST'], 'FAIL')
             self.assertEqual(project.snapshot(), before)
+
+    def test_network_failure_is_blocked_and_not_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, source, _, _ = prepare(tmp)
+            source.fetch_error = OSError('synthetic dns failure')
+            before = project.snapshot()
+            result = run(project, source)
+
+            self.assertEqual(result['result'], 'BLOCKED')
+            self.assertEqual(result['target']['verification']['status'], 'NOT_RUN')
+            self.assertTrue(all(entry['result'] == 'NOT_RUN'
+                                for entry in result['target']['verification']['checks']))
+            self.assertEqual(project.snapshot(), before)
+            self.assertEqual(result['commands'][-1]['exit_code'], 1)
+            self.assertEqual(report_module.validate_report(result), [])
 
     def test_downgrade_is_blocked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -412,6 +436,50 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(project.snapshot(), before)
             self.assertFalse(result['rollback']['attempted'])
             self.assertEqual(report_module.validate_report(result), [])
+
+    def test_symlinked_write_target_is_blocked_and_preserved(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, source, _, _ = prepare(tmp)
+            outside = Path(tmp) / 'outside.txt'
+            outside.write_bytes(b'outside data\n')
+            link = project.path('kit/new-in-16.md')
+            link.symlink_to(outside)
+            before = project.snapshot()
+
+            result = run(project, source)
+
+            self.assertEqual(result['result'], 'BLOCKED')
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(outside.read_bytes(), b'outside data\n')
+            self.assertEqual(project.snapshot(), before)
+            self.assertEqual(report_module.validate_report(result), [])
+
+
+class CliTests(unittest.TestCase):
+    def test_read_edition_accepts_both_colon_styles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / 'docs').mkdir()
+            (project / 'docs' / 'PROJECT.md').write_text(
+                '- `edition`：`github`\n', encoding='utf-8')
+            self.assertEqual(support.cli.read_edition(project), 'github')
+            (project / 'docs' / 'PROJECT.md').write_text(
+                '- edition: local\n', encoding='utf-8')
+            self.assertEqual(support.cli.read_edition(project), 'local')
+
+    def test_missing_or_invalid_edition_fails_closed(self):
+        import contextlib
+        import io as _io
+
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            with contextlib.redirect_stderr(_io.StringIO()):
+                self.assertEqual(support.cli.main(['--project', tmp]), 1)
+            (project / 'docs').mkdir()
+            (project / 'docs' / 'PROJECT.md').write_text(
+                '- `edition`: `1`\n', encoding='utf-8')
+            with contextlib.redirect_stderr(_io.StringIO()):
+                self.assertEqual(support.cli.main(['--project', tmp]), 1)
 
 
 class ReportEvidenceTests(unittest.TestCase):

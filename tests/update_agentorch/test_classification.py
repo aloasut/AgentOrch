@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import unittest
 
-from update_agentorch import classify
+from . import support
+
+classify = support.classify
 
 
 A = 'a' * 64

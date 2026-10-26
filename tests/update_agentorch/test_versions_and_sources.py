@@ -8,8 +8,10 @@ from __future__ import annotations
 import inspect
 import unittest
 
-from tests.update_agentorch import support
-from update_agentorch import sources, versions
+from . import support
+
+sources = support.sources
+versions = support.versions
 
 
 class VersionTests(unittest.TestCase):
