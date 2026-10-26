@@ -40,7 +40,7 @@ python scripts/orchestrator.py task status TASK-0001 REVIEW_READY --head-sha <sh
 python scripts/orchestrator.py backup
 ```
 
-`python` 指代当前环境的 Python 3 解释器；本套件不引入第三方依赖。完整流程见本目录 [MASTER.md](master.md) 与 [START-EXECUTION.md](execution.md)。
+`python` 指代当前环境的 Python 3 解释器；本套件不引入第三方依赖。完整流程见本目录 [master.md](master.md) 与 [execution.md](execution.md)。
 
 ## 证据
 

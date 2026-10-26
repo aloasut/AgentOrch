@@ -55,7 +55,7 @@ EDITIONS = ('local','github')
 RUNTIME_DEFAULTS = {'retry_cap': RETRY_CAP_DEFAULT, 'local_dir': '.local'}
 PROJECT_CONFIG = 'docs/PROJECT.md'
 # docs/PLAN.md is the plan of record (task registration, dispatch and phase
-# close-out read it); templates/PLAN.md is only the seed copy that `init`
+# close-out read it); templates/plan.md is only the seed copy that `init`
 # copies once. A root-level PLAN.md is the legacy (<=1.3) location: init never
 # touches it and never seeds docs/PLAN.md while it exists, so the design goals
 # always keep a single authority. Both names are relative to the project root.
@@ -221,7 +221,7 @@ def event(con, task_id, action, from_status=None, to_status=None, note='', data=
         (task_id,now(),action,from_status,to_status,note,json.dumps(data or {},ensure_ascii=False)))
 
 def init_plan(root):
-    """Seed <root>/docs/PLAN.md from templates/PLAN.md exactly once.
+    """Seed <root>/docs/PLAN.md from templates/plan.md exactly once.
 
     docs/PLAN.md is the plan of record, so an existing file is never
     overwritten (that would destroy the project owner's plan). A legacy root
@@ -236,7 +236,7 @@ def init_plan(root):
     legacy=root/LEGACY_PLAN_DOC
     if target.exists():
         print(f'PLAN.md already present, kept unchanged: {target}')
-        print('Next: judge task direction from the design goals in docs/PLAN.md; templates/PLAN.md is only the initial copy.')
+        print('Next: judge task direction from the design goals in docs/PLAN.md; templates/plan.md is only the initial copy.')
         return 'kept'
     if legacy.exists():
         print(f'Legacy root PLAN.md found; docs/PLAN.md not created: {legacy}')
@@ -245,7 +245,7 @@ def init_plan(root):
     template=root/PLAN_TEMPLATE
     if not template.is_file():
         print(f'PLAN.md not created: template missing at {template}')
-        print('Next: copy templates/PLAN.md into docs/PLAN.md (kit installed there), then rerun init.')
+        print('Next: copy templates/plan.md into docs/PLAN.md (kit installed there), then rerun init.')
         return 'template-missing'
     (root/'docs').mkdir(parents=True,exist_ok=True)
     target.write_bytes(template.read_bytes())
@@ -1336,7 +1336,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root',default='.',help='project root (default: current directory)')
     sub=parser.add_subparsers(dest='cmd',required=True)
-    sub.add_parser('init',help='initialize the local task database and .orchestration/config.json (retry_cap, local_dir); seed docs/PLAN.md from templates/PLAN.md when absent')
+    sub.add_parser('init',help='initialize the local task database and .orchestration/config.json (retry_cap, local_dir); seed docs/PLAN.md from templates/plan.md when absent')
     sub.add_parser('backup',help='create a consistent SQLite backup')
     cf=sub.add_parser('config',help='inspect runtime configuration'); cs=cf.add_subparsers(dest='configcmd',required=True)
     cs.add_parser('show',help='print effective config values and their source')

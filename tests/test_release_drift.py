@@ -505,6 +505,49 @@ class DiagnosisTests(unittest.TestCase):
         self.assertIn('is invalid', result.stderr)
 
 
+class SkipDirsTests(unittest.TestCase):
+    """Build output and tool caches must not drown the drift report.
+
+    A project that vendors a Rust crate, runs pytest, or indexes itself with
+    codegraph / opencode would otherwise report thousands of generated files as
+    `extension` — and as `unknown` when the cache sits inside an upstream
+    namespace, which would turn a clean tree into a false drift.
+    """
+
+    SKIPPED = (
+        'tools/app/target/debug/x',
+        '.pytest_cache/x',
+        '.codegraph/x',
+        '.opencode/x',
+        'tests/.pytest_cache/x',   # inside an upstream namespace: would be `unknown`
+    )
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.tree = FixtureTree(self.tmp.name)
+        self.tree.emit_manifest()
+        for rel in self.SKIPPED:
+            self.tree.write(rel, 'generated\n')
+        self.tree.write('src/app.py', 'x = 1\n')
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_iter_local_files_prunes_build_and_cache_directories(self):
+        found = drift.iter_local_files(self.tree.root)
+        self.assertIn('src/app.py', found)
+        for rel in self.SKIPPED:
+            self.assertNotIn(rel, found)
+
+    def test_report_does_not_list_them_as_extension_or_unknown(self):
+        report = drift.diagnose(self.tree.root)
+        reported = [item['path'] for key in ('extensions', 'unknown')
+                    for item in report['findings'][key]]
+        self.assertEqual(reported, ['src/app.py'])
+        self.assertEqual(report['status'], 'clean')
+        self.assertEqual(report['exit_code'], 0)
+
+
 class CliContractTests(unittest.TestCase):
     REPORT_KEYS = {'exit_code', 'findings', 'manifest', 'notes', 'report_schema_version',
                    'root', 'status', 'summary', 'tool', 'version_span'}

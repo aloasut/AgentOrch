@@ -17,7 +17,7 @@
 1. `docs/PROJECT.md` — 读取 `edition`，取值必须是 `local` 或 `github`。
 2. `AGENTS.md` — 核心协作契约（edition-neutral）。
 3. `kit/orchestration.md` — 状态机、合并门与能力契约。
-4. `editions/<edition>/MASTER.md` — 当前底座的 Master 手册。
+4. `editions/<edition>/master.md` — 当前底座的 Master 手册。
 
 **底座判定规则**：
 
@@ -62,8 +62,8 @@ gh pr list --state open --limit 100
 | # | 条件 | 动作 |
 |---|------|------|
 | a | `docs/PROJECT.md` 存在 `FILL_IN` 占位符，或章程缺失 | 加载 `templates/project-charter.md`（两个底座共享），先补齐章程再进入编排 |
-| b | 章程已填写完整，且当前底座没有任何任务（新项目） | 加载 `editions/<edition>/START-MASTER-NEW-PROJECT.md`，进入初始规划 |
-| c | 当前底座已有活动任务（`DISPATCHED` / `IN_PROGRESS` / `PR_OPEN` 等），或项目已有推进记录 | 加载 `editions/<edition>/START-MASTER-EXISTING-PROJECT.md`，先汇报当前状态、活动任务与阻塞，再继续调度 |
+| b | 章程已填写完整，且当前底座没有任何任务（新项目） | 加载 `editions/<edition>/master.md` 的“新项目启动”章节，进入初始规划 |
+| c | 当前底座已有活动任务（`DISPATCHED` / `IN_PROGRESS` / `PR_OPEN` 等），或项目已有推进记录 | 加载 `editions/<edition>/master.md` 的“已有项目接入”章节，先汇报当前状态、活动任务与阻塞，再继续调度 |
 | d | 当前底座没有任务，且用户本轮未给出目标 | 简要汇报当前状态（底座、分支、工作区、最近提交、章程情况）后等待用户目标，不自行造任务 |
 
 判断以底座载体与 Git 的真实状态为准；多种条件同时命中时，按 a → b → c 优先级处理（例如章程缺失时先补章程，即使已有任务）。
@@ -105,7 +105,7 @@ gh pr list --state open --limit 100
 
 ## 1. 适用方式
 
-- 核心条款只有这一份。底座手册（`editions/<edition>/MASTER.md` 与对应提示词）只能细化命令和载体操作，**不得复制或改写出另一套核心条款**；发现底座手册与本文件冲突时，以本文件为准并登记任务修正。
+- 核心条款只有这一份。底座手册（`editions/<edition>/master.md` 与对应提示词）只能细化命令和载体操作，**不得复制或改写出另一套核心条款**；发现底座手册与本文件冲突时，以本文件为准并登记任务修正。
 - 状态、门禁、审批与合并的语义在两个底座完全一致，差异只体现在“写到哪里、用什么命令查”。
 - 任何一项能力或检查未实际执行时，状态不得前进；“未知”一律按未完成处理。
 

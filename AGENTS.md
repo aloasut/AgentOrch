@@ -2,7 +2,7 @@
 
 # AGENTS.md — Agent Collaboration Contract
 
-本文件是仓库内所有 Agent 的唯一权威核心契约，与底座（edition）无关。每次接手先读本文件、`kit/orchestration.md` 与 `docs/PROJECT.md`，再读 `editions/<edition>/MASTER.md` 和当前底座的提示词。有分歧时，以项目所有者最近一次明确决定为最高约束，其次是本文件，再到 `kit/orchestration.md`、底座手册与提示词；发现冲突必须登记为任务，不能自行发明权限。
+本文件是仓库内所有 Agent 的唯一权威核心契约，与底座（edition）无关。每次接手先读本文件、`kit/orchestration.md` 与 `docs/PROJECT.md`，再读 `editions/<edition>/master.md` 和当前底座的提示词。有分歧时，以项目所有者最近一次明确决定为最高约束，其次是本文件，再到 `kit/orchestration.md`、底座手册与提示词；发现冲突必须登记为任务，不能自行发明权限。
 
 ## 0. 底座（Edition）
 

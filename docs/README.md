@@ -244,7 +244,7 @@ uv run python -m unittest discover -s tests
 3. **登记块接管锁**：开工前在 Issue 写 `ORCH-TASK-REGISTRY` 登记块，并检查所有开放 PR 的变更文件是否与 `locked_paths` 相交；两者都通过才算取得锁。
 4. **切换点一次性完成**：状态映射、证据迁移、合并后主分支重验一次做完；迁移后所有状态只写入 Issue / PR，任务库转为只读归档。
 
-迁移完成后，按 `github` 底座的启动提示词继续：[START-MASTER-NEW-PROJECT.md](../editions/github/master.md) 或 [START-MASTER-EXISTING-PROJECT.md](../editions/github/master.md)。迁移是单向的，本套件不提供自动回退；确需回退时由项目所有者单独立项。
+迁移完成后，按 `github` 底座的启动提示词继续：[master.md 的“新项目启动”章节](../editions/github/master.md) 或 [master.md 的“已有项目接入”章节](../editions/github/master.md)。迁移是单向的，本套件不提供自动回退；确需回退时由项目所有者单独立项。
 
 ## 5. 目录结构
 
@@ -399,16 +399,28 @@ uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until
 - **90 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
 - **合约模板是否仍问对问题**：`templates/design.md`、`templates/milestone-audit.md`、`templates/contract-decision-log.md` 的必备章节缺一即失败，模板内的相对链接断链也失败（章节缺失会被静默当成“不需要回答”，因此单列一项检查）。
 - **能力登记与指标模板是否仍问对问题**：`templates/runtime-capability.md` 的身份 / 能力矩阵 / 扩展边界 / `UNKNOWN` 与重测 / 权限范围 / 证据与限制，以及 `templates/metrics.md` 的阅读规则 / 公共定义 / 指标定义 / 缺失与覆盖率 / 报告契约 / 金样本 / 限制，缺章节同样失败。
-- **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析、SHA-256 与大小；仓库根目录没有该文件，检查自动跳过，不误报。
+- **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析与 `REQUIRED` 集合一致；SHA-256 与大小在纯净包与上游 checkout 严格比较，在下游项目只校验结构（见下方“三种树”）。仓库根目录没有该文件，检查自动跳过，不误报。
 - **两底座结构是否一致**：`editions/local` 与 `editions/github` 共享 7 个文件，`github` 额外提供 3 个模板；任一侧缺失或出现多余文件都会失败。
 - **治理概念是否真实存在**：核心编排文档必须出现 `PR_OPEN`、合并门 G1–G6、运行时能力契约 C1–C4；文档整体必须出现主要状态名。
 - **`edition` 是否合法**：`docs/PROJECT.md` 必须有该键，且值为 `local` 或 `github`。
 - **相对链接是否可解析**：扫描所有 Markdown 链接，断链即失败（外部 URL 与锚点除外）。
 - **可选架构契约检查器是否随包发布**：`scripts/architecture/` 与 `templates/architecture/` 进入 `REQUIRED`（发行包清单），缺失即失败。检查器本身不猜模块：没有 `docs/architecture/contract.json` 时等价 `OFF`，只输出只读盘点并以 0 退出；配置契约后才按 `ERROR` / `WARNING` / `UNKNOWN` / `NOT_RUN` 报告并绑定 head SHA。用法见 [`templates/architecture/README.md`](../templates/architecture/README.md)。
 
+**三种树，三种严格度**：`validate_kit.py` 按树自动判定，汇总行会打印 `tree mode package|downstream|upstream`。
+
+| 树 | 判定依据 | 仓库文档检查 | `MANIFEST.json` 检查 |
+| --- | --- | --- | --- |
+| 纯净包（`package`） | 没有 `docs/` 目录 | 跳过（包内不带仓库文档） | 结构 + 分类 + 路径 + `REQUIRED` 集合 + **SHA-256 / 大小** |
+| 下游项目（`downstream`） | 有 `docs/`，没有 `docs/upgrade.md` | 只要求 `docs/PROJECT.md` 与 `docs/PLAN.md`（后者仍需“设计目标”章节） | 结构 + 分类 + 路径 + `REQUIRED` 集合 + 每个列出文件存在；**不比较哈希** |
+| 上游 checkout（`upstream`） | 有 `docs/upgrade.md` | 全部 `REQUIRED_DOCS` | 结构 + 分类 + 路径 + `REQUIRED` 集合 + **SHA-256 / 大小** |
+
+- **`docs/upgrade.md` 是上游标记**：它只存在于本仓库，不随包发布。下游项目**不要**创建同名文件——一旦出现，`validate_kit.py` 会按上游 checkout 要求全部仓库文档，并把本地修改当哈希漂移报错。
+- **下游放宽的只有哈希**：清单结构非法、分类错误、路径非法、`REQUIRED` 少列 / 多列、清单列出的文件缺失，在三种树下都是失败。下游项目保留官方 `MANIFEST.json` 当基线即可，自己的修改由 `check_drift.py` 报告（见 8.2）。
+- **纯净包与上游不降级**：包内或本仓库 checkout 里改动核心文件，`validate_kit.py` 仍以退出码 1 失败。
+
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `docs/PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `docs/PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 686 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树、构建 / 缓存目录被跳过）、三种树下的校验模式（纯净包 / 下游 / 上游的文档集合与清单严格度、下游本地修改不触发哈希失败而 `check_drift` 仍报 `modified`）、shipped 文件不出现已改名路径、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 702 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -512,8 +524,10 @@ uv run python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON�
 
 `project-extension` 与 `unknown` 的差别是「归属」：前者是项目自己的地盘，后者是套件的地盘出现了清单不认识的文件；两者都会逐条列出，既不误报成应覆盖的通用核心，也不被静默忽略。
 
+- **与 `validate_kit.py` 的分工**：`validate_kit.py` 在纯净包与上游 checkout 上做哈希严格校验，在下游树上只校验清单契约；**下游的本地修改只由本工具报告**（`modified` / `missing` / `unknown`）。因此下游看到 `check_drift` 退出码 2 是预期诊断结果，不是 `validate_kit` 失败。
 - **退出码**：`0` clean；`2` 发现 drift（缺失、改动、`unknown`，或清单 schema 超出本工具支持范围）；`1` 输入无效或工具错误（项目根不存在、`MANIFEST.json` 非法 JSON / 结构不合法）。`--json` 的报告结构带 `report_schema_version`，字段固定，失败时同样输出稳定结构（多一个 `error` 字段）。
 - **只读**：诊断只读取文件与目录、绝不写入 / 重命名 / 删除 / 覆盖目标项目；没有 `--fix`、`--sync` 一类开关，也不做自动合并或迁移。
+- **不扫描的目录**：`.git`、`.orchestration`、`.local`、`.worktrees`、`.workbuddy`、`__pycache__`、`release`、`node_modules`、`.venv`、`.idea`、`.vscode`，以及构建 / 缓存目录 `target`、`.pytest_cache`、`.codegraph`、`.opencode`。这些目录下的文件不会进入任何分类，也不会被误报成 `extension` / `unknown`。
 - **旧项目（无 `MANIFEST.json`）**：报告 `status: version-unknown`、退出码 `2`，提示「版本未知 / 需基线登记」并说明如何登记基线，**不猜版本**，也不阻止用户继续读取项目。
 - **版本跨度**：报告 manifest 的 `schema_version` 是否在本工具支持范围内，并原样给出 `suite` / `format_version`，便于与上游发布记录对照。
 
