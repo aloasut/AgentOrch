@@ -75,8 +75,9 @@ def _read_baseline(root: Path) -> Baseline:
         )
     try:
         data = path.read_bytes()
-    except OSError as exc:
-        return Baseline(status='INVALID_BASELINE', notes=f'cannot read MANIFEST.json: {exc}')
+    except OSError:
+        return Baseline(status='INVALID_BASELINE',
+                        notes='cannot read MANIFEST.json (I/O or permission error)')
     try:
         manifest = json.loads(data.decode('utf-8'))
     except (UnicodeDecodeError, ValueError) as exc:
@@ -417,16 +418,21 @@ def run_update(project, *, mode: str, source, edition: str,
                 report['rollback']['evidence'] = f'backup could not be created: {type(exc).__name__}'
                 return report
 
-        backup = workspace.create_backup(
-            target_root, list(write_data), now=now,
-            metadata={
-                'installed_version': baseline.installed_version,
-                'target_version': pkg.version,
-                'head_sha': git.head_sha,
-                'dirty_paths': dirty_paths,
-                'old_manifest_sha256': baseline.manifest_sha256,
-            },
-        )
+        try:
+            backup = workspace.create_backup(
+                target_root, list(write_data), now=now,
+                metadata={
+                    'installed_version': baseline.installed_version,
+                    'target_version': pkg.version,
+                    'head_sha': git.head_sha,
+                    'dirty_paths': dirty_paths,
+                    'old_manifest_sha256': baseline.manifest_sha256,
+                },
+            )
+        except OSError as exc:
+            report['result'] = 'BLOCKED'
+            report['rollback']['evidence'] = f'backup could not be created: {type(exc).__name__}'
+            return report
         report['backup'] = {
             'required': True,
             'location': str(backup.location),
@@ -529,7 +535,8 @@ def _source_error_checks(exc: sources.SourceError) -> list[dict]:
     index = package.CHECK_ORDER.index(check)
     checks = [{'check': name, 'result': 'PASS', 'detail': None}
               for name in package.CHECK_ORDER[:index]]
-    checks.append({'check': check, 'result': 'FAIL', 'detail': exc.detail})
+    checks.append({'check': check, 'result': 'FAIL',
+                   'detail': exc.detail[:997] + '...' if len(exc.detail) > 1000 else exc.detail})
     checks.extend({'check': name, 'result': 'NOT_RUN',
                    'detail': f'not executed: stopped at {check}'}
                   for name in package.CHECK_ORDER[index + 1:])

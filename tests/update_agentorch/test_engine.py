@@ -437,6 +437,19 @@ class WorkspaceTests(unittest.TestCase):
             self.assertFalse(result['rollback']['attempted'])
             self.assertEqual(report_module.validate_report(result), [])
 
+    def test_backup_creation_error_blocks_without_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project, source, _, _ = prepare(tmp)
+            before = project.snapshot()
+            with mock.patch.object(support.workspace, 'create_backup',
+                                   side_effect=OSError('synthetic disk full')):
+                result = run(project, source)
+            self.assertEqual(result['result'], 'BLOCKED')
+            self.assertEqual(project.snapshot(), before)
+            self.assertFalse(result['rollback']['attempted'])
+            self.assertIn('backup', result['rollback']['evidence'])
+            self.assertEqual(report_module.validate_report(result), [])
+
     def test_symlinked_write_target_is_blocked_and_preserved(self):
         with tempfile.TemporaryDirectory() as tmp:
             project, source, _, _ = prepare(tmp)

@@ -334,8 +334,8 @@ def restore_backup(root: Path, backup: Backup) -> list[str]:
                 atomic_write(target, data)
             elif target.is_file() or target.is_symlink():
                 target.unlink()
-        except OSError as exc:
-            problems.append(f'cannot restore {relative}: {exc}')
+        except OSError:
+            problems.append(f'cannot restore {relative}')
     return problems
 
 
@@ -353,8 +353,8 @@ def verify_restore(root: Path, backup: Backup) -> list[str]:
             continue
         try:
             digest = sha256_bytes(target.read_bytes())
-        except OSError as exc:
-            problems.append(f'{entry["path"]}: unreadable after rollback: {exc}')
+        except OSError:
+            problems.append(f'{entry["path"]}: unreadable after rollback')
             continue
         if digest != entry['sha256']:
             problems.append(f'{entry["path"]}: sha256 differs after rollback')

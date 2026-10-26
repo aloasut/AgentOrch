@@ -31,6 +31,8 @@ ASSET_NAME_RE = re.compile(r'^[A-Za-z0-9._-]+\.zip$')
 DIGEST_RE = re.compile(r'^sha256:([a-f0-9]{64})$')
 
 USER_AGENT = 'agentorch-update-engine'
+MAX_METADATA_BYTES = 1024 * 1024
+MAX_ASSET_BYTES = 64 * 1024 * 1024
 
 
 class SourceError(Exception):
@@ -128,6 +130,21 @@ def select_asset(release: ReleaseInfo) -> ReleaseAsset:
     return asset
 
 
+def read_limited(stream, limit: int, *, check: str = 'ASSET_SHA256') -> bytes:
+    """Read at most ``limit`` bytes; a larger body is an unsafe package."""
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = stream.read(min(64 * 1024, limit - total + 1))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > limit:
+            raise SourceError(check, f'download exceeds the {limit} byte limit')
+        chunks.append(chunk)
+    return b''.join(chunks)
+
+
 def parse_release_payload(payload: dict, repository: str = OFFICIAL_REPOSITORY) -> ReleaseInfo:
     """Turn a GitHub ``/releases/latest`` JSON object into a :class:`ReleaseInfo`."""
     assets = []
@@ -167,17 +184,17 @@ class GitHubReleaseSource:
         self._token = token if token is not None else os.environ.get('GITHUB_TOKEN')
         self._timeout = timeout
 
-    def _request(self, url: str, *, authenticate: bool) -> bytes:
+    def _request(self, url: str, *, authenticate: bool, limit: int) -> bytes:
         headers = {'Accept': 'application/vnd.github+json', 'User-Agent': USER_AGENT}
         if authenticate and self._token:
             headers['Authorization'] = f'Bearer {self._token}'
         request = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(request, timeout=self._timeout) as response:
-            return response.read()
+            return read_limited(response, limit)
 
     def fetch_release(self) -> ReleaseInfo:
         url = f'{OFFICIAL_API}/repos/{OFFICIAL_REPOSITORY}/releases/latest'
-        raw = self._request(url, authenticate=True)
+        raw = self._request(url, authenticate=True, limit=MAX_METADATA_BYTES)
         try:
             payload = json.loads(raw.decode('utf-8'))
         except (UnicodeDecodeError, ValueError) as exc:
@@ -189,4 +206,4 @@ class GitHubReleaseSource:
     def download_asset(self, asset: ReleaseAsset) -> bytes:
         _validate_download_url(asset.download_url, OFFICIAL_REPOSITORY)
         authenticate = (urlparse(asset.download_url).hostname or '') in {'api.github.com', 'github.com'}
-        return self._request(asset.download_url, authenticate=authenticate)
+        return self._request(asset.download_url, authenticate=authenticate, limit=MAX_ASSET_BYTES)

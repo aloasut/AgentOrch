@@ -206,6 +206,8 @@ def manifest_schema_errors(manifest: object) -> list[str]:
 # --- verification -----------------------------------------------------------
 
 def _check(name: str, result: str, detail: str | None = None) -> dict:
+    if detail is not None and len(detail) > 1000:
+        detail = detail[:997] + '...'
     return {'check': name, 'result': result, 'detail': detail}
 
 

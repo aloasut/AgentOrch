@@ -127,6 +127,15 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(release.assets[0].digest, 'sha256:' + 'a' * 64)
         self.assertEqual(release.assets[0].size, 1234)
 
+    def test_download_size_limit_is_enforced(self):
+        import io
+
+        self.assertEqual(sources.read_limited(io.BytesIO(b'x' * 10), 10), b'x' * 10)
+        with self.assertRaises(sources.SourceError) as caught:
+            sources.read_limited(io.BytesIO(b'x' * 11), 10)
+        self.assertEqual(caught.exception.check, 'ASSET_SHA256')
+        self.assertLess(sources.MAX_ASSET_BYTES, 1 << 30)
+
     def test_parse_missing_digest_is_kept_as_none(self):
         payload = {
             'tag_name': 'v1.6',
