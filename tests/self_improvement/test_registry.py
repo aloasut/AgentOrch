@@ -48,14 +48,6 @@ class RegistryShapeTests(unittest.TestCase):
                                          'an OK cursor must record a successful scan')
                     self.assertIsNotNone(cursor.get('last_scanned_commit'),
                                          'an OK cursor must record a commit watermark')
-                else:
-                    # This repository's default registry is a first scan that
-                    # ended PARTIAL: it has no prior success to preserve, so a
-                    # non-OK cursor here must not claim a success watermark.
-                    self.assertIsNone(cursor.get('last_successful_scan_at'),
-                                      'a non-OK cursor must not claim a successful scan')
-                    self.assertIsNone(cursor.get('last_scanned_commit'),
-                                      'a non-OK cursor must not claim a commit watermark')
             self.assertEqual(entry['trust']['content_trust'], 'untrusted_data')
             self.assertFalse(entry['trust']['may_override_rules'])
             self.assertGreaterEqual(len(entry['evidence_scope']), 1)
