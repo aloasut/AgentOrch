@@ -408,7 +408,7 @@ uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `docs/PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `docs/PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 683 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 686 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -482,8 +482,8 @@ uv run python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-
 
 ### 8.1 构建发行包
 
-- **构建（两种命名，互不组合）**：日期构建用 `uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD`，产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`；正式 Release 用 `--release-version 1.6`，产出 `release/AgentOrch-1.6.zip`，顶层目录 `AgentOrch-1.6/`。zip 名与顶层目录名始终相同；两个命名参数同时给出会直接报错。无论用哪种命名，包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`，`MANIFEST.json` 的 `format_version` 都不变（当前 `1.5`）。
-- **Release 版本 ≠ Format 版本**：`AgentOrch-1.6.zip` 是**发行号**（tag `v1.6`），`VERSION.md` 的 `Format version` 仍是 `1.5`，`MANIFEST.json` 的 `format_version` 也是 `1.5`；下游兼容性判断看 `format_version`，不要把它读成 `1.6`。`VERSION.md` 的 `Release version` 行只作记录，不参与 `check_drift.py` 的 Format 解析。
+- **构建（两种命名，互不组合）**：日期构建用 `uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD`，产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`；正式 Release 用 `--release-version 1.6`，产出 `release/AgentOrch-1.6.zip`，顶层目录 `AgentOrch-1.6/`。zip 名与顶层目录名始终相同；两个命名参数同时给出会直接报错。无论用哪种命名，包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`，`MANIFEST.json` 的 `format_version` 只由 `VERSION.md` 的 `Format version:` 行决定（当前 `1.6`）。
+- **Release 版本 ≠ Format 版本**：`AgentOrch-1.6.zip` 是**发行号**（tag `v1.6`），`Format version` 是格式契约版本；本轮两者数值都是 `1.6`，但仍是两条序列。`MANIFEST.json` 的 `format_version` 由 `Format version:` 行生成（`1.6`），`Release version` 行只作记录、不参与 `check_drift.py` 的解析。升 Format 到 1.6 同时满足更新引擎的 `VERSION_MATCH`（tag 的 major.minor 必须等于 `format_version`）。
 - **机器可读清单**：`MANIFEST.json` 记录 `schema_version`（清单格式版本）、`suite`、`format_version`（套件格式版本）与 `files[]`；每个条目含 `path`、`category`、`sha256`、`size`。清单**不含时间戳**、条目按路径排序，分类规则只有一处实现（`scripts/check_drift.py`，构建脚本导入它），因此同一工作树两次构建得到完全相同的清单与 zip SHA256。
 - **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–l 自检，失败会删除未通过自检的产物，没有跳过开关。自检 a 现在校验「包内文件集合 == `REQUIRED` + `MANIFEST.json`」、清单中每条路径可解析、SHA-256 与大小和实际文件一致、分类合法且清单路径与 `REQUIRED` 完全一致。
 - **可复现**：归档时间戳固定、文本文件按 LF 归一后打包，清单哈希同样按归一后的字节计算；同一仓库状态重建应得到同一 SHA256，Windows 上 `core.autocrlf=true` 的检出也不会改变结果。
@@ -521,8 +521,9 @@ uv run python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON�
 
 ## 9. 版本与兼容
 
-- [VERSION.md](../VERSION.md) 记录套件名、支持底座、**Format version**（当前 `1.5`）与**对外 Release 版本**（当前 `1.6`，仅作记录）；格式变更时同步更新模板与校验清单。
-- **Format 版本与 Release 版本是两条序列，不要混读**：本轮发布是 Release `1.6`（tag `v1.6`、资产 `AgentOrch-1.6.zip`），不含格式变更，因此 `Format version` 仍是 `1.5`。`MANIFEST.json` 的 `format_version` 只由 `Format version:` 一行生成，`Release version` 行不参与解析；下游判断兼容性看 `format_version`。
+- [VERSION.md](../VERSION.md) 记录套件名、支持底座、**Format version**（当前 `1.6`）与**对外 Release 版本**（当前 `1.6`，仅作记录）；格式变更时同步更新模板与校验清单。
+- **Format 版本与 Release 版本是两条序列，不要混读**：本轮发布是 Release `1.6`（tag `v1.6`、资产 `AgentOrch-1.6.zip`），同时把 `Format version` 从 `1.5` 升到 `1.6`（新增自我完善 / 安全更新资产，见 `release/README.md` §5.2）；两个数值相同只是本轮结果，语义仍分开。`MANIFEST.json` 的 `format_version` 只由 `Format version:` 一行生成（`1.6`），`Release version` 行不参与解析；下游判断兼容性看 `format_version`。
+- **1.6 相对 1.5 的格式变化**：新增 `scripts/self_improvement/`、`scripts/update_agentorch/`、`templates/self-improvement/` 及随包测试进入 `REQUIRED`（包内 34 → 91 个文件）；无文件移动、改名或删除，`MANIFEST.json` schema 1 不变。已安装 1.3 及以后、有 `MANIFEST.json` 的项目可用「更新 AgentOrch」入口准备升级；真实 v1.5 → 1.6 升级仍归 #71（`NOT_RUN`）。
 - `1.3` 相对 `1.2` 的变更要点：
   - **资源锁的载体字段**：具名资源锁把"不落在文件上"的独占需求写成任务字段——通用任务包新增可选 `declared_resources`（`<resource_id>:<mode>[:<ttl>]`，逗号分隔）；`github` 登记块新增 `locked_resources` 与 `resource_lease_until`（后者仅为记账值，平台不会因其过期而拒绝写入）；`local` 任务库新增 `resources_json` 列。字段格式属载体契约，故 `Format version` 从 `1.2` 升到 `1.3`；语义仍只在 `docs/design/resource-locks.md` 定义（该目录不随包发布）。
   - **发布清单与漂移工具进包**：包内新增 `MANIFEST.json`，分类与清单生成只有一处实现（`scripts/check_drift.py`，构建脚本导入它），`check_drift.py` 同时随包提供下游只读漂移诊断（见 8.1 / 8.2 节）。
@@ -542,7 +543,7 @@ uv run python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON�
 
 上面每条版本变更对应的**旧项目迁移动作**见第 10 节：`edition` 旧格式行、旧 `PLAN.md` 台账、资源锁 TTL、旧包无 `MANIFEST.json`；1.4 新增第 10.6 节（根 `PLAN.md` 迁入 `docs/PLAN.md` 与图片规范）。
 
-## 10. 从旧版升级（1.1 → 1.5，含安全更新入口）
+## 10. 从旧版升级（1.1 → 1.6，含安全更新入口）
 
 已经装了 1.1 / 1.2 的项目升到 1.3 时，有四条会“先撞错、再猜原因”。下面每条按**变了什么 / 怎么改 / 怎么自检**三段写，命令可直接复制；四条互相独立，命中几条改几条。完整分步清单、报错原文、退出码与逐条回退见仓库文档 `docs/upgrade.md`（`docs/` 不随发行包发布，因此本节不依赖它：包内用户照本节即可完成四条迁移）。
 
@@ -695,7 +696,7 @@ uv run python scripts/check_drift.py .               # 0：已登记基线
 
 ### 10.7 “更新 AgentOrch”安全入口（当前 Format）
 
-已安装 1.3 / 1.4 / 1.5（有 `MANIFEST.json`）的项目可以用一条入口命令准备升级，不必手工比对上游文件：
+已安装 1.3 / 1.4 / 1.5（有 `MANIFEST.json`）的项目可以用一条入口命令准备升级到 1.6，不必手工比对上游文件；已安装 1.6 的项目无需再升级：
 
 ```bash
 uv run python -m scripts.update_agentorch.entry --project . \

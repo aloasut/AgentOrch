@@ -7,6 +7,7 @@ rules) and prove that a diagnosis never touches the inspected tree.
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -19,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / 'scripts' / 'check_drift.py'
 VALIDATOR = ROOT / 'scripts' / 'validate_kit.py'
 BUILD = ROOT / 'scripts' / 'build_release.py'
+VERSIONS = ROOT / 'scripts' / 'update_agentorch' / 'versions.py'
 
 
 def load(name, path):
@@ -254,6 +256,47 @@ class ReleaseAssetNamingTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn('not allowed with argument', result.stderr)
             self.assertEqual(list(Path(tmp).iterdir()), [])
+
+
+class VersionConsistencyTests(unittest.TestCase):
+    """Format and Release version have to agree for the published tag.
+
+    The update engine's VERSION_MATCH check accepts a release only when the
+    tag's major.minor equals MANIFEST.json's format_version (versions.py owns
+    that rule), so the two numbers in VERSION.md cannot be reviewed separately:
+    a `v1.6` tag with a `1.5` Format version is rejected as UNSAFE_PACKAGE.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.versions = load('versions_under_test', VERSIONS)
+
+    def release_version(self):
+        text = (ROOT / 'VERSION.md').read_text(encoding='utf-8')
+        match = re.search(r'^- Release version:\s*(\S+)', text, re.M)
+        self.assertIsNotNone(match, 'VERSION.md must declare "Release version: <x.y>"')
+        return match.group(1)
+
+    def test_version_file_parses_as_suite_and_format_1_6(self):
+        self.assertEqual(drift.read_version(ROOT), (SUITE, '1.6'))
+
+    def test_release_tag_matches_the_format_version(self):
+        release = self.release_version()
+        _, format_version = drift.read_version(ROOT)
+        self.assertEqual(release, '1.6')
+        self.assertEqual(format_version, '1.6')
+        self.assertTrue(self.versions.tag_matches_format(f'v{release}', format_version))
+        # The previous tag must NOT be accepted against the current Format: the
+        # rule compares major.minor, so a silent mismatch would be a real defect.
+        self.assertFalse(self.versions.tag_matches_format('v1.5', format_version))
+
+    def test_manifest_generated_from_version_file_records_format_1_6(self):
+        suite, format_version = drift.read_version(ROOT)
+        manifest = drift.build_manifest({'AGENTS.md': b'# agents\n'}, suite, format_version)
+        self.assertEqual(manifest['format_version'], '1.6')
+        shipped = json.loads(drift.dumps_manifest(manifest))
+        self.assertEqual(shipped['format_version'], '1.6')
+        self.assertEqual(shipped['suite'], SUITE)
 
 
 class ManifestValidationTests(unittest.TestCase):
