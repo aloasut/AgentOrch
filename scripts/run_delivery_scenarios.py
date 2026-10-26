@@ -3575,6 +3575,28 @@ def _redact(text, sandbox):
     return text
 
 
+def _remove_sandbox(path):
+    """Remove a scenario sandbox, including read-only files a Windows git repo leaves.
+
+    ``git init`` / ``git worktree add`` mark objects read-only on Windows, and
+    ``shutil.rmtree`` cannot unlink a read-only file there. Granting write access
+    while walking the tree is the portable way to make the removal succeed; on
+    POSIX the mode bits are equally harmless. Cleanup never raises: a leftover
+    sandbox is reported by the tests that assert an empty work directory.
+    """
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in dirnames + filenames:
+            try:
+                os.chmod(os.path.join(dirpath, name), 0o700)
+            except OSError:
+                pass
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def run_scenarios(scenarios, workdir, vk=None, orch=None, emit=None):
     """Run every scenario; a failure or crash never stops the remaining ones."""
     results = []
@@ -3600,7 +3622,7 @@ def run_scenarios(scenarios, workdir, vk=None, orch=None, emit=None):
                 'traceback': _redact(traceback.format_exc(), sandbox),
             })
         finally:
-            shutil.rmtree(sandbox, ignore_errors=True)
+            _remove_sandbox(sandbox)
         results.append(result)
         if emit is not None:
             emit(result)
@@ -3706,11 +3728,14 @@ def main(argv=None):
         print(f'RUNNER ERROR: {exc}', file=sys.stderr)
         return EXIT_TOOL_ERROR
 
-    workdir = tempfile.TemporaryDirectory(prefix='agentorch-delivery-scenarios-')
+    # `mkdtemp` + `_remove_sandbox` instead of `TemporaryDirectory`: the git-backed
+    # scenarios leave read-only object files on Windows, which need the same
+    # explicit permission fix the per-scenario cleanup applies.
+    workdir = Path(tempfile.mkdtemp(prefix='agentorch-delivery-scenarios-'))
     try:
-        results = run_scenarios(selected, workdir.name, vk=vk, orch=orch)
+        results = run_scenarios(selected, workdir, vk=vk, orch=orch)
     finally:
-        workdir.cleanup()
+        _remove_sandbox(workdir)
 
     report = build_report(results)
     if args.output:
