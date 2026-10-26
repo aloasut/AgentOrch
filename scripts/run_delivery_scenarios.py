@@ -65,7 +65,7 @@ EXIT_TOOL_ERROR = 2
 GROUPS = {
     'A': 'governance / authorization',
     'B': 'migration / versioning',
-    'C': 'cross-module closeout / shared state and recovery',
+    'C': 'cross-module closeout / shared state, recovery and architecture alignment',
     'D': 'orchestration base / evidence decay',
 }
 
@@ -599,6 +599,385 @@ def _scan_entries(directory, swallow=False):
             'total': len(paths), 'errors': errors, 'skipped': skipped}
 
 
+# --- architecture-contract fixtures (adapter isolation, shared service) -----
+# The six rules in docs/architecture/agentmgr-contract-rules.md are exercised on
+# the *real* checker: a synthetic tree is written to the sandbox, the optional
+# Architecture Contract (frozen by #47, implemented by #48) is asked to judge it,
+# and the JSON report is the evidence. The semantic rules (shared application
+# service, mock versus real evidence, terminal states, capability claims) cannot
+# be proven by static analysis, so they run as small contract tests here and are
+# labelled as such. Nothing read or written outside the scenario sandbox.
+ARCH_PACKAGE = 'agentorch_architecture'
+ARCH_EXPECTED_MODULES = ('adapter-hermes', 'application', 'domain',
+                         'entrypoint-api', 'entrypoint-mcp')
+SYNTHETIC_TOP_PACKAGE = 'src'
+TERMINAL_STATES = ('OK', 'FAILED', 'CANCELLED', 'TIMED_OUT', 'UNKNOWN')
+EVIDENCE_KINDS = ('MOCK', 'REAL_RUNTIME')
+CAPABILITY_EVIDENCE_KINDS = ('PROBE', 'STARTUP_OK', 'DESIGN_DOC')
+PROBE_TIMESTAMP = '2026-10-26T00:00:00Z'
+
+AGM_FILES = {
+    'src/domain/rules.py':
+        'def decide(request):\n'
+        '    return {"amount": request["amount"] * 2}\n',
+    'src/app/service.py':
+        'from src.domain import rules\n'
+        '\n'
+        '\n'
+        'def plan(request):\n'
+        '    return rules.decide(request)\n',
+    'src/adapters/hermes/api.py':
+        'from src.domain import rules\n'
+        '\n'
+        '\n'
+        'class HermesAdapter:\n'
+        '    def decide(self, request):\n'
+        '        return rules.decide(request)\n',
+    'src/adapters/hermes/runtime/session.py':
+        'FRAMEWORK_SESSION = object()\n',
+    'src/entrypoints/api/handler.py':
+        'from src.app import service\n'
+        '\n'
+        '\n'
+        'def handle(request):\n'
+        '    return service.plan(request)\n',
+    'src/entrypoints/mcp/handler.py':
+        'from src.app import service\n'
+        '\n'
+        '\n'
+        'def handle(request):\n'
+        '    return service.plan(request)\n',
+}
+
+# The defect: the application service reaches into the adapter's private runtime.
+SERVICE_IMPORTS_PRIVATE = (
+    'from src.adapters.hermes.runtime import session\n'
+    'from src.domain import rules\n'
+    '\n'
+    '\n'
+    'def plan(request):\n'
+    '    return rules.decide(request)\n')
+
+# The defect, semantic form: the transport re-implements the rule inline. It has
+# no import edge at all, so a dependency check cannot see it.
+MCP_INLINE_DECISION = (
+    'def handle(request):\n'
+    '    return {"amount": request["amount"] * 2 + 1}\n')
+
+# The defect, structural form: the same fork written as a direct domain call,
+# which the frozen FORBIDDEN_EDGE rule can block.
+MCP_IMPORTS_DOMAIN = (
+    'from src.domain import rules\n'
+    '\n'
+    '\n'
+    'def handle(request):\n'
+    '    return rules.decide(request)\n')
+
+AGM_MODULES = [
+    {'module_id': 'domain', 'paths': ['src/domain/'],
+     'responsibilities': ['domain decisions and owned state'],
+     'public_interfaces': [{'name': 'src.domain.rules', 'kind': 'python_module',
+                            'stability': 'stable'}]},
+    {'module_id': 'application', 'paths': ['src/app/'],
+     'responsibilities': ['single application service shared by every transport'],
+     'public_interfaces': [{'name': 'src.app.service', 'kind': 'python_module',
+                            'stability': 'stable'}]},
+    {'module_id': 'adapter-hermes', 'paths': ['src/adapters/hermes/'],
+     'responsibilities': ['runtime adapter that hides its framework internals'],
+     'public_interfaces': [{'name': 'src.adapters.hermes.api', 'kind': 'python_module',
+                            'stability': 'additive_only'}],
+     'private_paths': ['src/adapters/hermes/runtime/']},
+    {'module_id': 'entrypoint-api', 'paths': ['src/entrypoints/api/'],
+     'responsibilities': ['HTTP transport: protocol translation only'],
+     'public_interfaces': [{'name': 'plan:http', 'kind': 'http_api', 'stability': 'stable'}]},
+    {'module_id': 'entrypoint-mcp', 'paths': ['src/entrypoints/mcp/'],
+     'responsibilities': ['event transport: protocol translation only'],
+     'public_interfaces': [{'name': 'plan:event', 'kind': 'event', 'stability': 'stable'}]},
+]
+
+AGM_RULES = [
+    {'rule_id': 'ARCH-AGM-NO-CYCLE', 'kind': 'NO_CYCLE', 'severity': 'ERROR',
+     'enabled': True, 'description': 'modules must not form dependency cycles'},
+    {'rule_id': 'ARCH-AGM-ENTRY-SHARED', 'kind': 'FORBIDDEN_EDGE', 'severity': 'ERROR',
+     'enabled': True,
+     'description': 'transport entry points call the shared application service, never '
+                    'the domain or a concrete adapter'},
+    {'rule_id': 'ARCH-AGM-ADAPTER-PRIVATE', 'kind': 'PRIVATE_ACCESS', 'severity': 'ERROR',
+     'enabled': True,
+     'description': 'core modules never import an adapter private runtime path'},
+]
+
+AGM_BOUNDARIES = [
+    {'boundary_id': 'BND-DOMAIN', 'kind': 'domain', 'members': ['domain']},
+    {'boundary_id': 'BND-APP', 'kind': 'application', 'members': ['application']},
+    {'boundary_id': 'BND-ADAPTER', 'kind': 'adapter', 'members': ['adapter-hermes']},
+    {'boundary_id': 'BND-TRANSPORT', 'kind': 'layer',
+     'members': ['entrypoint-api', 'entrypoint-mcp']},
+]
+
+AGM_INVARIANTS = [
+    {'invariant_id': 'INV-AGM-ENTRY-EDGE',
+     'statement': 'no transport entry point reaches the domain or a concrete adapter '
+                  'directly; every request goes through the application service',
+     'checked_by': 'STATIC_RULE', 'severity': 'ERROR',
+     'rule_ids': ['ARCH-AGM-ENTRY-SHARED']},
+    {'invariant_id': 'INV-AGM-ADAPTER-ISOLATION',
+     'statement': 'the core modules never import an adapter private runtime path',
+     'checked_by': 'STATIC_RULE', 'severity': 'ERROR',
+     'rule_ids': ['ARCH-AGM-ADAPTER-PRIVATE']},
+    {'invariant_id': 'INV-AGM-SHARED-DECISION',
+     'statement': 'both transports return the same decision for the same request',
+     'checked_by': 'CONTRACT_TEST', 'severity': 'ERROR',
+     'notes': 'the checker cannot run the project test suite; the shared contract test '
+              'result has to be attached as its own evidence'},
+]
+
+
+def _agm_contract_data():
+    return {
+        'schema_version': '1.0',
+        'contract_version': '1.0.0',
+        'project_name': 'agentmgr-alignment-fixture',
+        'enforcement_mode': 'ENFORCE',
+        'modules': AGM_MODULES,
+        'dependencies': {
+            'allowed': [
+                {'from': 'entrypoint-api', 'to': 'application',
+                 'reason': 'the HTTP transport calls the shared application service'},
+                {'from': 'entrypoint-mcp', 'to': 'application',
+                 'reason': 'the event transport calls the shared application service'},
+                {'from': 'application', 'to': 'domain',
+                 'reason': 'the application service orchestrates domain rules'},
+                {'from': 'adapter-hermes', 'to': 'domain',
+                 'reason': 'the adapter implements the domain port'},
+            ],
+            'forbidden': [
+                {'from': 'entrypoint-api', 'to': 'domain',
+                 'reason': 'an entry point must not re-implement a business rule',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+                {'from': 'entrypoint-mcp', 'to': 'domain',
+                 'reason': 'an entry point must not re-implement a business rule',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+                {'from': 'entrypoint-api', 'to': 'adapter-hermes',
+                 'reason': 'an entry point must not bind a concrete adapter',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+                {'from': 'entrypoint-mcp', 'to': 'adapter-hermes',
+                 'reason': 'an entry point must not bind a concrete adapter',
+                 'rule_id': 'ARCH-AGM-ENTRY-SHARED'},
+            ],
+        },
+        'boundaries': AGM_BOUNDARIES,
+        'invariants': AGM_INVARIANTS,
+        'rules': AGM_RULES,
+        'baseline': {'frozen_at': '2026-01-01T00:00:00Z', 'frozen_by': 'fixture'},
+    }
+
+
+def _agm_tree(root, *, core_imports_private=False, mcp_bypass=None):
+    """Write the synthetic architecture tree; `mcp_bypass` is None / inline / import."""
+    files = dict(AGM_FILES)
+    if core_imports_private:
+        files['src/app/service.py'] = SERVICE_IMPORTS_PRIVATE
+    if mcp_bypass == 'inline':
+        files['src/entrypoints/mcp/handler.py'] = MCP_INLINE_DECISION
+    elif mcp_bypass == 'import':
+        files['src/entrypoints/mcp/handler.py'] = MCP_IMPORTS_DOMAIN
+    for relative, text in files.items():
+        _write_text(root, relative, text)
+    return files
+
+
+def _write_agm_contract(root, data=None):
+    path = root / 'docs' / 'architecture' / 'contract.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data if data is not None else _agm_contract_data(),
+                               indent=2) + '\n', encoding='utf-8')
+    return path
+
+
+def _load_architecture():
+    """Import scripts/architecture as a package (once per process)."""
+    if ARCH_PACKAGE in sys.modules:
+        return sys.modules[ARCH_PACKAGE]
+    base = SCRIPTS / 'architecture'
+    init = base / '__init__.py'
+    if not init.is_file():
+        raise ToolError(f'architecture package not found at {base}')
+    spec = importlib.util.spec_from_file_location(
+        ARCH_PACKAGE, init, submodule_search_locations=[str(base)])
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[ARCH_PACKAGE] = module
+    try:
+        spec.loader.exec_module(module)
+    except Exception as exc:  # noqa: BLE001 - a missing checker is a tool error
+        sys.modules.pop(ARCH_PACKAGE, None)
+        raise ToolError(f'architecture: cannot import {base}: {exc}') from exc
+    return module
+
+
+def _arch_modules():
+    _load_architecture()
+    return tuple(importlib.import_module(f'{ARCH_PACKAGE}.{name}')
+                 for name in ('contract', 'rules', 'report'))
+
+
+def _arch_check(root):
+    """Run the real checker on a synthetic tree and return its JSON report."""
+    contract_module, rules_module, report_module = _arch_modules()
+    loaded = contract_module.load(root)
+    executed = None
+    if loaded['contract'] is not None:
+        # Python fixtures only: the Rust adapter is neither exercised nor claimed.
+        executed = rules_module.run(loaded['contract'], root, adapters_enabled=('python',))
+    return report_module.build_report(root, loaded, executed, HEAD_SHA, 'explicit', ('python',))
+
+
+def _load_synthetic(root, names):
+    """Import synthetic modules from the sandbox (plain files, namespace packages)."""
+    root = str(root)
+    sys.path.insert(0, root)
+    importlib.invalidate_caches()
+    try:
+        modules = [importlib.import_module(name) for name in names]
+    except Exception as exc:  # noqa: BLE001 - a broken fixture is a scenario failure
+        raise ScenarioFailed(f'synthetic module import failed: {exc}') from None
+    finally:
+        for name in [key for key in sys.modules
+                     if key == SYNTHETIC_TOP_PACKAGE
+                     or key.startswith(SYNTHETIC_TOP_PACKAGE + '.')]:
+            sys.modules.pop(name, None)
+        try:
+            sys.path.remove(root)
+        except ValueError:
+            pass
+    return modules
+
+
+def _transport_behaviour(api_plan, mcp_plan, requests):
+    """Shared contract test: the same request must produce the same decision."""
+    differences = []
+    for request in requests:
+        api, mcp = api_plan(request), mcp_plan(request)
+        if api != mcp:
+            differences.append({'request': request, 'api': api, 'mcp': mcp})
+    return {'requests': len(requests), 'differences': differences, 'agree': not differences}
+
+
+def _adapter_contract_run(evidence_kind, *, failing=None):
+    """Run the shared adapter contract suite against a synthetic implementation."""
+    implementation = {name: (lambda: 'PASS') for name in ('create', 'cancel', 'status')}
+    if failing:
+        implementation[failing] = lambda: 'FAIL'
+    checks = {name: implementation[name]() for name in implementation}
+    return {'evidence_kind': evidence_kind, 'checks': checks,
+            'all_pass': all(value == 'PASS' for value in checks.values())}
+
+
+def _verification_status(run):
+    """What the run establishes: a mock run cannot establish real behaviour."""
+    if run['evidence_kind'] == 'REAL_RUNTIME' and run['all_pass']:
+        return 'PASS'
+    return 'UNKNOWN'
+
+
+def _claim_findings(run, claimed):
+    """The evidence label must not claim more than the run supports."""
+    if claimed not in EVIDENCE_KINDS:
+        return [f'unknown evidence kind {claimed!r}']
+    findings = []
+    if not run['all_pass']:
+        findings.append('the shared adapter contract suite did not pass; '
+                        'nothing may be claimed from it')
+    if claimed == 'REAL_RUNTIME' and run['evidence_kind'] != 'REAL_RUNTIME':
+        findings.append(f'claim exceeds evidence: {run["evidence_kind"]} results reported as '
+                        'REAL_RUNTIME')
+    return findings
+
+
+class _Terminal(RuntimeError):
+    code = 'DISPATCH_ERROR'
+
+
+class _Failed(_Terminal):
+    code = 'DISPATCH_FAILED'
+
+
+class _Cancelled(_Terminal):
+    code = 'DISPATCH_CANCELLED'
+
+
+class _TimedOut(_Terminal):
+    code = 'DISPATCH_TIMED_OUT'
+
+
+class _Unknown(_Terminal):
+    code = 'DISPATCH_UNKNOWN'
+
+
+_TERMINAL_ERRORS = {'FAILED': _Failed, 'CANCELLED': _Cancelled,
+                    'TIMED_OUT': _TimedOut, 'UNKNOWN': _Unknown}
+
+
+def _dispatch_outcome(outcome, *, collapse=False):
+    """Result record for a dispatch terminal state; `collapse` is the defect."""
+    if outcome == 'OK':
+        return {'outcome': 'OK', 'success': True, 'code': None}
+    if collapse:
+        # The defect: one generic error covers failure, cancellation, timeout and
+        # "we do not know", and "unknown" is rewritten as a failure.
+        return {'outcome': 'FAILED', 'success': False, 'code': 'DISPATCH_ERROR'}
+    return {'outcome': outcome, 'success': False, 'code': _TERMINAL_ERRORS[outcome].code}
+
+
+def _terminal_findings(results):
+    """Terminal-state contract: distinct codes, never upgraded to success."""
+    findings = []
+    codes = [result['code'] for result in results if result['code']]
+    expected = len(TERMINAL_STATES) - 1  # every non-success state has its own code
+    if len(set(codes)) < expected:
+        findings.append(f'{expected} non-success terminal states collapse into '
+                        f'{len(set(codes))} code(s): {", ".join(sorted(set(codes)))}')
+    missing = [outcome for outcome in TERMINAL_STATES
+               if outcome not in {result['outcome'] for result in results}]
+    if missing:
+        findings.append('undistinguishable terminal state(s): ' + ', '.join(missing))
+    upgraded = [result['outcome'] for result in results
+                if result['outcome'] != 'OK' and result['success']]
+    if upgraded:
+        findings.append('non-success terminal reported as success: ' + ', '.join(upgraded))
+    return findings
+
+
+def _capability_record(capability, status, evidence, scope):
+    return {'capability': capability, 'status': status, 'evidence': list(evidence),
+            'scope': scope}
+
+
+def _capability_findings(record):
+    """A capability claim is PASS only when it is bound to evidence and a scope."""
+    if record['status'] != 'PASS':
+        return []  # a non-PASS claim is never silently upgraded to a pass
+    findings = []
+    evidence = record['evidence']
+    if not evidence:
+        findings.append(f'PASS without evidence: {record["capability"]} has no probe record')
+    for item in evidence:
+        if item.get('kind') not in CAPABILITY_EVIDENCE_KINDS:
+            findings.append(f'unknown evidence kind {item.get("kind")!r}')
+        elif item.get('kind') != 'PROBE':
+            findings.append(f'PASS based on {item.get("kind")}: that is not evidence of '
+                            f'{record["capability"]}')
+        elif not all(item.get(key) for key in ('probe_id', 'probed_at', 'environment')):
+            findings.append('probe evidence is missing probe_id / probed_at / environment')
+        elif item.get('capability') != record['capability']:
+            findings.append(f'probe covered {item.get("capability")!r}, the claim is '
+                            f'{record["capability"]!r}')
+    if not record['scope'] or record['scope'] == ['*']:
+        findings.append('PASS without a specific scope: the claim does not say what was '
+                        'verified')
+    return findings
+
+
 SYNTHETIC_TEST_MODULE = '''
 import unittest
 
@@ -1076,6 +1455,271 @@ def scenario_c11(ctx):
 
 
 # --------------------------------------------------------------------------- #
+# Group C, third family - architecture contract alignment
+# --------------------------------------------------------------------------- #
+def scenario_c12(ctx):
+    """Positive control: one application service, honest labels, no over-claimed PASS."""
+    root = ctx.sandbox / 'architecture'
+    _agm_tree(root)
+    _write_agm_contract(root)
+    report = _arch_check(root)
+    _require(report['enforcement_mode'] == 'ENFORCE', report['enforcement_mode'])
+    _require(report['blocking'] is False, f'a clean tree blocked: {report["findings"]}')
+    _require(report['status'] == 'PASS', f'expected PASS, got {report["status"]}: '
+                                         f'{report["findings"]}')
+    _require(report['counts']['ERROR'] == 0, report['counts'])
+    _require(tuple(sorted(report['examined_modules'])) == ARCH_EXPECTED_MODULES,
+             f'the report does not state its scope: {report["examined_modules"]}')
+    _require(report['uncovered_modules'] == [], report['uncovered_modules'])
+    coverage = {entry['invariant_id']: entry['status'] for entry in report['invariants']}
+    _require(coverage.get('INV-AGM-ENTRY-EDGE') == 'PASS', coverage)
+    _require(coverage.get('INV-AGM-ADAPTER-ISOLATION') == 'PASS', coverage)
+    _require(coverage.get('INV-AGM-SHARED-DECISION') == 'UNKNOWN',
+             f'a declared contract test was reported as coverage: {coverage}')
+
+    api_handler, mcp_handler = _load_synthetic(
+        root, ['src.entrypoints.api.handler', 'src.entrypoints.mcp.handler'])
+    requests = [{'amount': 1}, {'amount': 7}]
+    behaviour = _transport_behaviour(api_handler.handle, mcp_handler.handle, requests)
+    _require(behaviour['agree'], f'the two transports disagree on a clean tree: {behaviour}')
+
+    mock_run = _adapter_contract_run('MOCK')
+    _require(_claim_findings(mock_run, 'MOCK') == [],
+             f'a mock run may be claimed as mock: {_claim_findings(mock_run, "MOCK")}')
+    _require(_verification_status(mock_run) == 'UNKNOWN',
+             'a mock run was reported as real verification')
+
+    fixed_terminals = [_dispatch_outcome(outcome) for outcome in TERMINAL_STATES]
+    _require(_terminal_findings(fixed_terminals) == [], _terminal_findings(fixed_terminals))
+
+    unprobed = _capability_record('execution_isolation', 'UNKNOWN', [], None)
+    _require(_capability_findings(unprobed) == [],
+             'an honest UNKNOWN capability claim was rejected')
+    probed = _capability_record(
+        'execution_isolation', 'PASS',
+        [{'kind': 'PROBE', 'probe_id': 'probe-1', 'probed_at': PROBE_TIMESTAMP,
+          'environment': 'synthetic fixture', 'capability': 'execution_isolation'}],
+        ['single-process sandbox'])
+    _require(_capability_findings(probed) == [],
+             f'a probed capability claim with a scope was rejected: '
+             f'{_capability_findings(probed)}')
+
+    return [f'contract: mode=ENFORCE status={report["status"]} '
+            f'ERROR={report["counts"]["ERROR"]} blocking={report["blocking"]}',
+            f'scope: examined modules = {", ".join(report["examined_modules"])}; '
+            f'uncovered = {report["uncovered_modules"] or "none"}',
+            'invariant coverage: entry-edge PASS, adapter-isolation PASS, '
+            'shared-decision UNKNOWN (a declared contract test is not coverage)',
+            f'shared contract test: both transports agree on {behaviour["requests"]} requests',
+            f'mock adapter contract run: claimed MOCK, verification '
+            f'{_verification_status(mock_run)} (never real)',
+            f'terminal states: {", ".join(sorted({r["code"] for r in fixed_terminals if r["code"]}))}',
+            'capability claim: UNKNOWN accepted; probed + scoped PASS accepted']
+
+
+def scenario_c13(ctx):
+    """A core module importing an adapter private symbol is blocked statically."""
+    root = ctx.sandbox / 'private-symbol'
+    _agm_tree(root, core_imports_private=True)
+    _write_agm_contract(root)
+    report = _arch_check(root)
+    _require(report['blocking'] is True,
+             f'the checker did not block a core -> adapter private import: {report["findings"]}')
+    hits = [finding for finding in report['findings']
+            if finding['rule_id'] == 'ARCH-AGM-ADAPTER-PRIVATE' and finding['status'] == 'ERROR']
+    _require(len(hits) == 1, f'expected one PRIVATE_ACCESS error, got {report["findings"]}')
+    hit = hits[0]
+    _require(hit['module_id'] == 'application' and hit['target_module'] == 'adapter-hermes',
+             f'the violation is not locatable: {hit}')
+    _require(hit['file'] == 'src/app/service.py' and hit['line'] == 1,
+             f'the import location is missing: {hit}')
+    _require('src/adapters/hermes/runtime' in hit['message'], hit['message'])
+    coverage = {entry['invariant_id']: entry['status'] for entry in report['invariants']}
+    _require(coverage.get('INV-AGM-ADAPTER-ISOLATION') == 'ERROR',
+             f'the bound invariant did not follow its rule: {coverage}')
+    return [f'blocking: {report["blocking"]}; counts: {report["counts"]}',
+            f'PRIVATE_ACCESS error: {hit["module_id"]} -> {hit["target_module"]} '
+            f'at {hit["file"]}:{hit["line"]}',
+            f'invariant INV-AGM-ADAPTER-ISOLATION coverage: '
+            f'{coverage.get("INV-AGM-ADAPTER-ISOLATION")}']
+
+
+def scenario_c14(ctx):
+    """Two transports with forked business rules: static edge or shared contract test."""
+    requests = [{'amount': 1}, {'amount': 4}]
+
+    # Semantic fork: an inline re-implementation has no import edge, so the
+    # dependency checker is blind to it by construction (and must not pretend).
+    semantic_root = ctx.sandbox / 'fork-inline'
+    _agm_tree(semantic_root, mcp_bypass='inline')
+    _write_agm_contract(semantic_root)
+    semantic = _arch_check(semantic_root)
+    _require(semantic['blocking'] is False,
+             'the dependency checker claimed to catch an inline re-implementation')
+    coverage = {entry['invariant_id']: entry['status'] for entry in semantic['invariants']}
+    _require(coverage.get('INV-AGM-SHARED-DECISION') == 'UNKNOWN',
+             f'a declared contract test was reported as coverage: {coverage}')
+    api_handler, mcp_handler = _load_synthetic(
+        semantic_root, ['src.entrypoints.api.handler', 'src.entrypoints.mcp.handler'])
+    behaviour = _transport_behaviour(api_handler.handle, mcp_handler.handle, requests)
+    _require(behaviour['agree'] is False,
+             'the shared contract test did not catch the forked decision')
+    _require(len(behaviour['differences']) == len(requests),
+             f'only part of the fork was observed: {behaviour}')
+
+    # Structural fork: the same divergence written as a direct domain call is
+    # exactly what FORBIDDEN_EDGE can block.
+    structural_root = ctx.sandbox / 'fork-import'
+    _agm_tree(structural_root, mcp_bypass='import')
+    _write_agm_contract(structural_root)
+    structural = _arch_check(structural_root)
+    _require(structural['blocking'] is True,
+             f'the forbidden edge was not blocked: {structural["findings"]}')
+    hits = [finding for finding in structural['findings']
+            if finding['rule_id'] == 'ARCH-AGM-ENTRY-SHARED' and finding['status'] == 'ERROR']
+    _require(len(hits) == 1, structural['findings'])
+    _require(hits[0]['module_id'] == 'entrypoint-mcp'
+             and hits[0]['target_module'] == 'domain', hits[0])
+    return [f'inline fork: static blocking={semantic["blocking"]} (a dependency check '
+            'cannot see it), shared contract test agreement=False over '
+            f'{len(behaviour["differences"])}/{behaviour["requests"]} requests',
+            f'inline fork: INV-AGM-SHARED-DECISION coverage='
+            f'{coverage.get("INV-AGM-SHARED-DECISION")} (declaration is not coverage)',
+            f'structural fork: blocking={structural["blocking"]}, '
+            f'{hits[0]["module_id"]} -> {hits[0]["target_module"]} at '
+            f'{hits[0]["file"]}:{hits[0]["line"]}']
+
+
+def scenario_c15(ctx):
+    """A mock adapter success must never be reported as real runtime verification."""
+    mock = _adapter_contract_run('MOCK')
+    _require(mock['all_pass'], f'the mock run should pass its shared contract: {mock}')
+    over_claim = _claim_findings(mock, 'REAL_RUNTIME')
+    _require(any('exceeds evidence' in finding for finding in over_claim),
+             f'the mock -> real over-claim was accepted: {over_claim}')
+    _require(_verification_status(mock) == 'UNKNOWN',
+             'a mock run was upgraded to real verification')
+
+    honest = _claim_findings(mock, 'MOCK')
+    _require(honest == [], f'a mock run labelled mock was rejected: {honest}')
+
+    real = _adapter_contract_run('REAL_RUNTIME')
+    _require(_claim_findings(real, 'REAL_RUNTIME') == [],
+             'a real run labelled real was rejected')
+    _require(_verification_status(real) == 'PASS', _verification_status(real))
+
+    broken = _adapter_contract_run('REAL_RUNTIME', failing='cancel')
+    _require(_claim_findings(broken, 'REAL_RUNTIME') != [],
+             'a failing contract suite still supported a claim')
+    return [f'mock run: all_pass={mock["all_pass"]}, claimed MOCK -> no finding; '
+            f'verification status {_verification_status(mock)}',
+            'mock run claimed REAL_RUNTIME -> ' + over_claim[0],
+            f'real run: verification status {_verification_status(real)}',
+            'failing contract suite: ' + _claim_findings(broken, 'REAL_RUNTIME')[0]]
+
+
+def scenario_c16(ctx):
+    """Cancellation, timeout, failure and "unknown" must stay distinguishable."""
+    collapsed = [_dispatch_outcome(outcome, collapse=True) for outcome in TERMINAL_STATES]
+    findings = _terminal_findings(collapsed)
+    _require(bool(findings), 'the collapsed terminal states were not reported')
+    _require(any('collapse' in finding for finding in findings), findings)
+    _require(all(not record['success'] for record in collapsed[1:]),
+             'a non-success terminal was recorded as success')
+    collapsed_codes = sorted({record['code'] for record in collapsed if record['code']})
+    _require(len(collapsed_codes) == 1, collapsed_codes)
+
+    distinct = [_dispatch_outcome(outcome) for outcome in TERMINAL_STATES]
+    _require(_terminal_findings(distinct) == [],
+             f'the distinct terminal states were rejected: {_terminal_findings(distinct)}')
+    codes = sorted({record['code'] for record in distinct if record['code']})
+    _require(len(codes) == len(TERMINAL_STATES) - 1, codes)
+    _require(all(not record['success'] for record in distinct[1:]),
+             'a distinct non-success terminal was recorded as success')
+    return [f'collapsed: {len(TERMINAL_STATES) - 1} non-success states -> 1 code '
+            f'({", ".join(collapsed_codes)}); reported: {findings[0]}',
+            f'distinct: {", ".join(codes)}',
+            'no non-success terminal was reported as success in either variant']
+
+
+def scenario_c17(ctx):
+    """A capability may only be PASS when its evidence and scope are attached."""
+    unbacked = _capability_record('execution_isolation', 'PASS', [], None)
+    unbacked_findings = _capability_findings(unbacked)
+    _require(any('without evidence' in finding for finding in unbacked_findings),
+             f'PASS without evidence was accepted: {unbacked_findings}')
+
+    startup_only = _capability_record(
+        'execution_isolation', 'PASS',
+        [{'kind': 'STARTUP_OK', 'probe_id': 'probe-1', 'probed_at': PROBE_TIMESTAMP,
+          'environment': 'synthetic fixture', 'capability': 'execution_isolation'}],
+        ['single-process sandbox'])
+    startup_findings = _capability_findings(startup_only)
+    _require(any('not evidence of' in finding for finding in startup_findings),
+             f'"startup succeeded" was accepted as isolation evidence: {startup_findings}')
+
+    wildcard = _capability_record(
+        'execution_isolation', 'PASS',
+        [{'kind': 'PROBE', 'probe_id': 'probe-1', 'probed_at': PROBE_TIMESTAMP,
+          'environment': 'synthetic fixture', 'capability': 'execution_isolation'}],
+        ['*'])
+    wildcard_findings = _capability_findings(wildcard)
+    _require(any('scope' in finding for finding in wildcard_findings),
+             f'PASS with a wildcard scope was accepted: {wildcard_findings}')
+
+    wrong_probe = _capability_record(
+        'cancellation', 'PASS',
+        [{'kind': 'PROBE', 'probe_id': 'probe-1', 'probed_at': PROBE_TIMESTAMP,
+          'environment': 'synthetic fixture', 'capability': 'execution_isolation'}],
+        ['single-process sandbox'])
+    wrong_findings = _capability_findings(wrong_probe)
+    _require(any('probe covered' in finding for finding in wrong_findings),
+             f'a probe for a different capability was accepted: {wrong_findings}')
+
+    honest = _capability_record('execution_isolation', 'UNKNOWN', [], None)
+    _require(_capability_findings(honest) == [],
+             'an honest UNKNOWN claim was rejected')
+    return [f'PASS without evidence -> {len(unbacked_findings)} finding(s): '
+            f'{unbacked_findings[0]}',
+            f'"startup succeeded" as isolation evidence -> {startup_findings[0]}',
+            f'wildcard scope -> {wildcard_findings[0]}',
+            f'probe for another capability -> {wrong_findings[0]}',
+            'honest UNKNOWN claim: 0 findings (a non-PASS claim is not upgraded)']
+
+
+def scenario_c18(ctx):
+    """Without a contract the same violations stay diagnostic: no inferred rule fires."""
+    root = ctx.sandbox / 'unconfigured'
+    files = _agm_tree(root, core_imports_private=True, mcp_bypass='import')
+    report = _arch_check(root)
+    _require(report['contract_path'] is None, report['contract_path'])
+    _require(report['enforcement_mode'] == 'OFF', report['enforcement_mode'])
+    _require(report['diagnostic_only'] is True, report['diagnostic_only'])
+    _require(report['blocking'] is False, 'an unconfigured project was blocked')
+    _require(report['counts']['ERROR'] == 0, report['counts'])
+    _require(report['counts']['WARNING'] == 0, report['counts'])
+    _require(report['status'] == 'NOT_RUN', report['status'])
+    _require(report['invariants'] == [], report['invariants'])
+    _require(report['examined_modules'] == [], report['examined_modules'])
+    inventory = report.get('inventory') or {}
+    _require(inventory.get('python_files') == len(files),
+             f'the read-only inventory is incomplete: {inventory}')
+
+    # The only difference is the declaration: the same tree with a contract blocks.
+    _write_agm_contract(root)
+    declared = _arch_check(root)
+    _require(declared['blocking'] is True,
+             'the same tree was not blocked once the contract was declared')
+    return [f'no contract: mode={report["enforcement_mode"]} status={report["status"]} '
+            f'blocking={report["blocking"]} ERROR={report["counts"]["ERROR"]} '
+            f'WARNING={report["counts"]["WARNING"]}',
+            f'read-only inventory: {inventory.get("python_files")} python files, '
+            f'0 rules executed',
+            f'the same tree with a declared contract: blocking={declared["blocking"]} '
+            f'ERROR={declared["counts"]["ERROR"]}']
+
+
+# --------------------------------------------------------------------------- #
 # Group D - orchestration base and evidence decay
 # --------------------------------------------------------------------------- #
 def scenario_d1(ctx):
@@ -1362,6 +2006,59 @@ SCENARIOS = (
              'corrected scan reports FAILED and names the entry',
              'scan report before/after the fix, skipped and error lists',
              'synthetic sandbox removed with the scenario', scenario_c11),
+    Scenario('C12', 'C', 'positive', 'clean architecture contract with honest coverage',
+             'a synthetic tree with domain, application, adapter and two transport entry points',
+             'none (positive control)',
+             'architecture contract: ENFORCE, no error, scope reported, both transports agree, '
+             'mock evidence never labelled real, capability claims bound to a probe',
+             'JSON report (status, counts, examined modules, invariant coverage), shared '
+             'contract test result, terminal-state matrix, capability findings',
+             'synthetic sandbox removed with the scenario', scenario_c12),
+    Scenario('C13', 'C', 'negative', 'core module imports an adapter private symbol',
+             'the application service importing the adapter runtime session module',
+             'the adapter private path leaks into the core through an import',
+             'PRIVATE_ACCESS: blocking under ENFORCE, located at rule / module / file / line, '
+             'and the bound invariant follows the rule',
+             'report blocking flag, PRIVATE_ACCESS finding, invariant coverage',
+             'synthetic sandbox removed with the scenario', scenario_c13),
+    Scenario('C14', 'C', 'negative', 'two transports implement forked business rules',
+             'one transport delegating to the application service, one re-implementing the rule',
+             'inline duplication that no import edge reveals, plus the same fork as a direct '
+             'domain import',
+             'FORBIDDEN_EDGE blocks the structural fork; the shared contract test catches the '
+             'inline one; the invariant declared CONTRACT_TEST stays UNKNOWN',
+             'static blocking flag per variant, behaviour differences, invariant coverage',
+             'synthetic sandbox removed with the scenario', scenario_c14),
+    Scenario('C15', 'C', 'negative', 'mock adapter result reported as real verification',
+             'a passing shared adapter contract suite executed against a mock implementation',
+             'the run is labelled REAL_RUNTIME although the evidence kind is MOCK',
+             'evidence labelling: the over-claim is rejected and the mock run stays UNKNOWN '
+             'for real-runtime verification',
+             'claim findings, verification status per evidence kind',
+             'synthetic sandbox removed with the scenario', scenario_c15),
+    Scenario('C16', 'C', 'negative', 'cancel, timeout, failure and unknown collapsed',
+             'four non-success dispatch terminal states recorded through one generic error',
+             'one error code covers failure, cancellation, timeout and "unknown", and unknown '
+             'is rewritten as a failure',
+             'terminal-state contract: collapsed codes are reported, "unknown" never becomes '
+             'success, and the distinct variants keep one code per state',
+             'terminal findings, code sets before/after the fix',
+             'synthetic sandbox removed with the scenario', scenario_c16),
+    Scenario('C17', 'C', 'negative', 'capability marked PASS without evidence',
+             'capability records for execution isolation and cancellation',
+             'PASS with no probe, with "startup succeeded", with a wildcard scope, or with a '
+             'probe that covers a different capability',
+             'capability claim gate: every over-claim is rejected, an honest UNKNOWN claim is '
+             'accepted and never upgraded',
+             'capability findings per record',
+             'synthetic sandbox removed with the scenario', scenario_c17),
+    Scenario('C18', 'C', 'positive', 'unconfigured project is not judged by inferred rules',
+             'the same violating tree without any Architecture Contract',
+             'none (positive control): nothing may be guessed from the code alone',
+             'contract optionality: OFF / diagnostic only, exit 0, no ERROR or WARNING, no '
+             'invariant and no examined module claimed; declaring the contract then blocks',
+             'report mode, status, counts, inventory, and the contrast after declaring',
+             'synthetic sandbox removed with the scenario', scenario_c18),
     Scenario('D1', 'D', 'positive', 'legal edition with a declared resource',
              'a local project with resource_lease_ttl configured',
              'none (positive control)',
