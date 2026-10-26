@@ -9,7 +9,7 @@
   - **正式 Release 资产**：`uv run python scripts/build_release.py --release-version 1.6` 产出 `release/AgentOrch-1.6.zip`，zip 顶层目录与资产 stem 一致，即 `AgentOrch-1.6/`。对应 Git tag 为 `v1.6`、资产名为 `AgentOrch-1.6.zip`。参数写 `1.6`，**不要写 `v1.6`**：`v1.6` 是 tag 名而不是资产名，带 `v` 前缀或预发布后缀会被构建直接拒绝。补丁发行把版本号写全：`--release-version 1.6.1` 产出 `AgentOrch-1.6.1.zip` / 顶层目录 `AgentOrch-1.6.1/`，tag 为 `v1.6.1`；补丁号只改变资产名与顶层目录，不改变 Format。
   - **日期构建（默认，保持不变）**：`uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD` 产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`。CI 与 `docs/upgrade.md` 的基线重建继续用这个模式。
   - `--date` 与 `--release-version` **互斥**：同时给出即报错退出（`argparse` 退出码 2），不存在"谁覆盖谁"的隐含优先级；不带任何命名参数时仍按今天日期命名。
-- **发布名只决定资产名与顶层目录**：包内文件集合、`MANIFEST.json` schema 与 `format_version` 在两种模式下完全相同。**Release 版本号不是 Format 版本**：`Release 1.6` 与 `Format version` 1.6 在本轮数值相同，但两者仍是两条序列（发行号 vs 格式契约），`MANIFEST.json` 的 `format_version` 由 `VERSION.md` 的 `Format version:` 一行生成；两者的区别与 `Release 1.6` 记录见第 5 节。
+- **发布名只决定资产名与顶层目录**：包内文件集合、`MANIFEST.json` schema 与 `format_version` 在两种模式下完全相同。**Release 版本号不是 Format 版本**：`Release 1.6` 发布时与 `Format version` 1.6 数值相同；当前 Release 1.6.1 与 Format 1.6 已不同。两者仍是两条序列（发行号 vs 格式契约），`MANIFEST.json` 的 `format_version` 由 `VERSION.md` 的 `Format version:` 一行生成；两者的区别与 `Release 1.6` 记录见第 5 节。
 - 产物不纳入 git：`.gitignore` 忽略 `release/*.zip`；仓库只保留流程文档、构建脚本与本标准；历史版本记录由 GitHub Releases 承担。`release/README.md` 不入忽略范围。**已发布的历史资产（如 `agentorch-20261023.zip`）不删除、不覆盖、不改写**；新 Release 用新的资产名。
 - 产物可随时重建：运行 `uv run python scripts/build_release.py`（默认输出到 `release/`），或按上面的正式 Release 命令指定 `--release-version`。构建是**可复现**的：同一仓库状态下（同一命名模式与同一 top dir），包内文件集合、各文件内容与 zip 的校验和均一致（归档时间戳使用固定值），因此 zip 的校验和可被任何人重建复核。可复现性不依赖检出行尾：构建时文本文件按 LF 归一后打包、二进制文件原样打包（仓库以 `.gitattributes` 统一 LF），故任何检出（含 Windows 上 `core.autocrlf=true`）重建都得到同一校验和。
 
@@ -119,7 +119,7 @@
   - 58 个合成回归场景（A–D 组，含正负控制组）；包内文件 91 个（90 `REQUIRED` + `MANIFEST.json`）；
   - 四档 CI（3 个 runner、4 个 OS / Python 组合）：Linux（Python 3.12 / 3.13）、macOS（3.13）、Windows（3.13）；包内自检 a–l 在每一档真实执行。
 - **未验证 / 已知限制（不得写成已验证）**：
-  - 真实 `v1.5 → 1.6` 旧包升级为 `NOT_RUN`，归 #71 用真实发布资产验证；本任务不声称旧包升级成功。合成测试只证明“v1.5 基线清单 + v1.6 包 → `APPLIED`”（`tests/update_agentorch/test_entry_release.py` 与场景 B5）。
+  - 真实 `v1.5 → 1.6` 旧包升级已由 #71 于 2026-10-26 用真实发布资产验证为 `APPLIED`（`docs/upgrade.md` §14.2）；真实 1.3 / 1.4 与以 1.6 为已安装基线的升级仍为 `NOT_RUN`。合成测试仍作为合成证据保留：“v1.5 基线清单 + v1.6 包 → `APPLIED`”（`tests/update_agentorch/test_entry_release.py` 与场景 B5）。
   - 真实 GitHub Release 的创建、下载与 SHA256 复核依赖网络与权限，发布前为 `NOT_RUN`，由 Master 在发布后补证（Issue 的 AC-4）。
   - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
   - 真实 GitHub Release 下载、真实旧项目与回滚失败场景仍为 `NOT_RUN` / `UNKNOWN`；自动更新入口的校验、分类、备份与回滚语义本轮未改动。
@@ -144,8 +144,8 @@
 - **1.6（当前）** 相对 1.5：
   - **包内新增自我完善与安全更新资产**：`scripts/self_improvement/`（来源注册表、采集、Lesson、规划与闭环）、`scripts/update_agentorch/`（安全更新引擎与「更新 AgentOrch」入口）及其随包测试、`templates/self-improvement/` 模板进入 `REQUIRED`。连同 1.5 发布后合入 Format 1.5 的可选架构契约检查器与相关测试，包内文件从 v1.5 资产的 34 个（33 `REQUIRED` + `MANIFEST.json`）增至 91 个（90 + 1）。
   - **无文件移动 / 改名 / 删除，无破坏性布局变化**：新增的只是文件与子目录，既有路径、`MANIFEST.json` schema 1 与 `REQUIRED` 中已有条目全部保留；升级按普通“新增上游文件”处理，不需要手工搬迁。
-  - **Format 升到 1.6 的原因**：让 `v1.6` release tag 与 `MANIFEST.json` 的 `format_version` 一致，满足更新引擎 `VERSION_MATCH`；`VERSION.md` 的 `Release version` 仍独立记录（本轮数值相同，语义仍分开）。
-  - 迁移：无强制手工步骤。已安装 1.3 及以后、且有 `MANIFEST.json` 的项目可用「更新 AgentOrch」入口准备升级；真实旧包升级验证仍归 #71。
+  - **Format 升到 1.6 的原因**：让 `v1.6` release tag 与 `MANIFEST.json` 的 `format_version` 一致，满足更新引擎 `VERSION_MATCH`；`VERSION.md` 的 `Release version` 仍独立记录（1.6 发布时数值相同，语义仍分开）。
+  - 迁移：无强制手工步骤。已安装 1.3 及以后、且有 `MANIFEST.json` 的项目可用「更新 AgentOrch」入口准备升级；真实 v1.5 → 1.6 旧包升级已由 #71 验证；1.3 / 1.4 等仍为 `NOT_RUN`。
 - **1.5** 相对 1.4：
   - **根目录瘦身至 3 文件**：根只保留 `AGENTS.md`、`LICENSE.md`、`VERSION.md`（原 txt→md）；`README.md`→`docs/README.md`（GitHub 仍渲染仓库首页）、`ORCHESTRATION-PROJECT.md`→`docs/PROJECT.md`（配置权威，旧根位置 fail-closed）。
   - **Agent 权威合并**：`AGENT-BOOTSTRAP.md` + `AGENT-ORCHESTRATION.md` + `AGENT-ORCHESTRATION-ACCEPTANCE.md` 三合一为 `kit/orchestration.md`（随包分发）；editions 每底座 6 份合并为 `master.md`（+`execution.md`）；`prompts/` 并入对应模板后删除；全部模板/底座文件小写命名。

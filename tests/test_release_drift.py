@@ -311,8 +311,10 @@ class VersionConsistencyTests(unittest.TestCase):
         self.assertEqual(release, '1.6.1')
         self.assertEqual(format_version, '1.6')
         self.assertTrue(self.versions.tag_matches_format(f'v{release}', format_version))
-        # The previous tag must NOT be accepted against the current Format: the
-        # rule compares major.minor, so a silent mismatch would be a real defect.
+        # The rule compares major.minor: a different major.minor (v1.5) must NOT
+        # be accepted, while patch tags that share the Format (v1.6 / v1.6.1)
+        # both match. A silent mismatch would be a real defect.
+        self.assertTrue(self.versions.tag_matches_format('v1.6', format_version))
         self.assertFalse(self.versions.tag_matches_format('v1.5', format_version))
 
     def test_manifest_generated_from_version_file_records_format_1_6(self):
