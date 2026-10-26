@@ -4,13 +4,13 @@
 > 设计目标（为什么做、做到什么程度、原则与边界）只在 [PLAN.md](PLAN.md)（1.4 起位于 `docs/`）；字段、状态取值与合并门语义只在 [kit/orchestration.md](../kit/orchestration.md) 4.1 与第 5 节，本文件只引用不重述。
 > 本文件只经任务分支 + PR 修改。与 `PLAN.md` 的设计目标冲突时，以设计目标为准并停下对齐，不得各写一套。
 
-- 版本：v2.2（规划增补）
+- 版本：v2.3（进度同步）
 - 日期：2026-10-26
-- 状态：Phase A / B / C 已交付；新增自我完善与安全更新计划，待按 Issues #46–#53 分阶段实施
+- 状态：Phase A / B / C 已交付；#47 设计冻结已 `VERIFIED`， #48 进行中；#49/#51 因共享路径等待 #48，其余任务按依赖推进
 - 适用范围：AgentOrch 核心规则、local/github edition、任务模板、验证脚本与发行机制
 - 设计目标来源：[PLAN.md](PLAN.md)
 
-## 1. 当前状态（2026-10-23）
+## 1. 当前状态（2026-10-26）
 
 状态变化的唯一落点就是这张表；`PLAN.md` 的设计目标不随任务状态变化。
 
@@ -190,13 +190,13 @@
 
 | Issue | 交付重点 | 依赖 | 状态 |
 |---|---|---|---|
-| [#47](https://github.com/ctrlshiftaltdel/AgentOrch/issues/47) | 冻结来源注册表、Lesson 生命周期、Architecture Contract、更新安全与威胁模型 | Epic #46 | OPEN |
-| [#48](https://github.com/ctrlshiftaltdel/AgentOrch/issues/48) | 项目可配置架构契约与依赖边界检查器 | #47 | OPEN |
-| [#49](https://github.com/ctrlshiftaltdel/AgentOrch/issues/49) | TalkDND / AgentMgr 可配置来源、经验采集、验证与去重 | #47；可与 #48 并行 | OPEN |
+| [#47](https://github.com/ctrlshiftaltdel/AgentOrch/issues/47) | 冻结来源注册表、Lesson 生命周期、Architecture Contract、更新安全与威胁模型 | Epic #46 | 已完成（PR #57 合并 `73a9c03`；主分支验证通过；Issue 已关闭） |
+| [#48](https://github.com/ctrlshiftaltdel/AgentOrch/issues/48) | 项目可配置架构契约与依赖边界检查器 | #47 | 进行中（分支 `task/48-architecture-contract`；活动锁覆盖验证器 / 发行清单 / CI） |
+| [#49](https://github.com/ctrlshiftaltdel/AgentOrch/issues/49) | TalkDND / AgentMgr 可配置来源、经验采集、验证与去重 | #47；共享路径需等 #48 | 等待 #48（依赖 #47 已满足；与 #48 共享 `docs/self-improvement/`、`validate_kit.py`、`build_release.py`、CI，按路径锁串行） |
 | [#55](https://github.com/ctrlshiftaltdel/AgentOrch/issues/55) | TalkDND 已知模块边界、共享状态、并发、回滚和失败语义经验的首批规则 / 回归场景 | #47；架构专项检查依赖 #48 | OPEN |
 | [#56](https://github.com/ctrlshiftaltdel/AgentOrch/issues/56) | AgentMgr 已知契约优先、Runtime Adapter 隔离、共用应用层和证据边界经验的首批架构回归场景 | #47、#48 | OPEN |
 | [#50](https://github.com/ctrlshiftaltdel/AgentOrch/issues/50) | “进行自我完善”触发、计划、派发、执行与验证闭环 | #48、#49；首批经验场景参考 #55、#56 | OPEN |
-| [#51](https://github.com/ctrlshiftaltdel/AgentOrch/issues/51) | 官方 Release 校验、三方比较、冲突分类、备份与回滚 | #47；可与 #48 / #49 并行 | OPEN |
+| [#51](https://github.com/ctrlshiftaltdel/AgentOrch/issues/51) | 官方 Release 校验、三方比较、冲突分类、备份与回滚 | #47；共享路径需等 #48 | 等待 #48（只依赖 #47；与 #48 共享验证器 / 发行清单 / CI 路径，按路径锁串行） |
 | [#52](https://github.com/ctrlshiftaltdel/AgentOrch/issues/52) | “更新 AgentOrch”入口、迁移指南与发行包接入 | #51 | OPEN |
 | [#53](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53) | 自我完善 / 更新流程合成回归、端到端演练与趋势报告 | #48–#52、#55、#56 | OPEN |
 
@@ -207,7 +207,7 @@
 
 执行纪律：
 - #47 契约未冻结前，不得开始依赖该契约的完整实现；隔离的只读探测可以先做，但不得形成不可逆设计承诺。
-- #48 与 #49 可并行，但必须使用已冻结的同一契约；#51 可独立于 #48 / #49 并行实现。
+- #48 与 #49 只有在锁定路径不重叠时才可并行；两者共享 `docs/self-improvement/`、`scripts/validate_kit.py`、`scripts/build_release.py` 与 CI，当前按路径锁串行。#51 同理等待共享路径释放。
 - #50 依赖架构检查与经验管线；#52 依赖安全更新引擎；#53 最终验收依赖所有实现合并。
 - 每个任务都按现有任务状态、路径锁、证据矩阵、独立审查和当前 head 验证执行。Issue 关闭不等于阶段验证完成。
 - 该能力不能覆盖或弱化现有核心协作契约；涉及权限 / 安全边界、锁与状态机、数据迁移、破坏兼容或不可逆行为时，必须保留人工决策门。
