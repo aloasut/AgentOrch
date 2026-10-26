@@ -229,7 +229,7 @@ T-01 / T-02 / T-03 / T-09 / T-10 / T-11 属 #49，T-12 / T-13 属 #48，本任�
 | 命令 | 退出码 | 结果 |
 |---|---|---|
 | `python3 scripts/validate_kit.py` | 0 | `Kit validation passed` |
-| `python3 -m unittest discover -s tests` | 0 | `Ran 399 tests` / `OK` |
+| `python3 -m unittest discover -s tests` | 0 | `Ran 511 tests` / `OK` |
 | `python3 -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/update_agentorch/*.py` | 0 | 无输出 |
 | `python3 scripts/build_release.py` | 0 | 打包自检通过；未修改 `REQUIRED` / 发行清单 |
 | `python3 -m unittest tests.update_agentorch` | 0 | `Ran 116 tests` / `OK` |
