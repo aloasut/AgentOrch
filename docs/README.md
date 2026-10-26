@@ -407,20 +407,30 @@ uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `docs/PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `docs/PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 672 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树）、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 673 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
 仓库自带一条 GitHub Actions 工作流 `.github/workflows/ci.yml`（仅本仓库使用，不随发行包发布），把登记检查与发布打包自检放到平台上执行：
 
 - **触发**：`pull_request` 目标 `main`、`push` 到 `main`、以及手动 `workflow_dispatch`。
-- **环境**：`ubuntu-latest`，Python 版本矩阵 `3.12` / `3.13`（两个版本都跑，任一失败即整体失败）。
-- **步骤**：按顺序执行且不跳过失败步骤 —— `uv run python scripts/validate_kit.py`、`uv run python -m unittest discover -s tests`、`uv run python -m py_compile scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py`、`uv run python scripts/run_delivery_scenarios.py --json --output "$RUNNER_TEMP/delivery-scenarios.json"`、`uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until 2026-02-01 --json`、`uv run python scripts/build_release.py`。
+- **环境（三个操作系统）**：
+  - `checks`：`ubuntu-latest`，Python 矩阵 `3.12` / `3.13`；
+  - `checks-macos`：`macos-latest`（真实 macOS runner），Python `3.13`；
+  - `checks-windows`：`windows-latest`（真实 Windows runner，默认 shell 是 pwsh），Python `3.13`。
+
+  三个 job 共用同一份步骤定义（workflow 内的 YAML anchor），所以不存在"某个平台少跑一步"的漂移；任一 job 的任一档失败即整体失败（矩阵 `fail-fast: false`，其余档继续跑并各自留证）。macOS / Windows 只跑 `3.13`，是**为了验证平台，而不是扩大 Python 版本承诺**：`3.12` / `3.13` 的版本覆盖仍由 Linux 矩阵承担。
+- **步骤**：按顺序执行且不跳过失败步骤 —— `uv run python scripts/validate_kit.py`、`uv run python scripts/architecture/check.py --project . --json`（无契约项目应为只读诊断并退出 0）、`uv run python -m unittest discover -s tests`、`uv run python scripts/run_delivery_scenarios.py --json --output "${{ runner.temp }}/delivery-scenarios.json"`、`uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until 2026-02-01 --json`、跨平台语法检查、`uv run python scripts/build_release.py`。
+  - **报告路径用 `${{ runner.temp }}`**：不依赖 shell 的 `$RUNNER_TEMP`，同一行在 bash 与 pwsh 下都能解析；报告只写到 runner 临时目录，不进仓库。
+  - **语法检查不依赖 shell 通配符**：核心脚本用显式文件列表，`scripts/update_agentorch/*.py` 与 `scripts/self_improvement/*.py` 由 Python `glob` 展开。Windows runner 的默认 shell 是 pwsh，不会像 bash 那样展开 `*.py`，原写法会让这两个目录在 Windows 上被静默跳过。
+  - **统一 UTF-8**：工作流级设置 `PYTHONUTF8=1` 与 `PYTHONIOENCODING=utf-8`。不设置时 Windows runner 的 Python 子进程会沿用旧代码页，套件里的中文诊断信息会在写出或读回时失败，而同样的命令在 Linux 上是通过的。这是 runner 环境设置，不改变产品行为。
 - **打包自检**：最后一步是发布构建本身。它失败即 job 失败 —— 没有 `continue-on-error`、没有 `|| true`、没有跳过开关，因此"少打包一个文件、包里断链、清单哈希对不上、包内出现禁止路径、包内场景或指标回归"这类回归会在 PR 上直接变红，而不是等 Master 手工构建才发现。
-  - **两个版本都跑的原因**：自检会在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`（a–l 中的 b、d），即真正检验"这一档 Python 拿到的包是否可用"；两档都证明一次，成本是本机数秒级的重复，换来不依赖版本判断的一致性（无 `if:` 条件，也就不会出现"某档静默跳过打包步骤"）。
+  - **每个平台都跑的原因**：自检会在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`（a–l 中的 b、d），即真正检验"这一平台 / Python 版本拿到的包是否可用"；三个 job 各自证明一次，无 `if:` 条件，也就不会出现"某档静默跳过打包步骤"。
+  - **行尾与可复现性**：仓库 `.gitattributes` 统一 `eol=lf`，打包前还会把文本文件归一为 LF，自检 f 断言包内文本不含 CRLF，因此 Windows 检出无法把 CRLF 带进发行包；场景沙箱里的 git 仓库也把 `core.autocrlf` / `core.eol` 固定为 LF 行为，不依赖 runner 的全局 git 配置。
   - **产物处理**：zip 写到 runner 的 `release/`（`.gitignore` 已忽略 `release/*.zip`），不提交、不上传 artifact、不使用任何密钥。
-  - **覆盖边界**：CI 只证明"包能构建且内置自检 a–l 通过"，**不证明发布本身** —— 不校验发布命名日期、不生成 GitHub Release、不核对发布记录。发布仍需按 `release/README.md` 第 4 节由 Master 执行并留证。
-- **边界**：`permissions: contents: read`，不使用 `pull_request_target`，不引入第三方依赖、密钥或 `pip install`。
+  - **覆盖边界**：CI 只证明"包能在该平台构建且内置自检 a–l 通过"，**不证明发布本身** —— 不校验发布命名日期、不生成 GitHub Release、不核对发布记录。发布仍需按 `release/README.md` 第 4 节由 Master 执行并留证。
+- **仍未覆盖（继续标 `UNKNOWN`）**：真实安装器与用户桌面环境、Windows 交互式 PowerShell / Git Bash 会话中的手工命令、macOS 大小写不敏感卷上的极端路径场景、以及下游项目的平台承诺。CI 只覆盖 GitHub-hosted 的 `ubuntu-latest` / `macos-latest` / `windows-latest`，不外推到其他发行版或自托管环境。
+- **边界**：`permissions: contents: read`，不使用 `pull_request_target`，不引入第三方依赖、密钥或 `pip install`；新增的 runner 用量（`macos-latest` / `windows-latest`）已由项目所有者授权。
 
 **证据地位**：`github` 底座下，G4 以**当前 head SHA** 上的 CI 运行全绿为准 —— 本地四条命令（含打包自检）仍是可复现的补充证据，不能替代 CI；反过来，CI 绿灯也只覆盖这四条命令，不能代替 G1 的逐条验收，也不能代替对发布标准的逐条审查。head 变化后旧 head 的绿灯失效，必须在新 head 上重新运行。
 
@@ -523,7 +533,7 @@ uv run python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON�
   - **按机器余量的并发策略**：不再固定并发数量，派发前按 CPU、内存、磁盘与测试资源余量决定并行度（见 6.4 节）。
   - **配置自省**：`uv run python scripts/orchestrator.py config show` 可查看每个配置键的生效值与来源，便于定位缺省值与项目覆盖。
 - 纯 **Python 3 标准库**，**零第三方依赖**；不需要数据库服务、包管理器或构建步骤。
-- 已在 **Windows + Git Bash** 环境用 Python 3 验证；四条检查（三条登记检查 + 发布打包自检）另由 CI 在 `ubuntu-latest` + Python 3.12/3.13 上运行（见 7.1）。其他操作系统、其他 shell 与其余命令**未验证**，命令中的引号与路径写法可能需要调整。
+- 已在 **Windows + Git Bash** 环境用 Python 3 验证；四条检查（三条登记检查 + 发布打包自检）另由 CI 在 `ubuntu-latest`（Python 3.12 / 3.13）、`macos-latest`（3.13）与 `windows-latest`（3.13）上运行（见 7.1）。真实安装器与用户桌面环境、其他 shell 会话与其余命令**未验证**，命令中的引号与路径写法可能需要调整。
 - `orchestrator.py` 只管理本地任务状态与路径锁，不启动模型、不写代码、不运行项目测试、不自动合并 Git 分支；这些动作由 Agent 按提示词执行，合并由 Master 决策。
 - 若运行时无法真实完成 spawn / wait / collect（C1–C4 未全部通过），必须降级为多会话人工交接，不得声称已派发。
 

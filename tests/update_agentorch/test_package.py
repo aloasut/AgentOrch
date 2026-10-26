@@ -6,6 +6,7 @@ extracted outside the engine's own temporary directory.
 from __future__ import annotations
 
 import io
+import os
 import unittest
 import zipfile
 
@@ -147,11 +148,42 @@ class PackageVerificationTests(unittest.TestCase):
         self.assertEqual(results(result)['MEMBER_PATHS'], 'FAIL')
 
     def test_absolute_and_drive_and_backslash_members_are_unsafe(self):
-        for name in ('/etc/passwd', 'C:/evil.txt', 'agentorch-20260101\\evil.txt',
-                     'agentorch-20260101//evil.txt'):
+        for name in ('/etc/passwd', 'C:/evil.txt', 'agentorch-20260101//evil.txt'):
             with self.subTest(name=name):
                 result, _, _ = self.verify(raw_members=((name, b'x', 0o644),))
                 self.assertEqual(results(result)['MEMBER_PATHS'], 'FAIL')
+        # `zipfile` rewrites the native separator to "/" both when writing and
+        # when reading an archive, so on Windows a backslash member reaches the
+        # verifier already normalized and `MEMBER_PATHS` cannot be the check that
+        # fires. The package must still be rejected on both platforms, so assert
+        # the exact path check on POSIX and rejection-by-some-path-check on
+        # Windows instead of dropping the hostile case.
+        result, _, _ = self.verify(
+            raw_members=(('agentorch-20260101\\evil.txt', b'x', 0o644),))
+        checks = results(result)
+        if os.name == 'nt':
+            self.assertIn('FAIL', {checks['MEMBER_PATHS'], checks['FILE_SET'],
+                                   checks['EXPECTED_LAYOUT']},
+                          f'backslash member was accepted: {checks}')
+        else:
+            self.assertEqual(checks['MEMBER_PATHS'], 'FAIL')
+
+    def test_path_validator_rejects_backslash_on_every_platform(self):
+        """The rule itself, asserted directly and identically on every platform.
+
+        The integration case above cannot prove this on Windows: `zipfile`
+        rewrites the native separator to "/" when writing *and* when reading an
+        archive, so a raw backslash member never reaches the validator there.
+        Calling `package_path_errors` directly keeps the invariant
+        ("backslash is never a legal member path") asserted on Linux, macOS and
+        Windows instead of only on the platforms where the fixture survives.
+        """
+        errors = package.package_path_errors('agentorch-20260101\\evil.txt')
+        self.assertTrue(any('no backslash' in error for error in errors),
+                        f'backslash path was not rejected: {errors}')
+        # Control: the same path with the only legal separator stays valid, so a
+        # validator that rejected everything could not satisfy the assertion above.
+        self.assertEqual(package.package_path_errors('agentorch-20260101/evil.txt'), [])
 
     def test_symlink_member_is_unsafe(self):
         result, _, _ = self.verify(

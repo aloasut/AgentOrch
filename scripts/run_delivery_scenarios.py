@@ -2302,12 +2302,20 @@ def _git(root, *args):
         ['git', '-c', 'user.email=scenario@example.invalid',
          '-c', 'user.name=Scenario', *args],
         cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        encoding='utf-8', errors='replace',
         env={**os.environ, 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_TERMINAL_PROMPT': '0'})
     return proc
 
 
 def _git_init(root):
     _git(root, 'init', '-q')
+    # Pin line endings in the scenario repository itself, not just on the
+    # commands above: the update engine later runs `git worktree add` in this
+    # repository, so a runner-wide `core.autocrlf=true` would otherwise check
+    # the isolated worktree out with CRLF and make the byte comparison against
+    # the LF payload depend on the host git configuration.
+    _git(root, 'config', 'core.autocrlf', 'false')
+    _git(root, 'config', 'core.eol', 'lf')
     _git(root, 'add', '-A')
     _git(root, 'commit', '-qm', 'synthetic baseline')
     return _git(root, 'rev-parse', 'HEAD').stdout.strip()
@@ -3567,6 +3575,28 @@ def _redact(text, sandbox):
     return text
 
 
+def _remove_sandbox(path):
+    """Remove a scenario sandbox, including read-only files a Windows git repo leaves.
+
+    ``git init`` / ``git worktree add`` mark objects read-only on Windows, and
+    ``shutil.rmtree`` cannot unlink a read-only file there. Granting write access
+    while walking the tree is the portable way to make the removal succeed; on
+    POSIX the mode bits are equally harmless. Cleanup never raises: a leftover
+    sandbox is reported by the tests that assert an empty work directory.
+    """
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in dirnames + filenames:
+            try:
+                os.chmod(os.path.join(dirpath, name), 0o700)
+            except OSError:
+                pass
+    try:
+        os.chmod(path, 0o700)
+    except OSError:
+        pass
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def run_scenarios(scenarios, workdir, vk=None, orch=None, emit=None):
     """Run every scenario; a failure or crash never stops the remaining ones."""
     results = []
@@ -3592,7 +3622,7 @@ def run_scenarios(scenarios, workdir, vk=None, orch=None, emit=None):
                 'traceback': _redact(traceback.format_exc(), sandbox),
             })
         finally:
-            shutil.rmtree(sandbox, ignore_errors=True)
+            _remove_sandbox(sandbox)
         results.append(result)
         if emit is not None:
             emit(result)
@@ -3698,11 +3728,14 @@ def main(argv=None):
         print(f'RUNNER ERROR: {exc}', file=sys.stderr)
         return EXIT_TOOL_ERROR
 
-    workdir = tempfile.TemporaryDirectory(prefix='agentorch-delivery-scenarios-')
+    # `mkdtemp` + `_remove_sandbox` instead of `TemporaryDirectory`: the git-backed
+    # scenarios leave read-only object files on Windows, which need the same
+    # explicit permission fix the per-scenario cleanup applies.
+    workdir = Path(tempfile.mkdtemp(prefix='agentorch-delivery-scenarios-'))
     try:
-        results = run_scenarios(selected, workdir.name, vk=vk, orch=orch)
+        results = run_scenarios(selected, workdir, vk=vk, orch=orch)
     finally:
-        workdir.cleanup()
+        _remove_sandbox(workdir)
 
     report = build_report(results)
     if args.output:

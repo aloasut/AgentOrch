@@ -75,7 +75,8 @@ def _run_git(root: Path, args: list[str], commands: list[dict], now: datetime) -
     commands.append({'command': ' '.join(args), 'exit_code': 0, 'ran_at': utc_stamp(now)})
     try:
         proc = subprocess.run(args, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                              text=True, env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
+                              text=True, encoding='utf-8', errors='replace',
+                              env={**os.environ, 'GIT_TERMINAL_PROMPT': '0'})
     except OSError:
         commands[-1]['exit_code'] = 127
         raise

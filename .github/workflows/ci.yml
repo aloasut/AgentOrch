@@ -10,6 +10,15 @@ on:
 permissions:
   contents: read
 
+# One encoding for every platform. The Windows runner otherwise starts Python
+# child processes on a legacy code page, so UTF-8 output (the kit's diagnostics
+# are UTF-8, and several of them are non-ASCII) fails to encode on the way out
+# and to decode on the way back in, even though the same command passes on
+# Linux. This is a runner setting only: no product behaviour depends on it.
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+
 jobs:
   checks:
     name: checks (Python ${{ matrix.python-version }})
@@ -18,7 +27,7 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.12", "3.13"]
-    steps:
+    steps: &checks-steps
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -49,11 +58,13 @@ jobs:
       # scenario passing means its gate really fired), the report must carry no
       # ERROR, and the exit code must be 0. No `continue-on-error`: a broken gate
       # has to turn this job red. The report is written to the runner temp
-      # directory, never into the repository.
+      # directory, never into the repository. `runner.temp` is used instead of
+      # the platform-specific $RUNNER_TEMP shell variable so the same step works
+      # under bash and under the Windows runner's pwsh.
       - name: Synthetic delivery scenarios
         run: >-
           uv run python scripts/run_delivery_scenarios.py --json
-          --output "$RUNNER_TEMP/delivery-scenarios.json"
+          --output "${{ runner.temp }}/delivery-scenarios.json"
 
       # Metric report self-check: the fixed gold sample must reproduce a report
       # with seven metrics and an explicit window. The report is read-only and
@@ -63,22 +74,49 @@ jobs:
           uv run python scripts/report_metrics.py --gold-sample
           --since 2026-01-01 --until 2026-02-01 --json
 
+      # Cross-platform syntax check. The explicit list pins the core scripts; the
+      # two wildcard directories are expanded in Python because the Windows
+      # runner's default pwsh does not expand `scripts/*/*.py` the way bash does,
+      # and a silently unexpanded glob would leave those modules unchecked.
       - name: Syntax check
         run: >-
-          uv run python -m py_compile
+          uv run python -c "import glob, py_compile, sys; files = list(sys.argv[1:]) + sorted(glob.glob('scripts/update_agentorch/*.py')) + sorted(glob.glob('scripts/self_improvement/*.py')); [py_compile.compile(f, doraise=True) for f in files]; print('syntax ok: %d files' % len(files))"
           scripts/orchestrator.py scripts/validate_kit.py scripts/check_drift.py
           scripts/architecture/check.py scripts/architecture/contract.py
           scripts/architecture/report.py scripts/architecture/rules.py
           scripts/architecture/adapters/python_ast.py scripts/architecture/adapters/rust.py
-          scripts/update_agentorch/*.py scripts/self_improvement/*.py
 
       # Release packaging self-check. No `continue-on-error`, no `|| true`: a
       # packaging regression (missing file, broken link inside the package,
       # manifest mismatch, forbidden path) must turn this job red, exactly as it
       # would at release time. The zip is written to the runner's `release/`
       # directory, which `.gitignore` already excludes; it is never committed or
-      # uploaded. Runs on every matrix entry (3.12 and 3.13) on purpose: the
+      # uploaded. Runs on every matrix entry of every OS on purpose: the
       # self-check executes the shipped test suite inside the extracted archive,
-      # so each supported version proves the artifact it would receive.
+      # so each supported platform/version proves the artifact it would receive.
       - name: Release self-check (build_release.py)
         run: uv run python scripts/build_release.py
+
+  # Real macOS runner. Same steps as `checks`, single Python version: this job
+  # exists to prove the kit on the platform, not to widen the version promise.
+  checks-macos:
+    name: checks-macos (Python ${{ matrix.python-version }})
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+    steps: *checks-steps
+
+  # Real Windows runner (default shell is pwsh). Same steps as `checks`; the
+  # steps above are written to work under both bash and pwsh, and the packaging
+  # self-check keeps proving that a Windows checkout cannot smuggle CRLF into the
+  # archive.
+  checks-windows:
+    name: checks-windows (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.13"]
+    steps: *checks-steps

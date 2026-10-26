@@ -242,7 +242,8 @@ def scan_text(name, text, extra_patterns=()):
 
 def run(cmd, cwd):
     """Run a child process with sys.executable; capture merged output."""
-    proc = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    proc = subprocess.run(cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                          text=True, encoding='utf-8', errors='replace')
     return proc.returncode, proc.stdout or ''
 
 

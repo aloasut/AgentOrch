@@ -103,6 +103,7 @@ class SubprocessRunner(CommandRunner):
             argv[0] = self.gh_binary
         try:
             proc = subprocess.run(argv, capture_output=True, text=True,
+                                  encoding='utf-8', errors='replace',
                                   timeout=self.timeout, shell=False)
         except FileNotFoundError as exc:
             raise CommandFailure('BLOCKED', REASON_TOOL_UNAVAILABLE,
