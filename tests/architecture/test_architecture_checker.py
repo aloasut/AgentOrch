@@ -158,10 +158,19 @@ class ContractOptionalityTests(CheckerTestBase):
         self.assertEqual(payload['contract_version'], '1.0.0')
 
     def test_contract_path_outside_the_project_is_rejected(self):
+        # One sibling file per test instance: a fixed name (e.g. /tmp/escape.json)
+        # is shared state, so concurrent runs would delete each other's fixture.
+        # The file must stay a *sibling* of the project root, otherwise the path
+        # would no longer escape the project and the rejection would go untested.
+        with tempfile.NamedTemporaryFile(
+                dir=self.root.parent, prefix='escape-', suffix='.json',
+                mode='w', encoding='utf-8', delete=False) as handle:
+            outside = Path(handle.name)
+            handle.write(json.dumps(contract(), indent=2))
+        self.addCleanup(outside.unlink, missing_ok=True)
+        relative = (Path('..') / outside.name).as_posix()
         self.build({'src/app/main.py': 'x = 1\n'},
-                   project_md='- `architecture_contract_path`: `../escape.json`\n')
-        (self.root.parent / 'escape.json').write_text(json.dumps(contract()), encoding='utf-8')
-        self.addCleanup((self.root.parent / 'escape.json').unlink)
+                   project_md=f'- `architecture_contract_path`: `{relative}`\n')
         code, payload = self.result()
         self.assertEqual(code, 1, payload)
         self.assertTrue(any('outside the project' in e for e in payload['contract_errors']),
