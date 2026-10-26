@@ -167,4 +167,4 @@ python3 scripts/self_improvement/cli.py lesson list          # 退出码 0；no 
 - 报告：`.local/self-improvement/reports/scan-20261026T140620Z.{json,md}`（本地、git-ignored、不入库）；脱敏摘要见 [`live-scan-2026-10-26.md`](live-scan-2026-10-26.md)。
 - 本次没有提供显式分析，lesson store 仍为 0 条；管线不会从标题推断根因（[lesson-lifecycle.md](lesson-lifecycle.md) §9）。结论是“本次无候选”，不是“来源无新经验”。
 - 仍未验证：窗口前段因分页上限未读；`agentmgr` issue 元数据未进入本次报告；CI 结论在扫描后可能变化；`gh` 限速与认证状态只按本次命令结果记录。
-- 当前 head 上 `python3 -m unittest discover -s tests` 因 [`tests/self_improvement/test_registry.py`](../../tests/self_improvement/test_registry.py) 仍断言默认注册表 `scan_cursor is None` 而失败（672 个测试，1 个失败）；`tests/` 不在 #74 的允许路径内，本任务未修改测试。详见 [`live-scan-2026-10-26.md`](live-scan-2026-10-26.md) §10。
+- 测试已拆分（Master 决定，方案 1）：默认注册表测试允许 `null` 或 schema 合法游标，`test_fresh_registry_does_not_claim_a_scan` 保留 fresh-registry 语义；真实 `PARTIAL` 游标保留。修复后 `python3 -m unittest discover -s tests` 退出码 `0`（674 个测试）。详见 [`live-scan-2026-10-26.md`](live-scan-2026-10-26.md) §10。

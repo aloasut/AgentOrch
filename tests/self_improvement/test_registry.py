@@ -36,10 +36,36 @@ class RegistryShapeTests(unittest.TestCase):
         self.assertEqual(repositories['agentmgr'], 'ctrlshiftaltdel/AgentMgr')
         for entry in registry.sources:
             self.assertTrue(entry['enabled'])
-            self.assertIsNone(entry['scan_cursor'], 'a fresh registry must not claim a scan')
+            cursor = entry['scan_cursor']
+            # The repository registry is no longer "fresh" once a real scan has
+            # run, so a null cursor and a schema-valid cursor object are both
+            # allowed here. The "fresh registry" rule keeps its own test below.
+            if cursor is not None:
+                self.assertEqual(sources.validate_cursor(cursor), [],
+                                 f'{entry["source_id"]} cursor must be schema-valid')
+                if cursor['last_scan_status'] == 'OK':
+                    self.assertIsNotNone(cursor.get('last_successful_scan_at'),
+                                         'an OK cursor must record a successful scan')
+                    self.assertIsNotNone(cursor.get('last_scanned_commit'),
+                                         'an OK cursor must record a commit watermark')
+                else:
+                    # This repository's default registry is a first scan that
+                    # ended PARTIAL: it has no prior success to preserve, so a
+                    # non-OK cursor here must not claim a success watermark.
+                    self.assertIsNone(cursor.get('last_successful_scan_at'),
+                                      'a non-OK cursor must not claim a successful scan')
+                    self.assertIsNone(cursor.get('last_scanned_commit'),
+                                      'a non-OK cursor must not claim a commit watermark')
             self.assertEqual(entry['trust']['content_trust'], 'untrusted_data')
             self.assertFalse(entry['trust']['may_override_rules'])
             self.assertGreaterEqual(len(entry['evidence_scope']), 1)
+
+    def test_fresh_registry_does_not_claim_a_scan(self):
+        # The original invariant still applies to a freshly built registry, even
+        # though the repository's own registry may now carry a real scan cursor.
+        registry = sources.Registry(support.registry())
+        for entry in registry.sources:
+            self.assertIsNone(entry['scan_cursor'], 'a fresh registry must not claim a scan')
 
     def test_empty_sources_array_is_legal(self):
         self.assertEqual(sources.validate_registry(support.registry()), [])
