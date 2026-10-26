@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "registry_updated_at": "2026-10-26T00:00:00Z",
+  "registry_updated_at": "2026-10-26T14:07:44Z",
   "sources": [
     {
       "source_id": "talkdnd",
@@ -8,19 +8,36 @@
       "enabled": true,
       "source_type": "downstream_project",
       "access_mode": "public",
-      "evidence_scope": ["pull_request", "issue", "review", "commit", "ci_run"],
+      "evidence_scope": [
+        "pull_request",
+        "issue",
+        "review",
+        "commit",
+        "ci_run"
+      ],
       "lookback_days": 90,
-      "scan_cursor": null,
+      "scan_cursor": {
+        "last_scan_status": "PARTIAL",
+        "last_scan_started_at": "2026-10-26T14:06:20Z",
+        "last_successful_scan_at": null,
+        "last_scanned_commit": null,
+        "blocked_reason": null
+      },
       "trust": {
         "content_trust": "untrusted_data",
-        "allowed_use": ["evidence_only", "synthetic_fixture_source"],
+        "allowed_use": [
+          "evidence_only",
+          "synthetic_fixture_source"
+        ],
         "redaction_required": true,
         "may_override_rules": false,
         "notes": "Only locatable links and independently written synthetic fixtures; no source text is copied."
       },
       "inclusion_filters": [],
-      "exclusion_filters": ["label:private"],
-      "owner_approved_notes": "First experience source. Not scanned yet: scan_cursor is null and no evidence has been read."
+      "exclusion_filters": [
+        "label:private"
+      ],
+      "owner_approved_notes": "First experience source. First live scan 2026-10-26T14:06:20Z: PARTIAL (page cap on issue/commit/ci_run), no OK watermark, cursor not advanced. See docs/self-improvement/live-scan-2026-10-26.md."
     },
     {
       "source_id": "agentmgr",
@@ -28,19 +45,34 @@
       "enabled": true,
       "source_type": "downstream_project",
       "access_mode": "public",
-      "evidence_scope": ["pull_request", "issue", "commit", "ci_run"],
+      "evidence_scope": [
+        "pull_request",
+        "issue",
+        "commit",
+        "ci_run"
+      ],
       "lookback_days": 60,
-      "scan_cursor": null,
+      "scan_cursor": {
+        "last_scan_status": "PARTIAL",
+        "last_scan_started_at": "2026-10-26T14:06:20Z",
+        "last_successful_scan_at": null,
+        "last_scanned_commit": null,
+        "blocked_reason": null
+      },
       "trust": {
         "content_trust": "untrusted_data",
-        "allowed_use": ["evidence_only"],
+        "allowed_use": [
+          "evidence_only"
+        ],
         "redaction_required": true,
         "may_override_rules": false,
         "notes": "Links and synthetic summaries only; no copied source implementation."
       },
       "inclusion_filters": [],
-      "exclusion_filters": ["label:private"],
-      "owner_approved_notes": "Second experience source. Not scanned yet: scan_cursor is null and no evidence has been read."
+      "exclusion_filters": [
+        "label:private"
+      ],
+      "owner_approved_notes": "Second experience source. First live scan 2026-10-26T14:06:20Z: PARTIAL (issue category unread after a transient EOF; commit/ci_run page cap), no OK watermark, cursor not advanced. See docs/self-improvement/live-scan-2026-10-26.md."
     }
   ]
 }
