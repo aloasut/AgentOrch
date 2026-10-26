@@ -54,7 +54,7 @@
   },
   "backup": {
     "required": true,
-    "location": "/tmp/agentorch-backup-20261026b",
+    "location": "agentorch-backup-20261026b",
     "created_at": "2026-10-26T04:09:00Z",
     "verified": true
   },

@@ -99,10 +99,9 @@ for p in files:
     json.loads(p.read_text(encoding='utf-8'))
 print(f'parsed {len(files)} files')
 PY
-
-# 2) 本地无第三方 JSON Schema 验证器；以下为临时的标准库子集检查（不提交）
-python3 /tmp/opencode/contract-check.py .
 ```
+
+2) 标准库子集检查：本任务在本地临时运行一个零依赖的 draft 2020-12 关键字子集检查器，脚本**不提交、路径不入库**；它逐 fixture 验证合法被接受、非法被拒绝。复现方式由 #48 或 #53 落地的 L1 校验器承担（见 §4.1），本仓库不提供该临时脚本。
 
 - 结果：`parsed 24 files`（5 schemas + 19 fixtures），退出码 `0`；临时子集检查器报告 19 个 fixture 全部符合预期（合法被接受、非法被拒绝并打印 §3.2 的位置），退出码 `0`。
 - **限制**：该临时检查器是本任务为取证编写的标准库子集实现，**不是**标准 JSON Schema 验证器。环境中没有 `jsonschema` / `check-jsonschema`，且禁止新增依赖，因此“标准验证器的判定”记为 `NOT_RUN`，不得写成已通过。CI 侧可选验证方案见 §4.3。
