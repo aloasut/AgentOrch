@@ -6,7 +6,8 @@ package registers its own test modules explicitly. ``python3 -m unittest discove
 """
 import importlib
 
-_TEST_MODULES = ('test_registry', 'test_lesson_lifecycle', 'test_collection', 'test_pipeline')
+_TEST_MODULES = ('test_registry', 'test_lesson_lifecycle', 'test_collection', 'test_pipeline',
+                 'test_routing', 'test_planning', 'test_orchestration')
 
 
 def load_tests(loader, standard_tests, pattern):
