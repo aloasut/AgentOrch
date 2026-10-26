@@ -581,16 +581,16 @@ python3 -m scripts.update_agentorch.entry --project . \
 
 | 已安装 Format | 自动更新是否可判定 | 本任务实测 | 真实已发布包 | 说明 |
 | --- | --- | --- | --- | --- |
-| `1.6`（当前） | 是 | 合成 / 单元：`tag_matches_format('v1.6','1.6')` 为真，v1.6 目标包通过 `VERSION_MATCH` 与包校验 | `NOT_RUN` | 当前 Format；v1.6 包可被入口接受，真实 v1.5 → 1.6 下载升级仍归 #71 |
-| `1.5` | 是 | 合成项目：`APPLIED`，项目自有文件逐字节不变 | `NOT_RUN` | 上一 Format；合成测试以 v1.6 为目标包（tag 与目标清单 Format 一致），复用 B5 / `test_entry_release` |
-| `1.4` | 是 | 合成项目：`APPLIED`，根 `PLAN.md` 保持原样 | `NOT_RUN` | 1.4 已有 `MANIFEST.json`；合成目标为 v1.6，根计划按项目自有路径处理 |
-| `1.3` | 是（清单存在时） | 合成项目：根 `README.md` 被识别为 `UPSTREAM_REMOVAL`，`STOPPED_CONFLICT` + `HD-09`，文件未删除 | `NOT_RUN` | 1.3 根文件在 1.5 布局中改名 / 迁移；入口不自动删除，需人工决策 |
-| `1.1` / `1.2` | 否 | 无清单 → `STOPPED_INVALID_BASELINE`，零写入、零网络 | `NOT_RUN` | 先按第 6 节手工登记基线，再重跑入口 |
+| `1.6`（当前） | 是 | 合成 / 单元：`tag_matches_format('v1.6','1.6')` 为真，v1.6 目标包通过 `VERSION_MATCH` 与包校验 | `NOT_RUN` | 当前 Format；真实 v1.6 包已下载并作为 v1.5 → 1.6 的目标包校验通过。未实测“以 1.6 为已安装基线”的升级：`/releases/latest` 当前即 v1.6，目标不高于已安装版本，按设计 `BLOCKED` / `HD-16`，因此保持 `NOT_RUN` |
+| `1.5` | 是 | 合成项目：`APPLIED`，项目自有文件逐字节不变 | `PASS`（2026-10-26，#71） | 真实 v1.5 Release 包（`agentorch-20261023.zip`）→ 真实 v1.6（`AgentOrch-1.6.zip`）：`APPLIED`，Format 1.5 → 1.6，项目自有文件逐字节不变；见 §14.2 |
+| `1.4` | 是 | 合成项目：`APPLIED`，根 `PLAN.md` 保持原样 | `NOT_RUN` | 未获取到真实已发布 1.4 资产（本仓库 Release 只有 v1.5 / v1.6，另有 v1.1 tag 但无 Release 资产）；合成目标为 v1.6，根计划按项目自有路径处理 |
+| `1.3` | 是（清单存在时） | 合成项目：根 `README.md` 被识别为 `UPSTREAM_REMOVAL`，`STOPPED_CONFLICT` + `HD-09`，文件未删除 | `NOT_RUN` | 未获取到真实已发布 1.3 资产；1.3 根文件在 1.5 布局中改名 / 迁移，入口不自动删除，需人工决策 |
+| `1.1` / `1.2` | 否 | 无清单 → `STOPPED_INVALID_BASELINE`，零写入、零网络 | `NOT_RUN` | 无真实发布资产可获取；本轮只用真实 v1.5 包删除 `MANIFEST.json` 复现无基线停止（§14.3 第 1 行），不等于真实 1.1 / 1.2 包；登记基线见第 6 节 |
 | 清单损坏 / schema 不支持 | 否 | `STOPPED_INVALID_BASELINE` | `NOT_RUN` | 只读诊断 + 手工迁移（`HD-08`） |
 
-**这张表只声称合成测试覆盖的行为。** 真实 GitHub Release 获取、真实已发布 1.3 / 1.4 / 1.5 / 1.6 包、真实项目的网络与权限均为 `NOT_RUN`；未实测的平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
+**上表的“本任务实测”只覆盖合成测试；“真实已发布包”一列只记录真实资产实测。** 2026-10-26，#71 在隔离项目上用真实 Release 补齐了 `1.5 → 1.6`、真实下载与网络 / 停止路径（§14.1–§14.3）。真实已发布 1.3 / 1.4 包、以 1.6 为已安装基线的升级仍为 `NOT_RUN`；签名校验为 `NOT_APPLICABLE`（两个 Release 都只有一个 zip 资产，没有 `.sig` / `.asc` / checksum 附件）；未实测平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
 
-**Release 1.6 的版本对齐**：本轮把 `Format version` 与 release tag 都设为 `1.6`，`v1.6` 包通过包校验第 10 步 `VERSION_MATCH`，可被「更新 AgentOrch」接受（合成测试：`tests/update_agentorch/test_entry_release.py` 的 v1.5 基线 → v1.6 目标为 `APPLIED`，场景 B5 同）。**真实** v1.5 → v1.6 下载升级、真实 Release 获取与权限仍为 `NOT_RUN`，归 #71；不得据此声称真实旧包已升级。
+**Release 1.6 的版本对齐**：本轮把 `Format version` 与 release tag 都设为 `1.6`，`v1.6` 包通过包校验第 10 步 `VERSION_MATCH`，可被「更新 AgentOrch」接受（合成测试：`tests/update_agentorch/test_entry_release.py` 的 v1.5 基线 → v1.6 目标为 `APPLIED`，场景 B5 同）。**真实** v1.5 → v1.6 下载与升级已于 2026-10-26 实测（§14.2）：资产 SHA256 `bc0a64e3…` 与 Release 记录一致，结果为 `APPLIED`。真实已发布 1.3 / 1.4 包与以 1.6 为已安装基线的升级仍为 `NOT_RUN`。
 
 ### 13.4 冲突、删除与重命名
 
@@ -633,7 +633,7 @@ python3 -m scripts.update_agentorch.entry --project . \
 - 项目零写入，已安装版本保持不变；
 - 不得把 `NOT_RUN` 折算成“已检查通过”，也不得回退到本地 zip / 任意 URL / fork。
 
-真实网络路径本任务 `NOT_RUN`；合成测试只证明失败关闭行为。
+真实网络成功路径已于 2026-10-26 实测（§14.1 / §14.2）；失败路径用进程级不可达代理强制连接失败，实测 `BLOCKED` + 全部检查 `NOT_RUN`、零写入（§14.3 第 4 行，属受控模拟，不是真实断网）。
 
 ### 13.8 回退与回滚失败
 
@@ -665,7 +665,51 @@ python3 scripts/build_release.py
 
 前两条只证明入口可导入、路由与失败关闭；真正升级命令的 `APPLY` 必须在有合法基线的项目上由 Master 派发的任务执行，并保留报告、命令、退出码与 head SHA。`build_release.py` 的包内自检覆盖入口与模板（自检 i / j），但不访问网络。
 
-## 14. 本轮“更新 AgentOrch”入口实测记录
+## 14. “更新 AgentOrch”入口实测记录
+
+### 14.1 真实 Release 下载（#71，2026-10-26 UTC）
+
+环境：Linux 6.12.113（x86_64）、Python 3.13.5、`github` 底座仓库检出；分支 `task/71-real-release-upgrade`，基线 `main@eac7f8edda56d4a707522fcddf01ac03c882cc7a`。下载目录在仓库外，命令 `gh release download --repo ctrlshiftaltdel/AgentOrch`，真实网络、只读。
+
+| # | 资产 | 发布 URL | 大小（字节） | SHA256（`sha256sum`） | 与 Release 记录 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `agentorch-20261023.zip`（v1.5） | `https://github.com/ctrlshiftaltdel/AgentOrch/releases/download/v1.5/agentorch-20261023.zip` | 186438 | `5fa4a91854b6b796334d13a6d916c64fa3002028e2d923d00b345fb3454fdc4b` | 一致 |
+| 2 | `AgentOrch-1.6.zip`（v1.6） | `https://github.com/ctrlshiftaltdel/AgentOrch/releases/download/v1.6/AgentOrch-1.6.zip` | 434678 | `bc0a64e35f0d70b937a4a40d923f03638376c97af5d3c55026084d12c04f8d57` | 一致 |
+| 3 | 签名 / checksum 附件 | — | — | — | `NOT_APPLICABLE`：两个 Release 均只有一个 zip 资产，无 `.sig` / `.asc` / checksum 文件 |
+
+v1.6 的 SHA256 与 #76 发布记录 `bc0a64e3…` 逐字符一致；两个资产的大小与 SHA256 同时和 GitHub API `assets[].digest` / `size` 互证。
+
+### 14.2 真实 v1.5 → v1.6 隔离升级（#71）
+
+在仓库外建立隔离项目：解压真实 `agentorch-20261023.zip`，补 `docs/PROJECT.md`（`edition: local`）与项目自有 `LOCAL-NOTES.md`（155 字节，`sha256=2feec58a…`），`git init` 并提交（fixture commit 只存在于临时项目，不进入本仓库）。升级命令从仓库检出运行，`--project` 指向临时项目：
+
+| # | 步骤 | 命令 | 退出码 | 结果 |
+| --- | --- | --- | --- | --- |
+| 1 | PLAN | `python3 -m scripts.update_agentorch.entry --project <tmp> --request "更新 AgentOrch" --mode PLAN` | `0` | `PLANNED`；基线 Format 1.5；目标 tag `v1.6`（报告版本归一 `1.6.0`）/ 资产 `AgentOrch-1.6.zip`；10 项包校验 `VERIFIED`；`UPSTREAM_UNCHANGED=69`、`ALREADY_CURRENT=22`、`PROJECT_OWNED=1`、`UNKNOWN_FILE=1`，冲突 / 删除 / 重命名均为 0 |
+| 2 | APPLY | `python3 -m scripts.update_agentorch.entry --project <tmp> --request "更新 AgentOrch" --mode APPLY` | `0` | `APPLIED`；写入 68 个包内文件 + `MANIFEST.json` |
+
+APPLY 后的可核对事实：
+
+- 项目根 `MANIFEST.json` 的 `format_version` 从 1.5 变为 **1.6**，`files` 从 33 变为 90；
+- 90 / 90 包内文件与解压后的真实 v1.6 包逐字节相同（逐文件 sha256 比对，0 不匹配）；
+- 项目自有文件未被覆盖：`docs/PROJECT.md`（289 字节，`sha256=87574391…`）与 `LOCAL-NOTES.md`（155 字节，`sha256=2feec58a…`）前后 `sha256sum -c` 退出码 `0`；
+- 备份与回滚字段可定位：`backup.required=true`、`backup.verified=true`、`backup.location=/tmp/agentorch-update-backup-<随机后缀>`（项目外，12 个被备份文件 + `backup.json`）、`backup.created_at` 有值；`rollback.required=false`、`result=NOT_NEEDED`；
+- `head_sha_before == head_sha_after`：引擎不提交、不合并，变更留在临时项目工作区，符合设计。
+
+### 14.3 停止 / 隔离路径（真实资产，#71）
+
+每个场景使用独立副本（都从真实 v1.5 包解压），并在运行前后对树内文件（排除 `.git`）做 sha256 快照对比。
+
+| # | 场景 | 命令 | 退出码 | 结果 | 项目写入 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 无基线：删除 `MANIFEST.json` 并提交（树干净） | APPLY | `2` | `STOPPED_INVALID_BASELINE`；`baseline_status=MISSING`；未发出任何 `github:` 命令（零网络） | 零写入（35 个文件快照完全一致） |
+| 2 | 脏工作区：修改 `AGENTS.md` 未提交 | APPLY | `0` | 按设计隔离：`workspace.action=ISOLATED_BRANCH`，在 `.worktrees/update-UPD-…` 独立分支上 `APPLIED` / Format 1.6；原工作区 `AGENTS.md` 仍未提交、`MANIFEST.json` 仍为 1.5，原树文件（排除 `.worktrees/`）快照完全一致 | 原工作区未被改写；新增 `.worktrees/` 属隔离动作 |
+| 3 | 上游冲突：本地修改 `VERSION.md` 并提交 | APPLY | `2` | `STOPPED_CONFLICT` + `HD-10`；`classification.files` 中 `VERSION.md` 为 `THREE_WAY_CONFLICT`，三方哈希均可定位 | 零写入（36 个文件快照完全一致） |
+| 4 | 网络失败（受控模拟） | APPLY，进程级 `HTTPS_PROXY` / `HTTP_PROXY` 指向关闭端口 | `3` | `BLOCKED`；`target.verification.status=NOT_RUN`，10 项检查逐条 `NOT_RUN`；已安装版本不变 | 零写入（36 个文件快照完全一致） |
+
+第 4 行是**受控模拟**：无法在不影响认证与环境的前提下制造真实断网，因此只给该子进程设置指向 `127.0.0.1:9` 的代理强制连接失败；未改动凭据、全局代理或系统网络。它只证明连接失败分支，不等同于真实断网 / 限速 / DNS 故障。
+
+### 14.4 合成记录（#52，保留作为历史基线）
 
 环境：Linux、Python 3.13、`github` 底座、分支 `task/52-update-entry-release`。合成项目与合成 Release 在系统临时目录中构造，未访问真实 Release、未使用凭据、未改动本仓库 `.orchestration/`。
 
@@ -678,6 +722,6 @@ python3 scripts/build_release.py
 | 5 | 1.4 合成项目升级 | 同上 | `0` | `APPLIED`，根 `PLAN.md` 保持原样 |
 | 6 | 1.3 风格根 `README.md` | 同上 | `0` | `STOPPED_CONFLICT`，文件未删除，`HD-09` |
 | 7 | 冲突 / 无基线 / 脏工作区 / 网络失败 | 同上 | `0` | 分别 `STOPPED_CONFLICT` / `STOPPED_INVALID_BASELINE` / `STOPPED_DIRTY_WORKTREE` / `BLOCKED` |
-| 8 | 真实 GitHub Release 获取 | — | `NOT_RUN` | 无网络凭据与真实 Release；不作为已验证 |
+| 8 | 真实 GitHub Release 获取 | — | `NOT_RUN` | #52 当时未执行；已由 #71 用 §14.1–§14.3 的真实记录补齐，以那三节为准，本行保留 `NOT_RUN` 不改写为通过 |
 
-`NOT_RUN` / `UNKNOWN` 项不得当作已支持；本节的通过只覆盖合成测试与失败关闭行为。
+合成部分只证明合成测试与失败关闭行为；`NOT_RUN` / `UNKNOWN` 项不得当作已支持。真实部分的 `PASS` 只覆盖 §14.1–§14.3 记录的资产、平台与命令。
