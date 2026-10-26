@@ -16,6 +16,22 @@ out with different line endings (a fresh Windows worktree under
 `core.autocrlf=true` turns LF blobs into CRLF), which would otherwise change the
 packaged bytes and therefore the zip SHA256 between two checkouts of one commit.
 
+Two naming modes exist, and they never combine:
+
+* default (date) build: `agentorch-YYYYMMDD.zip` with the top-level directory
+  `agentorch-YYYYMMDD/`, stamped by `--date` or by today's date. CI keeps
+  calling the builder with no arguments, so this mode stays the default.
+* public release build: `--release-version 1.6` produces `AgentOrch-1.6.zip`
+  with the top-level directory `AgentOrch-1.6/`, i.e. the archive stem and the
+  top-level directory are the same string in both modes. Pass the version
+  without a `v` prefix (the tag is `v1.6`, the asset is `AgentOrch-1.6.zip`).
+  `--date` and `--release-version` are mutually exclusive; passing both is a
+  build error rather than a silent precedence rule.
+
+The release name only changes the asset / top-level directory. The packaged file
+set, the manifest schema, and the `format_version` recorded in `MANIFEST.json`
+are identical in both modes: a public release number is not a Format version.
+
 A mandatory self-check runs after packaging. There is deliberately no flag to
 skip it. On any failure the script prints `RELEASE SELF-CHECK FAILED`, follows it
 with one line per reason, and exits with a non-zero status.
@@ -95,6 +111,14 @@ VALIDATOR = ROOT / 'scripts' / 'validate_kit.py'
 PROJECT_TEMPLATE = ROOT / 'templates' / 'project.md'
 PROJECT_CONFIG = 'docs/PROJECT.md'  # project-owned; never packaged (docs/ is forbidden)
 DEFAULT_OUTPUT_DIR = 'release'
+
+# The archive stem doubles as the single top-level directory inside the zip.
+DATE_ASSET_PREFIX = 'agentorch-'
+RELEASE_ASSET_PREFIX = 'AgentOrch-'
+DATE_STAMP_RE = re.compile(r'\d{8}')
+# 1.6 and 1.6.1 are accepted; a 'v' prefix is not (that is the git tag, not the
+# asset name), and neither are prerelease suffixes.
+RELEASE_VERSION_RE = re.compile(r'\d+\.\d+(?:\.\d+)?')
 
 # check_drift.py owns manifest generation, file classification and byte
 # normalization. It sits next to this script (and is shipped, while this builder
@@ -494,16 +518,45 @@ def sha256_file(path):
     return digest.hexdigest()
 
 
+def release_asset_stem(date_stamp=None, release_version=None):
+    """Return the asset stem, which is also the archive's top-level directory.
+
+    Exactly one naming mode is allowed. `release_version` names a public release
+    (`1.6` -> `AgentOrch-1.6`, so `AgentOrch-1.6.zip` with a single top-level
+    directory `AgentOrch-1.6/`); otherwise the default date naming applies
+    (`agentorch-YYYYMMDD`). Passing both is an error: there is no precedence rule
+    to remember, and neither flag may silently override the other.
+    """
+    if release_version is not None and date_stamp is not None:
+        raise SystemExit('build error: --release-version and --date are mutually exclusive; '
+                         'omit --date when building a named release asset')
+    if release_version is not None:
+        if not RELEASE_VERSION_RE.fullmatch(release_version):
+            raise SystemExit('build error: --release-version must look like 1.6 (or 1.6.1), '
+                             f"without a 'v' prefix or prerelease suffix, got {release_version!r}")
+        return f'{RELEASE_ASSET_PREFIX}{release_version}'
+    stamp = date_stamp if date_stamp is not None else date.today().strftime('%Y%m%d')
+    if not DATE_STAMP_RE.fullmatch(stamp):
+        raise SystemExit(f'build error: --date must be YYYYMMDD, got {stamp!r}')
+    return f'{DATE_ASSET_PREFIX}{stamp}'
+
+
 def main():
     parser = argparse.ArgumentParser(description='Build the generic Agent-Orchestration release zip.')
-    parser.add_argument('--date', default=date.today().strftime('%Y%m%d'),
-                        help='release date stamp as YYYYMMDD (default: today)')
+    naming = parser.add_mutually_exclusive_group()
+    naming.add_argument('--date', default=None,
+                        help='date naming as YYYYMMDD, producing agentorch-YYYYMMDD.zip '
+                             '(default: today; cannot be combined with --release-version)')
+    naming.add_argument('--release-version', default=None, metavar='X.Y',
+                        help='public release naming, e.g. 1.6, producing AgentOrch-1.6.zip '
+                             '(cannot be combined with --date)')
     parser.add_argument('--output-dir', default=DEFAULT_OUTPUT_DIR,
                         help='directory that receives the zip (default: release/)')
     args = parser.parse_args()
 
-    if not re.fullmatch(r'\d{8}', args.date):
-        raise SystemExit(f'build error: --date must be YYYYMMDD, got {args.date!r}')
+    # Validate the naming before any read / packaging work so a bad flag fails
+    # fast and never leaves a half-built artifact behind.
+    top_dir = release_asset_stem(args.date, args.release_version)
 
     required = read_required()
     files = collect_sources(required)
@@ -514,7 +567,6 @@ def main():
     print(f'extra scan patterns: {len(extra_patterns)} (from {LOCAL_SCAN_LABEL})'
           if extra_patterns else 'extra scan patterns: none')
 
-    top_dir = f'agentorch-{args.date}'
     zip_path = Path(args.output_dir) / f'{top_dir}.zip'
 
     write_zip(zip_path, files, top_dir)

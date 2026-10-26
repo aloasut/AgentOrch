@@ -333,9 +333,14 @@ note: this is a diagnosis only; reading and using the project is not blocked
 
 ### 6.3 登记基线（两条来源）
 
-**来源 A：当初那份发行包。** 把安装时那个 zip 里的 `MANIFEST.json` 放到项目根即可——它记录的正是你这棵树的上游基线。
+**来源 A：当初那份发行包。** 把安装时那个 zip 里的 `MANIFEST.json` 放到项目根即可——它记录的正是你这棵树的上游基线。zip 名与包内顶层目录名相同：正式 Release 是 `AgentOrch-<X.Y>.zip` / `AgentOrch-<X.Y>/`，日期构建是 `agentorch-<日期>.zip` / `agentorch-<日期>/`。
 
 ```bash
+# 正式 Release（示例：1.6）
+python -m zipfile -e AgentOrch-1.6.zip <解压目录>
+cp <解压目录>/AgentOrch-1.6/MANIFEST.json .
+
+# 日期构建
 python -m zipfile -e agentorch-<日期>.zip <解压目录>
 cp <解压目录>/agentorch-<日期>/MANIFEST.json .
 ```
@@ -358,6 +363,14 @@ Release self-check passed (checks a-f).
   zip path      : /tmp/baseline/agentorch-20261023.zip
 # exit 0
 ```
+
+正式 Release 资产（如 `AgentOrch-1.6.zip`）用 `--release-version 1.6` 重建，顶层目录为 `AgentOrch-1.6/`：
+
+```bash
+python scripts/build_release.py --release-version 1.6 --output-dir /tmp/baseline
+```
+
+参数写 `1.6`，不要写 `v1.6`（`v1.6` 是 tag，不是资产名）；`--date` 与 `--release-version` 互斥，同时给出会直接报错。两种命名模式只改变 zip 名与顶层目录，不改变包内文件集合与 `MANIFEST.json` 的 `format_version`。
 
 注意两点事实：
 
@@ -519,7 +532,8 @@ checked: 47 manifest file(s); missing 0, modified 1, unknown 0, project-profile 
   ```bash
   uv run python scripts/validate_kit.py     # 0：旧根位置（PLAN/ORCHESTRATION-PROJECT）不存在即通过
   uv run python scripts/orchestrator.py init  # 0：edition 从 docs/PROJECT.md 读取
-  uv run python scripts/build_release.py      # 0：包 34 文件（33 REQUIRED + MANIFEST），format 1.5
+  uv run python scripts/build_release.py      # 0：包 91 文件（90 REQUIRED + MANIFEST），format 1.6
+  uv run python scripts/build_release.py --release-version 1.6  # 0：AgentOrch-1.6.zip，format 1.6
   ```
 
 - **不要这样做**：保留旧根文件副本（validate 会报 legacy）；只改一半路径（validate 链接扫描会逐个指出断链）。
@@ -567,13 +581,16 @@ python3 -m scripts.update_agentorch.entry --project . \
 
 | 已安装 Format | 自动更新是否可判定 | 本任务实测 | 真实已发布包 | 说明 |
 | --- | --- | --- | --- | --- |
-| `1.5` | 是 | 合成项目：`APPLIED`，项目自有文件逐字节不变 | `NOT_RUN` | 当前 Format；合成包为 v1.6，tag 与目标清单 Format 一致 |
-| `1.4` | 是 | 合成项目：`APPLIED`，根 `PLAN.md` 保持原样 | `NOT_RUN` | 1.4 已有 `MANIFEST.json`；根计划按项目自有路径处理 |
+| `1.6`（当前） | 是 | 合成 / 单元：`tag_matches_format('v1.6','1.6')` 为真，v1.6 目标包通过 `VERSION_MATCH` 与包校验 | `NOT_RUN` | 当前 Format；v1.6 包可被入口接受，真实 v1.5 → 1.6 下载升级仍归 #71 |
+| `1.5` | 是 | 合成项目：`APPLIED`，项目自有文件逐字节不变 | `NOT_RUN` | 上一 Format；合成测试以 v1.6 为目标包（tag 与目标清单 Format 一致），复用 B5 / `test_entry_release` |
+| `1.4` | 是 | 合成项目：`APPLIED`，根 `PLAN.md` 保持原样 | `NOT_RUN` | 1.4 已有 `MANIFEST.json`；合成目标为 v1.6，根计划按项目自有路径处理 |
 | `1.3` | 是（清单存在时） | 合成项目：根 `README.md` 被识别为 `UPSTREAM_REMOVAL`，`STOPPED_CONFLICT` + `HD-09`，文件未删除 | `NOT_RUN` | 1.3 根文件在 1.5 布局中改名 / 迁移；入口不自动删除，需人工决策 |
 | `1.1` / `1.2` | 否 | 无清单 → `STOPPED_INVALID_BASELINE`，零写入、零网络 | `NOT_RUN` | 先按第 6 节手工登记基线，再重跑入口 |
 | 清单损坏 / schema 不支持 | 否 | `STOPPED_INVALID_BASELINE` | `NOT_RUN` | 只读诊断 + 手工迁移（`HD-08`） |
 
-**这张表只声称合成测试覆盖的行为。** 真实 GitHub Release 获取、真实已发布 1.3 / 1.4 / 1.5 包、真实项目的网络与权限均为 `NOT_RUN`；未实测的平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
+**这张表只声称合成测试覆盖的行为。** 真实 GitHub Release 获取、真实已发布 1.3 / 1.4 / 1.5 / 1.6 包、真实项目的网络与权限均为 `NOT_RUN`；未实测的平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
+
+**Release 1.6 的版本对齐**：本轮把 `Format version` 与 release tag 都设为 `1.6`，`v1.6` 包通过包校验第 10 步 `VERSION_MATCH`，可被「更新 AgentOrch」接受（合成测试：`tests/update_agentorch/test_entry_release.py` 的 v1.5 基线 → v1.6 目标为 `APPLIED`，场景 B5 同）。**真实** v1.5 → v1.6 下载升级、真实 Release 获取与权限仍为 `NOT_RUN`，归 #71；不得据此声称真实旧包已升级。
 
 ### 13.4 冲突、删除与重命名
 
