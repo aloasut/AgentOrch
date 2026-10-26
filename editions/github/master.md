@@ -86,7 +86,7 @@
 
 ## 自我完善闭环（github）
 
-用户以明确执行意图说出“进行自我完善”或其同义表述（“根据其他 AgentOrch 项目的经验改进本项目”“总结近期开发教训并推进改进”）时，进入自我完善闭环；完整流程、触发边界、`HD-*` 决策目录与限制见 `docs/self-improvement/self-improvement-loop.md`（仓库检出中存在）。普通提问（“自我完善机制是什么”“更新一下文档”）只回答；`更新 AgentOrch` 属于更新引擎，不走本闭环。
+用户以明确执行意图说出“进行自我完善”或其同义表述（“根据其他 AgentOrch 项目的经验改进本项目”“总结近期开发教训并推进改进”）时，进入自我完善闭环；完整流程、触发边界、`HD-*` 决策目录与限制见 `docs/self-improvement/self-improvement-loop.md`（仓库检出中读取；发行包内见 `templates/self-improvement/README.md`）。普通提问（“自我完善机制是什么”“更新一下文档”）只回答；`更新 AgentOrch` 属于更新引擎，不走本闭环。
 
 1. **恢复真实状态**：读 `docs/PROJECT.md` 的 `edition`（必须是 `github`），运行 `gh issue list --state open --limit 100`、`gh pr list --state open --limit 100`、`git status --short`、`git branch --show-current`、`git log -1 --oneline`；读取 `ORCH-TASK-REGISTRY` 登记块与开放 PR 的 changed files，记录完整 head SHA。载体不可达时停止，不临时改用本地任务库。
 2. **规划**：按经验教训管线的记录与 `scripts/self_improvement/` 的 planning / orchestration 模块生成提案与闭环报告；只有 `GENERAL_LESSON` + `GENERALIZED` + 无 `OPEN` 冲突的教训可生成任务。无新证据时报告“无新候选”，不造 Issue。
@@ -95,6 +95,21 @@
 5. **闭环报告**：按 `templates/self-improvement/closure-report.md` 汇总已完成、已创建 Issue、阻塞、`NOT_RUN` / `BLOCKED`、人工决策与 head SHA；报告发在 Issue / PR 评论，不替代任务状态或 CI 结论。
 
 **人工决策门**：修改权限 / 安全边界、状态机 / 锁语义、数据迁移、外部依赖、隐私、破坏兼容或不可逆动作时，先进入 `NEEDS_HUMAN_DECISION`，按 `docs/self-improvement/entrypoints-and-decisions.md` §5 的决策 ID 记录问题、选项与决定人；触发语或执行者不得自行批准。合并仍只由 Master 执行。
+
+## 更新 AgentOrch（github）
+
+用户以明确执行意图说出“更新 AgentOrch”“升级 AgentOrch”或“把项目中的 AgentOrch 更新到最新版”时，先恢复状态，再运行：
+
+```bash
+python -m scripts.update_agentorch.entry --project . --request "<用户原话>" --mode PLAN
+```
+
+入口读取 `edition`、当前 Format / 版本、已安装基线与工作区状态，并调用 #51 更新引擎。规划细节在仓库检出中见 `docs/self-improvement/update-safety.md`；发行包内见 `templates/self-improvement/README.md`。
+
+- **非触发**：“更新一下文档”“更新依赖”“更新这个 Issue”与只问版本号不启动更新；歧义先问一次“是更新套件本身还是更新项目内容”。
+- 入口默认 `PLAN`（只读）。无冲突且经人工确认后才用 `--mode APPLY`；`APPLY` 只在隔离分支 / Worktree 准备变更，入口不提交、不合并、不调用 `gh`。
+- `github` 的结果形态是 **Issue + Draft PR**：用入口给出的 payload 创建 Issue 与 Draft PR，回链 Issue 并走 `PR_OPEN` → `REVIEW_READY` → G1–G6 审查。不写本地任务库，不假装本地底座支持 GitHub 自动化。
+- 冲突、上游删除 / 重命名、无基线、未提交改动按入口报告停止；`HD-09`–`HD-12` / `HD-16` 未决时不得应用。
 
 ## 合并纪律
 

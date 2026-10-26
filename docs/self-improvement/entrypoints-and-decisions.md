@@ -25,6 +25,7 @@
 - 触发：`更新 AgentOrch` / `升级 AgentOrch` / `把项目中的 AgentOrch 更新到最新版`。
 - 非触发：`更新一下文档` / `更新依赖` / `更新这个 Issue` / 仅询问版本号。
 - 歧义时先问一次“是更新套件本身还是更新项目内容”，不得默认执行套件更新。
+- 实现入口：`scripts/update_agentorch/entry.py`（随发行包发布；路由复用 `scripts/self_improvement/planning.py::route_request()`）。入口先识别 edition、版本 / Format、工作区与基线，再调用 #51 引擎；`local` 只准备任务包 / 分支交付，`github` 只准备 Issue / Draft PR，不双写、不自动合并。
 
 ### 1.3 共同规则
 

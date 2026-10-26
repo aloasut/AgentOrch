@@ -3,7 +3,7 @@
 > **定位**：本文件说明入口与闭环**怎么做**：触发边界、恢复、规划、派发、审查和报告。
 > 任务状态机、路径 / 资源锁、证据矩阵与合并门 G1–G6 **只在** [`kit/orchestration.md`](../../kit/orchestration.md) 定义；字段名、取值与判定规则只在其中 4.1 节定义。本文件只引用章节，不复制、不改写。
 > **前置契约**：触发语与人工决策目录 [`entrypoints-and-decisions.md`](entrypoints-and-decisions.md)，来源注册表与信任模型 [`sources-and-trust.md`](sources-and-trust.md)，Lesson 生命周期与去重 [`lesson-lifecycle.md`](lesson-lifecycle.md)。本任务没有修改它们的语义。
-> **包集成**：发行包 `REQUIRED` 清单、`scripts/build_release.py`、CI 与 `docs/README.md` 计数由 #52 统一接入；本文件不声明相关文件已随包发布。
+> **包集成**：发行包 `REQUIRED` 清单、`scripts/build_release.py`、CI 与 `docs/README.md` 计数由 #52 统一接入；运行脚本、模板与随包测试已进入 `REQUIRED`，`docs/` 仍不随包发布。包内操作说明见 [`templates/self-improvement/README.md`](../../templates/self-improvement/README.md)。
 
 ## 1. 触发与不触发
 

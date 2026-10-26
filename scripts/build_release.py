@@ -47,6 +47,10 @@ Self-checks (see release/README.md for the published standard):
      to LF before archiving (see normalize_line_endings), so a surviving CRLF
      means normalization missed a file and reproducibility across checkouts is
      no longer guaranteed.
+  i. inside the extracted archive: `python -m scripts.update_agentorch.entry
+     --help` imports the natural-language entry and exits 0.
+  j. inside the extracted archive: `templates/self-improvement/sources.example.json`
+     is a registry the shipped `scripts/self_improvement/sources.py` accepts.
   h. inside the extracted archive: `scripts/architecture/check.py` exits 0 with
      a JSON report marked `enforcement_mode: OFF` and `blocking: false` (the
      package ships no contract, so the checker must degrade to read-only
@@ -241,7 +245,7 @@ def indent(text, prefix='      '):
 
 
 def run_self_check(zip_path, required, top_dir, extra_patterns=()):
-    """Run checks a-h and return a list of human-readable failure strings."""
+    """Run checks a-j and return a list of human-readable failure strings."""
     failures = []
 
     with zipfile.ZipFile(zip_path) as archive:
@@ -355,6 +359,35 @@ def run_self_check(zip_path, required, top_dir, extra_patterns=()):
                     failures.append('(h) architecture checker report does not bind head_sha '
                                     '(expected an explicit "unavailable" inside the extracted zip)')
 
+        # (i) the natural-language update entry must import and expose its help
+        # inside a package that carries no docs/. A missing package module would
+        # otherwise only surface when a downstream user tries the trigger.
+        rc, out = run([sys.executable, '-m', 'scripts.update_agentorch.entry', '--help'],
+                      pkg_root)
+        if rc != 0:
+            failures.append(f'(i) update entry failed inside package (exit {rc}):\n{indent(out)}')
+        elif 'update_agentorch.entry' not in out:
+            failures.append('(i) update entry help does not identify the entry point:\n'
+                            f'{indent(out)}')
+
+        # (j) the shipped self-improvement registry example must be one the
+        # shipped validator accepts. This keeps the in-package operating note and
+        # the schema from drifting apart after docs/ is stripped.
+        probe = (
+            'import json\n'
+            'from scripts.self_improvement import sources\n'
+            "with open('templates/self-improvement/sources.example.json', encoding='utf-8') as fh:\n"
+            '    data = json.load(fh)\n'
+            'errors = sources.validate_registry(data)\n'
+            'if errors:\n'
+            "    print(errors)\n"
+            '    raise SystemExit(1)\n'
+        )
+        rc, out = run([sys.executable, '-c', probe], pkg_root)
+        if rc != 0:
+            failures.append('(j) sources.example.json is not a valid registry inside the '
+                            f'package (exit {rc}):\n{indent(out)}')
+
         # (f) line-ending assertion: no packaged *text* file may contain CRLF.
         # Text is the same rule normalize_line_endings() uses (no NUL byte and
         # valid UTF-8); binary payloads ship verbatim and are exempt. A CRLF here
@@ -419,7 +452,7 @@ def main():
 
     size = zip_path.stat().st_size
     sha256 = sha256_file(zip_path)
-    print('Release self-check passed (checks a-h).')
+    print('Release self-check passed (checks a-j).')
     print(f'  package files : {len(files)} ({len(required)} REQUIRED + {MANIFEST_NAME})')
     print(f'  manifest      : schema {manifest["schema_version"]}, suite {manifest["suite"]!r}, '
           f'format {manifest["format_version"]}')

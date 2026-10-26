@@ -15,12 +15,14 @@
 - 只含通用可复用产出；不得包含本仓库特有的演进决策、任务记录或个人环境信息。
 - 包内文件集合 == `scripts/validate_kit.py` 中的 `REQUIRED` 列表 **+ 构建时生成的 `MANIFEST.json`**（数量与名称都一致，即 `len(REQUIRED) + 1` 个文件）。`REQUIRED` 是分发内容的唯一来源，构建脚本直接解析它，不再维护第二份清单；`MANIFEST.json` 是唯一不来自 `REQUIRED` 的成员。
 - **`MANIFEST.json`（机器可读清单）**：由 `scripts/check_drift.py` 生成，构建脚本导入该模块而不另写一份规则，因此分类只有一处实现。字段固定为：
-  - 顶层 `schema_version`（清单格式版本）、`suite`（套件名，取自 `VERSION.md`）、`format_version`（套件格式版本，当前 `1.3`）、`files[]`；
+  - 顶层 `schema_version`（清单格式版本）、`suite`（套件名，取自 `VERSION.md`）、`format_version`（套件格式版本，当前 `1.5`）、`files[]`；
   - 条目 `path`、`category`、`sha256`、`size`（`sha256` 与 `size` 按包内实际字节计算，文本已按 LF 归一）；
   - `category` 只允许四种上游分类：`editions/` 前缀 → `edition`，`templates/` 前缀 → `template`，`docs/PROJECT.md` / `PLAN.md`（旧根位置）/ `docs/PLAN.md`（1.4 起）/ `DESIGN.md` → `project-profile`，其余 → `core`；
   - 清单**不列出自身**（无法嵌入自己的哈希）、**不含时间戳**、条目按路径排序，因此同一仓库状态两次构建得到逐字节相同的清单。
 - **`check_drift.py` 的只读边界**：该脚本随包发布，供下游项目做漂移诊断。它只读取（`read_bytes` / `read_text`）、列目录，**从不创建、重命名、删除或写入项目根下的任何文件**；诊断只报告差异与建议，是否对齐由项目所有者决定。
 - 发布时 `docs/PROJECT.md` 自动替换为待填模板 `templates/project.md`，即分发包总是随附 FILL_IN 模板，首次使用时填写。
+- **自我完善与安全更新资产**：`scripts/self_improvement/`（来源注册表、采集、Lesson、规划与闭环）、`scripts/update_agentorch/`（#51 安全更新引擎与 #52「更新 AgentOrch」自然语言入口 `entry.py`）、`templates/self-improvement/`（提案 / 任务包 / 闭环报告模板、`sources.example.json` 注册表示例与包内操作说明 `README.md`）全部进入 `REQUIRED`，随包发布。包内说明与测试只读模板 / 脚本路径，不读 `docs/`。
+- **仓库专属测试（不随包）**：`tests/update_agentorch/test_report.py` 读取冻结 fixture `docs/contracts/fixtures/`，因此保留为 repository-only，不加入 `REQUIRED`；包内仍通过随包发布的 `tests/update_agentorch/`（引擎、分类、依赖、入口合成升级）与 `tests/self_improvement/` 测试已发布入口和引擎。
 - 明确排除（不得出现在包内）：
   - `docs/`：本仓库自有章程与验收记录；
   - `release/`：发布目录本身（含本文件与历史分发包）；
@@ -40,6 +42,8 @@
 - e. 解压目录内 `scripts/orchestrator.py init` 与 `scripts/orchestrator.py task list` 冒烟退出码为 0（`init` 会在临时目录创建 `.orchestration/`，属预期）。
 - f. 非必要信息扫描零命中：对包内每个文本文件扫描个人路径与用户名、本仓库任务 ID、本仓库专有文档名与凭据痕迹；并断言包内不存在 `.orchestration/`、`release/`、`scripts/build_release.py`、`docs/` 等结构残留。命中即失败并打印文件与行号。凭据痕迹分两类：`ghp_`、`github_pat_`、`-----BEGIN`、`AKIA` 等精确子串；以及用精确形状正则匹配的 OpenAI 风格密钥——词边界 + `sk-` + 至少 16 位密钥字符（**不使用裸 `sk-` 子串**，否则会误命中 `task-id`、`risk-based`、`subtask-level` 等普通词，误拦正常发布）。此外，断言包内文本文件不含 CRLF（换行统一为 LF），保证构建对检出行尾不敏感；命中即失败并打印文件。
   - 扫描模式分层：**通用模式内置在脚本**（个人主目录、凭据形状等，任何克隆都适用）；**机器 / 本仓库相关模式放在 `.local/release-scan.json`**（`{"forbidden_patterns": [...]}`，逐条按精确子串匹配）。该文件缺失时跳过本地规则并打印 `extra scan patterns: none`；该文件永不入库、永不打包。
+- i. 解压目录内 `python -m scripts.update_agentorch.entry --help` 退出码为 0：证明自然语言入口及其依赖（`scripts/self_improvement/planning.py`、更新引擎）在无 `docs/` 的包内可导入。
+- j. 解压目录内用随包发布的 `scripts/self_improvement/sources.py` 校验 `templates/self-improvement/sources.example.json`：必须无 schema 错误，证明包内注册表示例与实际校验器一致。
 - h. 解压目录内 `scripts/architecture/check.py --project <包根> --json` 退出码为 0，且报告为 `enforcement_mode: OFF`、`blocking: false`、`head_sha_source: "unavailable"`：发行包不含契约与 `docs/`，可选架构检查器必须降级为只读诊断，而不是猜模块边界、静默失败或声称已检查。
 - g. 结束时打印摘要：包内文件数、zip 路径、zip 大小（字节）与 zip 的校验和（校验和用于复核：同一仓库状态下重建应得到同一值）。
 
@@ -50,7 +54,7 @@
 `.github/workflows/ci.yml` 在 `pull_request`→`main`、`push`→`main` 与手动触发时，于 `ubuntu-latest` 的两个 Python 版本（3.12 / 3.13）上执行同一套自检：`uv run python scripts/build_release.py`。该步骤**失败即 job 失败**，没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
 
 - **两档都跑的理由**：自检 b、d 在解压目录里执行随包发布的 `validate_kit.py` 与 `unittest`，即真正检验"该 Python 版本拿到的包是否可用"；两档各证明一次，成本是本机数秒级重复，换来不设 `if:` 条件、不会出现某档静默跳过打包步骤。
-- **CI 证明什么**：包能构建，且内置自检 a–h 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档"这类回归。
+- **CI 证明什么**：包能构建，且内置自检 a–j 通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档"这类回归。
 - **CI 不证明什么**：**不证明发布本身**。CI 不校验 `{YYYYMMDD}` 命名、不生成 GitHub Release、不写发布记录，也不替你判断"这一版是否该发"。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
 
 ## 4. 发布流程
@@ -58,7 +62,7 @@
 1. 在任务库登记发布任务（唯一 ID、单一目标、允许路径与验收）。
 2. 从最新本地主分支创建独立分支 / Worktree；不在共享工作区直接构建。
 3. 构建：运行 `uv run python scripts/build_release.py` 生成 `release/agentorch-{YYYYMMDD}.zip`。
-4. 自检：确认脚本内置 a–h 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
+4. 自检：确认脚本内置 a–j 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
 5. Master 独立审查（逐条对照本文件的自检清单与验收标准）。
 6. 合并到本地主分支；合并后重新运行验证并记录结果。
 7. 发布后清理本任务分支 / Worktree（独立记账，清理由此与"合并成功"分开记录）。
