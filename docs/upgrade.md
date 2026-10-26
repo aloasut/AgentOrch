@@ -667,7 +667,7 @@ python3 scripts/build_release.py
 
 ## 14. “更新 AgentOrch”入口实测记录
 
-### 14.1 真实 Release 下载（#71，2026-10-26）
+### 14.1 真实 Release 下载（#71，2026-10-26 UTC）
 
 环境：Linux 6.12.113（x86_64）、Python 3.13.5、`github` 底座仓库检出；分支 `task/71-real-release-upgrade`，基线 `main@eac7f8edda56d4a707522fcddf01ac03c882cc7a`。下载目录在仓库外，命令 `gh release download --repo ctrlshiftaltdel/AgentOrch`，真实网络、只读。
 
@@ -681,7 +681,7 @@ v1.6 的 SHA256 与 #76 发布记录 `bc0a64e3…` 逐字符一致；两个资�
 
 ### 14.2 真实 v1.5 → v1.6 隔离升级（#71）
 
-在仓库外建立隔离项目：解压真实 `agentorch-20261023.zip`，补 `docs/PROJECT.md`（`edition: local`）与项目自有 `LOCAL-NOTES.md`（155 字节，`sha256=2feec58a…`），`git init` 并提交（fixture commit `bd164fa38e8729a65ad7736385f3dab259aea836`，只存在于临时项目）。升级命令从仓库检出运行，`--project` 指向临时项目：
+在仓库外建立隔离项目：解压真实 `agentorch-20261023.zip`，补 `docs/PROJECT.md`（`edition: local`）与项目自有 `LOCAL-NOTES.md`（155 字节，`sha256=2feec58a…`），`git init` 并提交（fixture commit 只存在于临时项目，不进入本仓库）。升级命令从仓库检出运行，`--project` 指向临时项目：
 
 | # | 步骤 | 命令 | 退出码 | 结果 |
 | --- | --- | --- | --- | --- |
