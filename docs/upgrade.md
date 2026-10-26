@@ -590,7 +590,9 @@ python3 -m scripts.update_agentorch.entry --project . \
 
 **上表的“本任务实测”只覆盖合成测试；“真实已发布包”一列只记录真实资产实测。** 2026-10-26，#71 在隔离项目上用真实 Release 补齐了 `1.5 → 1.6`、真实下载与网络 / 停止路径（§14.1–§14.3）。真实已发布 1.3 / 1.4 包、以 1.6 为已安装基线的升级仍为 `NOT_RUN`；签名校验为 `NOT_APPLICABLE`（两个 Release 都只有一个 zip 资产，没有 `.sig` / `.asc` / checksum 附件）；未实测平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
 
-**Release 1.6 的版本对齐**：本轮把 `Format version` 与 release tag 都设为 `1.6`，`v1.6` 包通过包校验第 10 步 `VERSION_MATCH`，可被「更新 AgentOrch」接受（合成测试：`tests/update_agentorch/test_entry_release.py` 的 v1.5 基线 → v1.6 目标为 `APPLIED`，场景 B5 同）。**真实** v1.5 → v1.6 下载与升级已于 2026-10-26 实测（§14.2）：资产 SHA256 `bc0a64e3…` 与 Release 记录一致，结果为 `APPLIED`。真实已发布 1.3 / 1.4 包与以 1.6 为已安装基线的升级仍为 `NOT_RUN`。
+**Release 1.6.1（补丁）**：`1.6.0 → 1.6.1` 是**补丁升级，Format 不变**（仍为 `1.6`）；`tag_matches_format('v1.6.1', '1.6')` 为真，`v1.6.1` 仍满足 `VERSION_MATCH`。补丁内容是 #85 的下游包修复（已有 `docs/` 的项目可通过 `validate_kit` 与包内测试），不改变更新引擎的校验 / 分类 / 备份 / 回滚语义，也不改变 `MANIFEST.json` schema。真实 `v1.6.1` 下载与 `1.6.0 → 1.6.1` 升级为 `NOT_RUN`，归发布后验证；发布准备任务只证明构建、包内自检与 1.6.1 包的下游回归。
+
+**Release 1.6 的版本对齐**：本轮把 `Format version` 与 release tag 都设为 `1.6`，`v1.6` 包通过包校验第 10 步 `VERSION_MATCH`，可被「更新 AgentOrch」接受（合成测试：`tests/update_agentorch/test_entry_release.py` 的 v1.5 基线 → v1.6 目标为 `APPLIED`，场景 B5 同）。**真实** v1.5 → v1.6 下载与升级已于 2026-10-26 实测（§14.2）：资产 SHA256 `bc0a64e3…` 与 Release 记录一致，结果为 `APPLIED`。真实已发布 1.3 / 1.4 包与以 1.6 为已安装基线的升级仍为 `NOT_RUN`；`1.6.0 → 1.6.1` 的补丁升级同样为 `NOT_RUN`。
 
 ### 13.4 冲突、删除与重命名
 
