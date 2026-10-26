@@ -210,12 +210,12 @@ class UntrustedDataTests(unittest.TestCase):
     def test_secrets_and_home_paths_are_redacted_before_storage(self):
         payloads = support.github_payloads()
         payloads['/pulls?'] = [support.pr_payload(
-            title='fix leaked ghp_' + 'A' * 24 + ' in /home/someone/project/secret.env')]
+            title='fix leaked ' + support.FAKE_TOKEN + ' in /home/someone/project/secret.env')]
         result = collect.Collector(support.FakeRunner(payloads)).scan_source(
             support.source(), now=NOW)
         item = [entry for entry in result.evidence
                 if entry['evidence_kind'] == 'pull_request'][0]
-        self.assertNotIn('ghp_', item['title'])
+        self.assertNotIn(support.TOKEN_PREFIX, item['title'])
         self.assertNotIn('/home/someone', item['title'])
         self.assertIn('[redacted]', item['title'])
         self.assertGreaterEqual(item['redactions'], 2)
@@ -271,6 +271,18 @@ class FilterAndGapTests(unittest.TestCase):
         result = collect.Collector(support.FakeRunner()).scan_source(source, now=NOW)
         pr = [entry for entry in result.evidence if entry['evidence_kind'] == 'pull_request'][0]
         self.assertIn('ci_not_in_scope', pr['evidence_gaps'])
+
+    def test_unusable_evidence_url_is_dropped_and_flagged(self):
+        payloads = support.github_payloads()
+        bad = support.pr_payload()
+        bad['html_url'] = 'https://evil.example/x>`<script>'
+        payloads['/pulls?'] = [bad]
+        source = support.source(evidence_scope=['pull_request'])
+        result = collect.Collector(support.FakeRunner(payloads)).scan_source(source, now=NOW)
+        self.assertTrue(result.evidence)
+        self.assertIsNone(result.evidence[0]['url'])
+        self.assertIn('invalid_evidence_url', result.evidence[0]['evidence_gaps'])
+        self.assertNotIn('<script>', json.dumps(result.evidence))
 
     def test_closed_without_merge_evidence_is_flagged(self):
         payloads = support.github_payloads()

@@ -59,7 +59,7 @@ _WHITESPACE = re.compile(r'\s+')
 LESSON_ID_RE = re.compile(r'^LSN-[A-Z0-9]{2,12}-[0-9]{3}$')
 SHA1_RE = re.compile(r'^[a-f0-9]{40}$')
 SHA256_RE = re.compile(r'^[a-f0-9]{64}$')
-URL_RE = re.compile(r'^https?://[^\s`]+$')
+URL_RE = re.compile(r'^https?://[^\s<>`]+$')
 
 # lesson-lifecycle.md §2.1 as data. Both tables are the semantic authority; the
 # schema's allOf is their machine projection.
@@ -1281,7 +1281,7 @@ def render_markdown(report):
                 f"`{item.get('evidence_kind')}`",
                 f"`{item.get('observed_at')}`",
                 untrusted.data_cell(item.get('title')),
-                f"<{item.get('url')}>",
+                f"<{item.get('url')}>" if item.get('url') else '(no usable link)',
             ]) + ' |')
     lines.append('')
     lines.append('## Lessons')

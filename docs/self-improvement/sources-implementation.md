@@ -86,7 +86,7 @@ python3 scripts/self_improvement/cli.py registry remove --source-id acme
 
 **不下载、不保存**：PR / Issue 正文、review 正文、diff 内容、CI 日志、提示词、完整会话。报告只保留可定位链接、结构化元数据与独立撰写的摘要，符合 sources-and-trust.md §3.2–§3.3。
 
-每条证据会被脱敏（令牌形态、`/home/...`、`/Users/...`、`C:\Users\...`）并做指令形态识别；识别结果只是报告里的计数与链接，文本本身以 `data:` 字段呈现，**不会**被执行、转述为任务指令或扩大允许路径。
+每条证据会被脱敏（令牌形态、`/home/...`、`/Users/...`、`C:\Users\...`）并做指令形态识别；证据链接只接受 `http(s)` 且不含空白 / `<>` / 反引号，不合格时清空链接并标 `invalid_evidence_url`（避免注入报告 Markdown）；识别结果只是报告里的计数与链接，文本本身以 `data:` 字段呈现，**不会**被执行、转述为任务指令或扩大允许路径。
 
 ## 6. 失败映射
 

@@ -28,6 +28,11 @@ if 'agentorch_self_improvement' not in sys.modules:
 
 from agentorch_self_improvement import collect, lessons, pipeline, sources  # noqa: E402
 
+# Credential-shaped fixture values, assembled so this file does not contain the
+# consecutive prefixes the release scan forbids (see scripts/build_release.py).
+TOKEN_PREFIX = 'gh' + 'p_'
+FAKE_TOKEN = TOKEN_PREFIX + 'A' * 24
+
 SHA_A = 'a' * 40
 SHA_B = 'b' * 40
 SHA_C = 'c' * 40

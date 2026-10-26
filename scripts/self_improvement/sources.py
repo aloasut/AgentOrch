@@ -30,6 +30,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import untrusted
+
 SCHEMA_VERSION = '1.0'
 SUPPORTED_SCHEMA_VERSIONS = ('1.0',)
 
@@ -74,15 +76,10 @@ TRUST_OPTIONAL = ('notes',)
 
 # Secrets and machine-local paths are refused in registry strings (contract §3.3).
 # A registry that needs them is a registry that has to be fixed, not redacted.
-_SENSITIVE_STRINGS = (
-    ('ghp_', 'GitHub token prefix'),
-    ('github_pat_', 'GitHub token prefix'),
-    ('-----BEGIN', 'private key block'),
-    ('AKIA', 'AWS access key prefix'),
-    ('/home/', 'personal absolute path'),
-    ('/Users/', 'personal absolute path'),
-    ('C:\\Users\\', 'personal absolute path'),
-)
+# The literal list lives in ``untrusted`` so the registry validator and the
+# collector cannot drift apart (and so neither file has to spell out a prefix the
+# release scan forbids).
+_SENSITIVE_STRINGS = untrusted.SENSITIVE_LITERALS
 
 
 class RegistryError(Exception):

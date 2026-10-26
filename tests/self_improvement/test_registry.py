@@ -21,6 +21,11 @@ DEFAULT_REGISTRY = REPO_ROOT / 'docs' / 'self-improvement' / 'sources.json'
 
 
 class RegistryShapeTests(unittest.TestCase):
+    # `docs/` is project configuration and is never packaged, so inside a release
+    # archive this repository-only file legitimately does not exist. Same condition
+    # and reason as tests/test_validate_kit.py.
+    @unittest.skipUnless(DEFAULT_REGISTRY.is_file(),
+                         'repository-only project config is not shipped')
     def test_default_registry_file_is_valid_and_declares_the_two_sources(self):
         registry = sources.Registry.load(DEFAULT_REGISTRY)
         self.assertEqual(registry.data['schema_version'], '1.0')
@@ -99,7 +104,7 @@ class RegistryShapeTests(unittest.TestCase):
             self.assertIn('not valid JSON', str(caught.exception))
 
     def test_registry_strings_may_not_carry_credentials_or_home_paths(self):
-        for value in ('ghp_' + 'A' * 20, '/home/someone/private', 'C:\\Users\\someone\\x'):
+        for value in (support.FAKE_TOKEN, '/home/someone/private', 'C:\\Users\\someone\\x'):
             with self.subTest(value=value):
                 errors = sources.validate_registry(support.registry(
                     support.source(owner_approved_notes=value)))

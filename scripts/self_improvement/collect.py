@@ -35,6 +35,11 @@ PER_PAGE = 30
 DEFAULT_MAX_PAGES = 3
 COMMAND_TIMEOUT_SECONDS = 60
 
+# Evidence links are rendered into Markdown and stored in lesson records, so a
+# non-HTTP(S) or angle-bracket/backtick URL is treated as unusable rather than
+# escaped-and-hoped: it would otherwise be able to break out of the link syntax.
+EVIDENCE_URL_RE = re.compile(r'^https://[^\s<>`]+$|^http://[^\s<>`]+$')
+
 # Field extraction per evidence kind. Endpoints are data, not per-source branches:
 # the same table serves every registered repository.
 ENDPOINTS = {
@@ -342,7 +347,10 @@ def _evidence_item(source, kind, raw, captured_at, today_since):
         item['source_commit'] = raw.get('head_sha')
         item['state'] = raw.get('conclusion') or raw.get('status')
         item['suggested_evidence_level'] = 'E1_SOURCE_ARTIFACT'
-    if not item['url']:
+    if not item['url'] or not EVIDENCE_URL_RE.match(str(item['url'])):
+        if item['url']:
+            gaps.append('invalid_evidence_url')
+        item['url'] = None
         item['suggested_evidence_level'] = 'E0_CLAIM'
     clean_title, redactions = untrusted.redact(item['title'])
     item['title'] = clean_title
