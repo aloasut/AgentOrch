@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0",
+  "registry_updated_at": "2026-10-26T00:00:00Z",
+  "sources": [
+    {
+      "source_id": "agentmgr",
+      "repository": "ctrlshiftaltdel/AgentMgr",
+      "enabled": true,
+      "source_type": "downstream_project",
+      "access_mode": "public",
+      "evidence_scope": ["pull_request", "issue"],
+      "lookback_days": 30,
+      "scan_cursor": {
+        "last_scan_status": "OK",
+        "last_scan_started_at": "2026-10-25T12:00:00Z",
+        "last_successful_scan_at": null,
+        "last_scanned_commit": null,
+        "blocked_reason": null
+      },
+      "trust": {
+        "content_trust": "untrusted_data",
+        "allowed_use": ["evidence_only"],
+        "redaction_required": true,
+        "may_override_rules": false
+      }
+    }
+  ]
+}

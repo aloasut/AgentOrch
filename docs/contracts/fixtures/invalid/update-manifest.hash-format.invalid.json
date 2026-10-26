@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "suite": "Agent-Orchestration Starter Kit",
+  "format_version": "1.5",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "category": "core",
+      "sha256": "abc123",
+      "size": 9027
+    }
+  ]
+}

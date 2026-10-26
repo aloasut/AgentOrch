@@ -1,0 +1,298 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentorch.example/schemas/architecture-contract.schema.json",
+  "title": "Architecture Contract (v1)",
+  "description": "项目可选、可版本化架构契约的唯一机器定义。严重级别、豁免与未配置语义见 docs/architecture/architecture-contract.md；本文件不定义任何固定目录结构。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "contract_version",
+    "enforcement_mode",
+    "modules",
+    "dependencies",
+    "rules",
+    "baseline"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0" },
+    "contract_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "契约语义版本（语义化版本）。破坏性变更必须升主版本并记录迁移说明。"
+    },
+    "project_name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "enforcement_mode": {
+      "enum": ["OFF", "DIAGNOSTIC_ONLY", "WARN", "ENFORCE"],
+      "description": "OFF / DIAGNOSTIC_ONLY 永不阻断；WARN 只报告；ENFORCE 才对 ERROR 级规则失败。未提供契约文件等价于 OFF（只读诊断）。"
+    },
+    "modules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/module" },
+      "description": "模块 / 层声明。module_id 必须唯一；唯一性与跨引用存在性为语义检查（见 docs/contracts/README.md §4）。"
+    },
+    "dependencies": { "$ref": "#/$defs/dependencies" },
+    "boundaries": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/boundary" }
+    },
+    "invariants": {
+      "type": "array",
+      "default": [],
+      "items": { "$ref": "#/$defs/invariant" }
+    },
+    "rules": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/rule" },
+      "description": "启用的检查规则。rule_id 必须唯一；规则的启用集合决定可报告范围。"
+    },
+    "baseline": { "$ref": "#/$defs/baseline" }
+  },
+  "$defs": {
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512,
+      "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/?$",
+      "not": { "pattern": "(^|/)\\.\\.(/|$)" },
+      "description": "项目内相对路径或目录前缀（目录可带一个结尾 `/`）。禁止绝对路径、反斜杠、`.` / `..` 段与路径穿越。"
+    },
+    "module_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{1,63}$"
+    },
+    "module_ref": {
+      "type": "string",
+      "pattern": "^(\\*|[a-z][a-z0-9_.-]{1,63})$",
+      "description": "模块引用；`*` 仅允许用于 forbidden 边的通配声明，不得用于 allowed 边。"
+    },
+    "module": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["module_id", "paths", "responsibilities", "public_interfaces"],
+      "properties": {
+        "module_id": { "$ref": "#/$defs/module_id" },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/relative_path" }
+        },
+        "responsibilities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 4, "maxLength": 300 }
+        },
+        "owns_state": {
+          "type": "array",
+          "default": [],
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": "该模块独占的状态所有权；其它模块不得直接读写。"
+        },
+        "public_interfaces": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/interface" }
+        },
+        "private_paths": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/relative_path" },
+          "description": "不允许其它模块直接导入 / 访问的实现路径。"
+        }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "kind": { "enum": ["python_module", "cli_command", "http_api", "event", "file"] },
+        "stability": { "enum": ["stable", "additive_only", "experimental"] }
+      }
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["allowed", "forbidden"],
+      "properties": {
+        "allowed": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/allowed_edge" }
+        },
+        "forbidden": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/forbidden_edge" }
+        }
+      }
+    },
+    "allowed_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "reason"],
+      "properties": {
+        "from": { "$ref": "#/$defs/module_id" },
+        "to": { "$ref": "#/$defs/module_id" },
+        "reason": { "type": "string", "minLength": 8, "maxLength": 300 }
+      }
+    },
+    "forbidden_edge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to", "reason", "rule_id"],
+      "properties": {
+        "from": { "$ref": "#/$defs/module_ref" },
+        "to": { "$ref": "#/$defs/module_ref" },
+        "reason": { "type": "string", "minLength": 8, "maxLength": 300 },
+        "rule_id": { "$ref": "#/$defs/rule_id" }
+      }
+    },
+    "boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["boundary_id", "kind", "members"],
+      "properties": {
+        "boundary_id": { "type": "string", "pattern": "^BND-[A-Z0-9-]{2,32}$" },
+        "kind": {
+          "enum": ["layer", "domain", "application", "adapter", "infrastructure", "security", "generated"]
+        },
+        "members": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/module_id" }
+        },
+        "notes": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "invariant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invariant_id", "statement", "checked_by", "severity"],
+      "properties": {
+        "invariant_id": { "type": "string", "pattern": "^INV-[A-Z0-9-]{2,32}$" },
+        "statement": { "type": "string", "minLength": 8, "maxLength": 500 },
+        "checked_by": { "enum": ["STATIC_RULE", "CONTRACT_TEST", "MANUAL_REVIEW", "UNKNOWN"] },
+        "severity": { "enum": ["ERROR", "WARNING"] },
+        "rule_ids": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/rule_id" }
+        },
+        "notes": { "type": "string", "maxLength": 500 }
+      }
+    },
+    "rule_id": {
+      "type": "string",
+      "pattern": "^ARCH-[A-Z0-9-]{2,32}$"
+    },
+    "rule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule_id", "kind", "severity", "enabled", "description"],
+      "properties": {
+        "rule_id": { "$ref": "#/$defs/rule_id" },
+        "kind": {
+          "enum": [
+            "NO_CYCLE",
+            "FORBIDDEN_EDGE",
+            "LAYER_DIRECTION",
+            "PRIVATE_ACCESS",
+            "DUPLICATE_BUSINESS_RULE",
+            "MODULE_FAN_OUT",
+            "MODULE_SIZE",
+            "INTERFACE_GROWTH",
+            "CONTRACT_TEST",
+            "CUSTOM"
+          ]
+        },
+        "severity": {
+          "enum": ["ERROR", "WARNING"],
+          "description": "ERROR 只在 enforcement_mode=ENFORCE 时导致非零退出；WARNING 永不阻断。"
+        },
+        "enabled": { "type": "boolean" },
+        "description": { "type": "string", "minLength": 8, "maxLength": 500 },
+        "params": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "规则参数。未知参数不得静默忽略：实现必须在报告中标配置错误或 UNKNOWN。"
+        },
+        "waivers": {
+          "type": "array",
+          "default": [],
+          "items": { "$ref": "#/$defs/waiver" }
+        }
+      }
+    },
+    "waiver": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["waiver_id", "reason", "owner", "expires_at", "status", "scope"],
+      "properties": {
+        "waiver_id": { "type": "string", "pattern": "^WVR-[A-Z0-9-]{2,24}$" },
+        "reason": { "type": "string", "minLength": 8, "maxLength": 500 },
+        "owner": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "expires_at": {
+          "type": "string",
+          "format": "date",
+          "description": "豁免到期日；到期后状态必须变为 EXPIRED 并重新阻断，不得自动续期。"
+        },
+        "status": { "enum": ["ACTIVE", "EXPIRED", "REVOKED"] },
+        "scope": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "description": "豁免范围（模块、路径或具体违规实例）；不得为空或写通配整仓。"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "ACTIVE" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "scope": {
+                "not": {
+                  "contains": { "const": "*" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "baseline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["frozen_at", "frozen_by"],
+      "properties": {
+        "frozen_at": { "type": "string", "format": "date-time" },
+        "frozen_by": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "migration_notes": {
+          "type": ["string", "null"],
+          "maxLength": 2000,
+          "description": "契约升级 / 迁移说明；破坏性变更时必须给出。"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "enforcement_mode": { "const": "ENFORCE" } },
+        "required": ["enforcement_mode"]
+      },
+      "then": {
+        "properties": {
+          "baseline": {
+            "type": "object",
+            "required": ["frozen_by"],
+            "properties": { "frozen_by": { "type": "string", "minLength": 1 } }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "registry_updated_at": "2026-10-26T00:00:00Z",
+  "sources": [
+    {
+      "source_id": "talkdnd",
+      "repository": "ctrlshiftaltdel/TalkDND",
+      "enabled": true,
+      "source_type": "downstream_project",
+      "access_mode": "public_write",
+      "evidence_scope": ["pull_request"],
+      "lookback_days": 90,
+      "scan_cursor": null,
+      "trust": {
+        "content_trust": "untrusted_data",
+        "allowed_use": ["evidence_only"],
+        "redaction_required": true,
+        "may_override_rules": false
+      }
+    }
+  ]
+}

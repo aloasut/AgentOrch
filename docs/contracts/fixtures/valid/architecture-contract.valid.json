@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "contract_version": "1.0.0",
+  "project_name": "example-project",
+  "enforcement_mode": "ENFORCE",
+  "modules": [
+    {
+      "module_id": "domain",
+      "paths": ["src/domain/"],
+      "responsibilities": ["业务规则与不变量；不依赖任何框架或适配器。"],
+      "owns_state": ["domain/entities"],
+      "public_interfaces": [
+        { "name": "src.domain.api", "kind": "python_module", "stability": "stable" }
+      ],
+      "private_paths": ["src/domain/internal/"]
+    },
+    {
+      "module_id": "adapters",
+      "paths": ["src/adapters/"],
+      "responsibilities": ["外部系统适配；把协议细节隔离在边界内。"],
+      "owns_state": [],
+      "public_interfaces": [
+        { "name": "src.adapters.registry", "kind": "python_module", "stability": "additive_only" }
+      ]
+    }
+  ],
+  "dependencies": {
+    "allowed": [
+      {
+        "from": "adapters",
+        "to": "domain",
+        "reason": "适配器可以调用领域规则，反向不允许。"
+      }
+    ],
+    "forbidden": [
+      {
+        "from": "domain",
+        "to": "adapters",
+        "reason": "领域层不得依赖外部适配器或框架细节。",
+        "rule_id": "ARCH-NO-DOMAIN-ADAPTER"
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "boundary_id": "BND-CORE",
+      "kind": "domain",
+      "members": ["domain"],
+      "notes": "核心业务边界。"
+    }
+  ],
+  "invariants": [
+    {
+      "invariant_id": "INV-STATE-OWNER",
+      "statement": "共享状态只能由声明 owns_state 的模块写入。",
+      "checked_by": "CONTRACT_TEST",
+      "severity": "ERROR",
+      "rule_ids": ["ARCH-STATE-OWNERSHIP"]
+    }
+  ],
+  "rules": [
+    {
+      "rule_id": "ARCH-NO-CYCLE",
+      "kind": "NO_CYCLE",
+      "severity": "ERROR",
+      "enabled": true,
+      "description": "模块依赖图不得出现环。"
+    },
+    {
+      "rule_id": "ARCH-NO-DOMAIN-ADAPTER",
+      "kind": "FORBIDDEN_EDGE",
+      "severity": "ERROR",
+      "enabled": true,
+      "description": "领域层不得导入适配器实现。",
+      "waivers": [
+        {
+          "waiver_id": "WVR-LEGACY-CLI",
+          "reason": "旧 CLI 迁移完成前保留已知例外，到期后必须移除。",
+          "owner": "project-owner",
+          "expires_at": "2026-12-31",
+          "status": "ACTIVE",
+          "scope": ["src/domain/legacy_cli.py"]
+        }
+      ]
+    },
+    {
+      "rule_id": "ARCH-FANOUT",
+      "kind": "MODULE_FAN_OUT",
+      "severity": "WARNING",
+      "enabled": true,
+      "description": "模块扇出超过约定阈值时只警告，不阻断。",
+      "params": { "max_fan_out": 12 }
+    }
+  ],
+  "baseline": {
+    "frozen_at": "2026-10-26T00:00:00Z",
+    "frozen_by": "project-owner",
+    "migration_notes": null
+  }
+}

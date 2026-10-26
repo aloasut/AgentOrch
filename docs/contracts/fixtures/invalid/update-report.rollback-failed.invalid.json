@@ -1,0 +1,73 @@
+{
+  "schema_version": "1.0",
+  "report_id": "UPD-20261026T041000Z-7a8b9c",
+  "generated_at": "2026-10-26T04:10:00Z",
+  "operation": {
+    "command": "update_agentorch",
+    "edition": "github",
+    "mode": "APPLY",
+    "branch": "task/update-agentorch",
+    "worktree": null
+  },
+  "baseline": {
+    "installed_version": "1.5",
+    "installed_format_version": "1.5",
+    "manifest_sha256": "aa11bb22cc33dd44ee55ff66aa77bb88cc99dd00ee11ff22aa33bb44cc55dd66",
+    "head_sha": "0123456789abcdef0123456789abcdef01234567",
+    "baseline_status": "VALID",
+    "notes": null
+  },
+  "target": {
+    "repository": "ctrlshiftaltdel/AgentOrch",
+    "release_tag": "v1.6",
+    "version": "1.6",
+    "asset_name": "agentorch-20261101.zip",
+    "asset_sha256": "bb11cc22dd33ee44ff55aa66bb77cc88dd99ee00ff11aa22bb33cc44dd55ee66",
+    "manifest_sha256": "cc11dd22ee33ff44aa55bb66cc77dd88ee99ff00aa11bb22cc33dd44ee55ff66",
+    "retrieved_at": "2026-10-26T04:08:00Z",
+    "verification": {
+      "status": "VERIFIED",
+      "checks": [
+        { "check": "SOURCE_ALLOWLIST", "result": "PASS", "detail": null }
+      ]
+    }
+  },
+  "workspace": {
+    "dirty": false,
+    "dirty_paths": [],
+    "action": "ISOLATED_BRANCH"
+  },
+  "classification": {
+    "counts": {
+      "UPSTREAM_UNCHANGED": 0,
+      "ALREADY_CURRENT": 0,
+      "LOCAL_MODIFICATION": 0,
+      "THREE_WAY_CONFLICT": 0,
+      "PROJECT_OWNED": 0,
+      "UNKNOWN_FILE": 0,
+      "UPSTREAM_REMOVAL": 0,
+      "UPSTREAM_RENAME": 0,
+      "UNSAFE_PACKAGE": 0,
+      "INVALID_BASELINE": 0
+    },
+    "files": []
+  },
+  "backup": {
+    "required": true,
+    "location": "agentorch-backup-20261026b",
+    "created_at": "2026-10-26T04:09:00Z",
+    "verified": true
+  },
+  "rollback": {
+    "required": true,
+    "attempted": true,
+    "result": "FAILED",
+    "evidence": "回滚后校验仍失败，工作区不可判定。"
+  },
+  "result": "ROLLED_BACK",
+  "post_apply_checks": [],
+  "commands": [],
+  "human_decisions": [],
+  "head_sha_before": "0123456789abcdef0123456789abcdef01234567",
+  "head_sha_after": "0123456789abcdef0123456789abcdef01234567"
+}

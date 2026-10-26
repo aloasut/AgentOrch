@@ -1,0 +1,45 @@
+{
+  "schema_version": "1.0",
+  "lesson_id": "LSN-TALKDND-002",
+  "title": "疑似锁未覆盖的写入路径",
+  "content_class": "UNVERIFIED_ASSUMPTION",
+  "status": "VERIFIED",
+  "evidence_level": "E0_CLAIM",
+  "source": {
+    "source_id": "talkdnd",
+    "evidence_kind": "issue",
+    "evidence_urls": ["https://github.com/ctrlshiftaltdel/TalkDND/issues/1300"],
+    "observed_at": "2026-10-01T00:00:00Z",
+    "captured_at": "2026-10-25T00:00:00Z",
+    "source_commit": null
+  },
+  "observation": {
+    "observed_fact": "Issue 标题声称某写入路径没有锁，但尚未读取代码或复现。",
+    "repro_conditions": "not reproducible: 尚未在隔离工作区复现。",
+    "root_cause": "仅依据 Issue 标题推测，未验证根因。",
+    "impact": "若成立可能导致并发丢写，但影响未量化。",
+    "why_missed": "既有测试没有覆盖该入口。"
+  },
+  "fingerprint": {
+    "algorithm": "sha256-normalized-v1",
+    "value": "1111111111111111111111111111111111111111111111111111111111111111",
+    "normalized_fields": ["root_cause", "impact", "suggested_action_target"]
+  },
+  "duplicate_of": null,
+  "conflicts_with": [],
+  "applicability": {
+    "scope": "source_only",
+    "applies_to": ["state"],
+    "excluded_contexts": []
+  },
+  "suggested_action": {
+    "target": "TEST",
+    "summary": "先复现再决定是否补测试。",
+    "cost": "LOW",
+    "risk": "LOW",
+    "validation_command": null
+  },
+  "decision": null,
+  "created_at": "2026-10-25T00:00:00Z",
+  "updated_at": "2026-10-25T00:00:00Z"
+}

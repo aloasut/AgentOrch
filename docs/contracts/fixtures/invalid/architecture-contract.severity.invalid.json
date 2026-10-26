@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "contract_version": "1.0.0",
+  "project_name": "example-project",
+  "enforcement_mode": "ENFORCE",
+  "modules": [
+    {
+      "module_id": "domain",
+      "paths": ["src/domain/"],
+      "responsibilities": ["业务规则与不变量。"],
+      "public_interfaces": []
+    }
+  ],
+  "dependencies": {
+    "allowed": [],
+    "forbidden": []
+  },
+  "rules": [
+    {
+      "rule_id": "ARCH-NO-CYCLE",
+      "kind": "NO_CYCLE",
+      "severity": "BLOCKER",
+      "enabled": true,
+      "description": "模块依赖图不得出现环。"
+    }
+  ],
+  "baseline": {
+    "frozen_at": "2026-10-26T00:00:00Z",
+    "frozen_by": "project-owner",
+    "migration_notes": null
+  }
+}
