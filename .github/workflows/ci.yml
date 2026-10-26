@@ -45,6 +45,24 @@ jobs:
       - name: Run unit tests
         run: uv run python -m unittest discover -s tests
 
+      # Synthetic delivery scenarios: every scenario must PASS (a negative
+      # scenario passing means its gate really fired), the report must carry no
+      # ERROR, and the exit code must be 0. No `continue-on-error`: a broken gate
+      # has to turn this job red. The report is written to the runner temp
+      # directory, never into the repository.
+      - name: Synthetic delivery scenarios
+        run: >-
+          uv run python scripts/run_delivery_scenarios.py --json
+          --output "$RUNNER_TEMP/delivery-scenarios.json"
+
+      # Metric report self-check: the fixed gold sample must reproduce a report
+      # with seven metrics and an explicit window. The report is read-only and
+      # never touches a task library or a credential.
+      - name: Delivery metrics (gold sample)
+        run: >-
+          uv run python scripts/report_metrics.py --gold-sample
+          --since 2026-01-01 --until 2026-02-01 --json
+
       - name: Syntax check
         run: >-
           uv run python -m py_compile

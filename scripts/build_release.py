@@ -51,6 +51,13 @@ Self-checks (see release/README.md for the published standard):
      --help` imports the natural-language entry and exits 0.
   j. inside the extracted archive: `templates/self-improvement/sources.example.json`
      is a registry the shipped `scripts/self_improvement/sources.py` accepts.
+  k. inside the extracted archive: `python scripts/run_delivery_scenarios.py --json`
+     exits 0, reports `errors: 0`, every negative scenario passed (its gate really
+     fired) and at least one positive control passed.
+  l. inside the extracted archive: `python scripts/report_metrics.py --gold-sample
+     --since ... --until ... --json` reports seven metrics with a window, sample
+     size, missing rate and coverage, and the same script reports an empty input
+     as `no data` (never 0).
   h. inside the extracted archive: `scripts/architecture/check.py` exits 0 with
      a JSON report marked `enforcement_mode: OFF` and `blocking: false` (the
      package ships no contract, so the checker must degrade to read-only
@@ -388,6 +395,81 @@ def run_self_check(zip_path, required, top_dir, extra_patterns=()):
             failures.append('(j) sources.example.json is not a valid registry inside the '
                             f'package (exit {rc}):\n{indent(out)}')
 
+        # (k) the synthetic delivery scenarios must all pass inside the package.
+        # A negative scenario passing means its gate really fired; the report must
+        # carry `errors: 0`, `negative_passed == negative` and at least one passing
+        # positive control, so "everything failed" or "a gate did not fire" cannot
+        # hide behind an exit code alone.
+        rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'run_delivery_scenarios.py'),
+                       '--json'], pkg_root)
+        if rc != 0:
+            failures.append(f'(k) delivery scenarios failed inside package (exit {rc}):\n'
+                            f'{indent(out)}')
+        else:
+            try:
+                scenario_report = json.loads(out)
+            except ValueError as exc:
+                failures.append(f'(k) delivery scenarios emitted no JSON report: {exc}')
+            else:
+                totals = scenario_report.get('totals') or {}
+                if not scenario_report.get('scenarios'):
+                    failures.append('(k) delivery scenario report lists no scenarios')
+                if totals.get('errors'):
+                    failures.append(f'(k) {totals["errors"]} scenario(s) errored')
+                if totals.get('failed'):
+                    failures.append(f'(k) {totals["failed"]} scenario(s) failed')
+                if totals.get('negative_passed') != totals.get('negative'):
+                    failures.append('(k) not every negative scenario passed: its gate did not '
+                                    f'fire ({totals.get("negative_passed")}/'
+                                    f'{totals.get("negative")})')
+                if not totals.get('positive_passed'):
+                    failures.append('(k) no positive control passed, so "all scenarios fail" '
+                                    'cannot be excluded')
+
+        # (l) the metric report must reproduce the documented gold sample and must
+        # report an empty input as `no data` (never 0). Both runs are read-only and
+        # use the sample embedded in the shipped templates/metrics.md.
+        rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'report_metrics.py'),
+                       '--gold-sample', '--since', '2026-01-01', '--until', '2026-02-01',
+                       '--json'], pkg_root)
+        if rc != 0:
+            failures.append(f'(l) metric gold sample failed inside package (exit {rc}):\n'
+                            f'{indent(out)}')
+        else:
+            try:
+                metric_report = json.loads(out)
+            except ValueError as exc:
+                failures.append(f'(l) metric report emitted no JSON: {exc}')
+            else:
+                metrics = metric_report.get('metrics') or []
+                if len(metrics) != 7:
+                    failures.append(f'(l) expected seven metrics, got {len(metrics)}')
+                if not metric_report.get('window', {}).get('start'):
+                    failures.append('(l) metric report carries no explicit window start')
+                for metric in metrics:
+                    for key in ('sample_size', 'eligible', 'missing', 'missing_rate',
+                                'coverage'):
+                        if key not in metric:
+                            failures.append(f'(l) metric {metric.get("id")} is missing {key}')
+                if metric_report.get('summary', {}).get('headline') == 'no data':
+                    failures.append('(l) the gold sample produced no data')
+        empty_fixture = Path(tmp) / 'empty-events.json'
+        empty_fixture.write_text('{"events": []}', encoding='utf-8')
+        rc, out = run([sys.executable, str(pkg_root / 'scripts' / 'report_metrics.py'),
+                       str(empty_fixture), '--since', '2026-01-01', '--until', '2026-02-01',
+                       '--json'], pkg_root)
+        if rc != 0:
+            failures.append(f'(l) metric empty-input report failed inside package '
+                            f'(exit {rc}):\n{indent(out)}')
+        else:
+            try:
+                empty_report = json.loads(out)
+            except ValueError as exc:
+                failures.append(f'(l) empty-input metric report emitted no JSON: {exc}')
+            else:
+                if empty_report.get('summary', {}).get('headline') != 'no data':
+                    failures.append('(l) an empty input was not reported as "no data"')
+
         # (f) line-ending assertion: no packaged *text* file may contain CRLF.
         # Text is the same rule normalize_line_endings() uses (no NUL byte and
         # valid UTF-8); binary payloads ship verbatim and are exempt. A CRLF here
@@ -452,7 +534,7 @@ def main():
 
     size = zip_path.stat().st_size
     sha256 = sha256_file(zip_path)
-    print('Release self-check passed (checks a-j).')
+    print('Release self-check passed (checks a-l).')
     print(f'  package files : {len(files)} ({len(required)} REQUIRED + {MANIFEST_NAME})')
     print(f'  manifest      : schema {manifest["schema_version"]}, suite {manifest["suite"]!r}, '
           f'format {manifest["format_version"]}')

@@ -53,6 +53,7 @@ REQUIRED = [
     'tests/architecture/__init__.py', 'tests/architecture/test_architecture_checker.py',
     'tests/self_improvement/__init__.py', 'tests/self_improvement/loop_support.py',
     'tests/self_improvement/support.py',
+    'tests/self_improvement/test_acceptance_report.py',
     'tests/self_improvement/test_collection.py',
     'tests/self_improvement/test_lesson_lifecycle.py',
     'tests/self_improvement/test_orchestration.py',
