@@ -4,9 +4,9 @@
 > 设计目标（为什么做、做到什么程度、原则与边界）只在 [PLAN.md](PLAN.md)（1.4 起位于 `docs/`）；字段、状态取值与合并门语义只在 [kit/orchestration.md](../kit/orchestration.md) 4.1 与第 5 节，本文件只引用不重述。
 > 本文件只经任务分支 + PR 修改。与 `PLAN.md` 的设计目标冲突时，以设计目标为准并停下对齐，不得各写一套。
 
-- 版本：v2.4（进度同步：S1–S8 已交付，#53 最终验收）
+- 版本：v2.5（进度同步：Epic #46 收口，#53 `VERIFIED`）
 - 日期：2026-10-26
-- 状态：Phase A / B / C 已交付；Epic #46 的 S0–S5、S7、S8 与两项支撑修复均已合并并 `VERIFIED`；#53 最终验收在本 PR 合并生效
+- 状态：Phase A / B / C 已交付；Epic #46 的 S0–S6 与两项支撑修复均已合并并 `VERIFIED`，Epic 已按阶段审计关闭（[审计评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46#issuecomment-6415751115)）；#71-#73 为审计遗留的未完成硬化项，不计入本轮验证
 - 适用范围：AgentOrch 核心规则、local/github edition、任务模板、验证脚本与发行机制
 - 设计目标来源：[PLAN.md](PLAN.md)
 
@@ -30,7 +30,7 @@
 | [#17](https://github.com/ctrlshiftaltdel/AgentOrch/issues/17) 发布自检纳入 CI | 把 `build_release` 自检放进流水线 | #14（已满足） | 已完成 | PR #25 已合并（`53a86fc`）；CI 两档跑打包自检，`VERSION.md` 1.3 |
 | [#9](https://github.com/ctrlshiftaltdel/AgentOrch/issues/9) 合成回归与通用验收集成 | 故障注入、集成矩阵、失败演练、发布出口 | #2 / #3 / #4 / #5；最终验收等 #6–#8 | 已完成（随本 PR 合并生效） | 本 PR：`scripts/run_delivery_scenarios.py` + 场景文档 + 验收程序 I 段 |
 
-已完成只代表交付完成，不代表该阶段已验证；每条交付仍以对应 PR 的逐条验收结果、以及合并后主分支上重跑的结果为准。Phase A / B / C 的原有任务已交付。Epic [#46](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46) 的 S0–S5（[#47](https://github.com/ctrlshiftaltdel/AgentOrch/issues/47)–[#52](https://github.com/ctrlshiftaltdel/AgentOrch/issues/52)）、首批经验落地（[#55](https://github.com/ctrlshiftaltdel/AgentOrch/issues/55)、[#56](https://github.com/ctrlshiftaltdel/AgentOrch/issues/56)）与两项支撑修复（[#62](https://github.com/ctrlshiftaltdel/AgentOrch/issues/62)、[#66](https://github.com/ctrlshiftaltdel/AgentOrch/issues/66)）均已合并并按任务载体标为 `VERIFIED`；[#53](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53) 是最终验收任务，状态只在 §11 表中维护。
+已完成只代表交付完成，不代表该阶段已验证；每条交付仍以对应 PR 的逐条验收结果、以及合并后主分支上重跑的结果为准。Phase A / B / C 的原有任务已交付。Epic [#46](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46) 的 S0–S6（[#47](https://github.com/ctrlshiftaltdel/AgentOrch/issues/47)–[#52](https://github.com/ctrlshiftaltdel/AgentOrch/issues/52)）、首批经验落地（[#55](https://github.com/ctrlshiftaltdel/AgentOrch/issues/55)、[#56](https://github.com/ctrlshiftaltdel/AgentOrch/issues/56)）与两项支撑修复（[#62](https://github.com/ctrlshiftaltdel/AgentOrch/issues/62)、[#66](https://github.com/ctrlshiftaltdel/AgentOrch/issues/66)）均已合并并按任务载体标为 `VERIFIED`；最终验收任务 [#53](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53) 经 PR [#70](https://github.com/ctrlshiftaltdel/AgentOrch/pull/70) 合并 `6ac9573` 后标为 `VERIFIED` 并关闭。Epic #46 已于 2026-10-26 按 `templates/milestone-audit.md` 完成阶段审计并关闭（[审计评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46#issuecomment-6415751115)），审计无 `BLOCKING` 项；遗留 #71–#73 属 `NON_BLOCKING_HARDENING`，在 §11 单独登记为未完成后续任务，不得据此宣称真实 Release 或跨平台已验证。
 
 ## 2. 为什么要分阶段
 
@@ -200,7 +200,15 @@
 | [#62](https://github.com/ctrlshiftaltdel/AgentOrch/issues/62) | 对齐 Lesson T10 与 `GENERAL_LESSON` 的 `NEEDS_VERIFICATION` 状态 | #47 | 已完成（PR #65 合并 `c09352c`；Issue 已关闭并标 `status:verified`） |
 | [#66](https://github.com/ctrlshiftaltdel/AgentOrch/issues/66) | 隔离 architecture 路径穿越测试的固定 `/tmp` 文件 | #48 | 已完成（PR #67 合并 `66a659e`；Issue 已关闭并标 `status:verified`） |
 | [#52](https://github.com/ctrlshiftaltdel/AgentOrch/issues/52) | “更新 AgentOrch”入口、迁移指南与发行包接入 | #51 | 已完成（PR #69 合并 `6756249`；Issue 已关闭并标 `status:verified`） |
-| [#53](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53) | 自我完善 / 更新流程合成回归、端到端演练与趋势报告 | #48–#52、#55、#56 | 最终验收（本 PR 合并生效）：A8–A15 / B5–B14 / C19–C20 / D8–D9 场景与指标契约测试接入；CI 与发行包自检纳入；当前 head 的逐条证据见本 PR 评论。尚未合并前不记为 `VERIFIED` |
+| [#53](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53) | 自我完善 / 更新流程合成回归、端到端演练与趋势报告：A8–A15 / B5–B14 / C19–C20 / D8–D9 场景与指标契约测试接入；CI 与发行包自检纳入 | #48–#52、#55、#56 | 已完成 / `VERIFIED`（PR [#70](https://github.com/ctrlshiftaltdel/AgentOrch/pull/70) 合并 `6ac9573`；Issue 已关闭并标 `status:verified`；当前 head 的逐条证据见 [VERIFIED 评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/53#issuecomment-6415723538)） |
+
+**Epic #46 收口与残留任务：** Epic [#46](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46) 已按 `templates/milestone-audit.md` 于 2026-10-26 完成阶段审计并关闭（[审计评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46#issuecomment-6415751115)），S0–S6 全部完成。审计 `BLOCKING` / `NEEDS_HUMAN_DECISION` 均为 0，以下三项为 `NON_BLOCKING_HARDENING`，**目前未完成、未验证，不属于本轮 `VERIFIED` 结论**：
+
+| 遗留任务 | 交付重点 | 当前状态与依据 |
+|---|---|---|
+| [#71](https://github.com/ctrlshiftaltdel/AgentOrch/issues/71) | 真实 GitHub Release 下载 / 签名与已发布旧包升级验证 | `OPEN`；审计第 4 节标 `NON_BLOCKING_HARDENING`；真实 Release 下载 / 签名与真实旧包升级仍为 `NOT_RUN` |
+| [#72](https://github.com/ctrlshiftaltdel/AgentOrch/issues/72) | Windows / macOS 实机验证发行包与更新引擎 | `OPEN`；审计第 5 节标 `NON_BLOCKING_HARDENING`；跨平台结果仍为 `UNKNOWN`（所有者已同意推后） |
+| [#73](https://github.com/ctrlshiftaltdel/AgentOrch/issues/73) | 拆分 delivery scenarios 场景实现为按组模块 | `OPEN`；审计第 10 节标 `NON_BLOCKING_HARDENING`；可维护性硬化，非正确性问题 |
 
 首批经验落地（不是等未来采集机制完成后才处理）：
 - TalkDND 的具体经验已拆至 [#55](https://github.com/ctrlshiftaltdel/AgentOrch/issues/55)：模块拆分后的兼容验证、共享状态全调用点审计、锁保护完整性、回滚后的最终状态、阶段化失败语义。
