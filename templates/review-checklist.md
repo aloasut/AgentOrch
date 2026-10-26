@@ -11,6 +11,19 @@ Use this checklist when reviewing an execution task's delivery, independently of
 - [ ] Every changed frozen item has a decision record in [CONTRACT-DECISION-LOG.md](contract-decision-log.md) (ID, affected tasks, before/after, evidence, status)
 - [ ] A design contract touched by this task fills the headings of [DESIGN.md](design.md), or says `N/A: <reason>`; no heading was deleted to look finished
 
+### Cross-module state, concurrency and recovery
+
+Apply this block whenever the task touches shared mutable state, a lock file, a backup / rollback path, a multi-stage commit or a directory walk. Rule ids refer to `docs/self-improvement/cross-module-state-and-recovery.md` in a repository checkout.
+
+- [ ] **Call site inventory (R2).** Every read-modify-write call site of the shared state is listed with its guard — not just the main path. The reviewer states which entry points could not be verified, because static analysis cannot prove the list is exhaustive.
+- [ ] **Final state, not just the error (R3).** Negative cases assert the ending file tree / state against the baseline: restored content **and** no residue from after the snapshot. "It returned an error" is not acceptance evidence.
+- [ ] **Rollback completeness (R3/R5).** The rollback target is defined as a baseline (what must exist afterwards, not what the backup happens to remember); a partial commit names the failed stage, the side effects that remain, the backup location, and whether any rollback ran.
+- [ ] **Lock lifecycle (R4).** Business rollback neither deletes nor resurrects the lock; the review asks whether mutual exclusion still holds after recovery, and whether a second writer is actually refused.
+- [ ] **No swallowed errors (R6).** Directory reads, cleanup and rollback failures are either surfaced or explicitly counted and justified; a success report that skipped an entry is a defect, not best effort.
+- [ ] **Structured fields (4.1).** `invariants`, `negative_cases`, `migration_cases`, `integration_paths` and `unverified_assumptions` are filled for these surfaces, or say `N/A: <reason>` with a concrete reason.
+- [ ] **Minimal reproduction first (R6).** Before accepting a fix, the review can point at the reproduction or the source-level evidence that showed the problem was real; a fix without one is returned.
+- [ ] **Reviewer items stay open.** Anything this checklist cannot settle statically is recorded as an explicit reviewer judgement, not presented as an automated check.
+
 If any Stage 1 item fails, stop: do not proceed to Stage 2; return the task with findings.
 
 ## Stage 2 — Quality (only after all Stage 1 items pass)

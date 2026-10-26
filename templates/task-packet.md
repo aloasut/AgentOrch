@@ -38,6 +38,16 @@
 - **Evidence matrix.** Column order is fixed: `ac_id`, `method`, `expected`, `actual`, `status`, `environment`, `commit_sha`, `evidence_ref`, `notes` (meaning and rules: 4.1, not restated here). Every AC needs at least one row, and every `commit_sha` must equal `Evidence head SHA` except on `NOT_APPLICABLE` rows.
 - **Why not always maximal.** What is enforced is "field present + rules apply", not volume: a field that truly does not apply gets `N/A: <reason>`, and scenarios must not be invented to fill the format.
 
+### Cross-module tasks (shared state, locking, recovery)
+
+Applies when the task touches shared mutable state, a lock file, a backup / rollback path, a multi-stage commit or a directory walk. Then:
+
+- **Call-site inventory in `integration_paths`.** List every read-modify-write call site of the shared state — foreground, background, autosave, retry, migration — and the guard each one uses. One protected call site is not a complete answer, and a call-site list built by hand is only as good as the review of it.
+- **Final-state assertions in `negative_cases`.** Every negative case names the file tree / state that must hold afterwards: baseline restored, no residue, the lock still exclusive, no false "rollback complete". "The call returned an error" is not an acceptance argument.
+- **`invariants`** states what must stay true across modules and steps; **`migration_cases`** covers old lock files and old snapshot / manifest formats, plus what happens when they cannot be migrated (fail closed, `UNKNOWN`, or an explicit reviewer item).
+- **Small tasks stay small.** When none of these surfaces exists, write `N/A: <reason>` with a concrete reason (as in Sample A above), never a bare `N/A`.
+- The deeper rule set (R1–R6) lives in `docs/self-improvement/cross-module-state-and-recovery.md` in a repository checkout. It adds acceptance checkpoints only; it does not restate the state machine, the evidence fields or the merge gates.
+
 ## Task decomposition hard rules
 
 - Each task carries exactly one independently acceptable goal.
@@ -49,6 +59,7 @@
 
 - Delivery evidence must include real command output and exit codes from actual runs; inferred claims such as "this should pass" are not accepted.
 - Every acceptance criterion must be mapped to at least one evidence item in the matrix; a criterion without evidence counts as not met.
+- Tasks that change shared state, locks, backups or recovery must show the **final** state, not only the returned error: the evidence compares the ending file tree / state with the baseline (no residue), and states whether a rollback really happened.
 - Tasks involving code follow red-green-refactor: first write a failing test and actually run it to prove it fails, then make it pass with a minimal implementation. Declaring completion without test evidence is prohibited.
 - Any unverified item must be explicitly marked as incomplete (`NOT_RUN` / `BLOCKED`) and must not be counted as passing.
 

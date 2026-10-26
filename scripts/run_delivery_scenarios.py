@@ -7,7 +7,8 @@ taken from a typical failure mode rather than from a product's private data:
 
   A  governance / authorization   (evidence gates, revocation, duplicate writes)
   B  migration / versioning       (rerun, partial write, version isolation)
-  C  cross-module closeout        (unwired rule, ownership, event barrier, crash)
+  C  cross-module closeout        (unwired rule, ownership, event barrier, crash,
+                                   shared state, locking, rollback and staged failure)
   D  orchestration base           (edition, resource lock, stale SHA, retries, audit)
 
 Every scenario declares its precondition, the defect it injects, the gate that
@@ -31,6 +32,7 @@ Exit codes: 0 all scenarios passed, 1 at least one scenario failed or errored,
 from __future__ import annotations
 
 import argparse
+import ast
 import contextlib
 import hashlib
 import importlib.util
@@ -63,7 +65,7 @@ EXIT_TOOL_ERROR = 2
 GROUPS = {
     'A': 'governance / authorization',
     'B': 'migration / versioning',
-    'C': 'cross-module closeout',
+    'C': 'cross-module closeout / shared state and recovery',
     'D': 'orchestration base / evidence decay',
 }
 
@@ -398,6 +400,205 @@ def _check_turn(events, *, actor, owner):
     return violations
 
 
+# --- shared-state / recovery fixtures --------------------------------------
+# These model the shapes a delivery task has to get right when it touches shared
+# mutable state: one read-modify-write body with several call sites, a lock that
+# lives next to the data but outside the rolled-back subtree, a snapshot-based
+# rollback, a staged multi-file commit and a directory scan that must not hide a
+# read error. Everything is synthetic and confined to the scenario sandbox.
+LOCK_NAME = '.mutation.lock'
+SHARED_MANIFEST = 'data/manifest.json'
+
+
+def _write_text(root, rel, text):
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding='utf-8', newline='\n')
+
+
+def _tree_digest(root):
+    """Every file below `root` as relative posix path -> sha256 of its bytes."""
+    return {path.relative_to(root).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob('*')) if path.is_file()}
+
+
+def _snapshot_tree(base):
+    """Byte-for-byte copy of a tree, so a rollback can be compared exactly."""
+    return {path.relative_to(base).as_posix(): path.read_bytes()
+            for path in sorted(base.rglob('*')) if path.is_file()}
+
+
+def _restore_tree(base, snapshot):
+    """Restore a tree exactly: rewrite every snapshot file, delete everything else.
+
+    Deleting the extra files is the part a "copy the files I remember" rollback
+    forgets; leaving them behind is what this fixture exists to catch.
+    """
+    for path in sorted(base.rglob('*'), key=lambda item: len(item.parts), reverse=True):
+        if path.is_file() and path.relative_to(base).as_posix() not in snapshot:
+            path.unlink()
+    for path in sorted(base.rglob('*'), key=lambda item: len(item.parts), reverse=True):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    for rel, payload in snapshot.items():
+        target = base / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+
+
+def _residue(base, snapshot):
+    """Files present now that the snapshot does not know about."""
+    return sorted(rel for rel in _tree_digest(base) if rel not in snapshot)
+
+
+def _read_manifest(root):
+    return json.loads((root / SHARED_MANIFEST).read_text(encoding='utf-8'))
+
+
+def _write_manifest(root, payload):
+    path = root / SHARED_MANIFEST
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True), encoding='utf-8')
+
+
+def _bump_manifest(root, actor, pause=None):
+    """One read-modify-write cycle; `pause` widens the window a lock must close."""
+    payload = _read_manifest(root)
+    if pause is not None:
+        pause()
+    payload['count'] += 1
+    payload['writers'].append(actor)
+    _write_manifest(root, payload)
+
+
+class _MutationLock:
+    """A lock file that refuses a second holder: that refusal *is* mutual exclusion."""
+
+    def __init__(self, root, holder):
+        self.path = root / LOCK_NAME
+        self.holder = holder
+
+    def __enter__(self):
+        if self.path.exists():
+            raise RuntimeError(f'LOCK_HELD: {self.path.name} is already held by '
+                               f'{self.path.read_text(encoding="utf-8")}')
+        self.path.write_text(self.holder, encoding='utf-8')
+        return self
+
+    def __exit__(self, *exc):
+        if self.path.is_file() and self.path.read_text(encoding='utf-8') == self.holder:
+            self.path.unlink()
+        return False
+
+
+def _bump_guarded(root, actor):
+    """The guarded call site: the read-modify-write runs inside the lock."""
+    with _MutationLock(root, actor):
+        _bump_manifest(root, actor)
+
+
+RMW_HELPER = '_bump_manifest'
+SHARED_STATE_SOURCE = '''
+def read_manifest(path):
+    return json.loads(path.read_text())
+
+
+def write_manifest(path, payload):
+    path.write_text(json.dumps(payload, sort_keys=True))
+
+
+def _bump_manifest(root, actor):
+    payload = read_manifest(root)
+    payload["count"] += 1
+    write_manifest(root, payload)
+
+
+def update_import(root):
+    with mutation_lock(root):
+        _bump_manifest(root, "import")
+
+
+def update_autosave(root):
+    _bump_manifest(root, "autosave")
+
+
+def update_manual(root):
+    with mutation_lock(root):
+        _bump_manifest(root, "manual")
+'''
+
+
+def _call_site_findings(source, helper=RMW_HELPER):
+    """Every function performing the shared-state cycle, and whether it holds the lock.
+
+    This is a deliberately small AST check over a synthetic module, not a general
+    call-site finder: it sees one helper name in one file. Whether a real project
+    listed *all* of its call sites stays a reviewer question.
+    """
+    findings = []
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.FunctionDef):
+            continue
+        calls = [call for call in ast.walk(node)
+                 if isinstance(call, ast.Call) and getattr(call.func, 'id', '') == helper]
+        if not calls:
+            continue
+        guarded = any(isinstance(inner, ast.With)
+                      and 'lock' in ast.unparse(inner.items[0].context_expr).lower()
+                      for inner in ast.walk(node))
+        findings.append({'call_site': node.name, 'guarded': guarded})
+    findings.sort(key=lambda item: item['call_site'])
+    return findings
+
+
+COMMIT_STAGES = ('write-a', 'write-b', 'write-c')
+
+
+def _stage_report(root, fail_at=2, claim_complete=False):
+    """Apply a multi-file change stage by stage and report what really happened.
+
+    A failure after stage 1 leaves stage 1 on disk. The honest report says so,
+    names the failed stage and the backup, and does not claim a rollback that was
+    never performed.
+    """
+    data, backup = root / 'data', root / 'backup'
+    data.mkdir(parents=True, exist_ok=True)
+    backup.mkdir(parents=True, exist_ok=True)
+    completed, failed = [], None
+    for index, stage in enumerate(COMMIT_STAGES, 1):
+        if index == fail_at:
+            failed = stage
+            break
+        target = data / f'{stage}.txt'
+        target.write_text(stage, encoding='utf-8')
+        shutil.copy2(target, backup / target.name)
+        completed.append(stage)
+    return {
+        'completed_stages': completed,
+        'failed_stage': failed,
+        'side_effects': sorted(path.name for path in data.iterdir()),
+        'backup': 'backup/',
+        'rollback': 'COMPLETE' if claim_complete else 'NONE',
+    }
+
+
+def _scan_entries(directory, swallow=False):
+    """Read every directory entry; `swallow` hides an unreadable one behind success."""
+    processed, errors, skipped = [], [], []
+    paths = sorted(directory.iterdir())
+    for path in paths:
+        try:
+            processed.append({'name': path.name, 'text': path.read_text(encoding='utf-8')})
+        except OSError as exc:
+            if swallow:
+                skipped.append(path.name)
+                continue
+            errors.append(f'unreadable entry: {path.name} ({type(exc).__name__})')
+    failed = bool(errors)
+    return {'status': 'FAILED' if failed else 'OK', 'processed': len(processed),
+            'total': len(paths), 'errors': errors, 'skipped': skipped}
+
+
 SYNTHETIC_TEST_MODULE = '''
 import unittest
 
@@ -646,6 +847,235 @@ def scenario_c5(ctx):
 
 
 # --------------------------------------------------------------------------- #
+# Group C, second family - shared state, locking and recovery
+# --------------------------------------------------------------------------- #
+def scenario_c6(ctx):
+    """Positive control: guarded call sites, exact rollback, intact lock, honest scan."""
+    root = ctx.sandbox / 'delivery'
+    _write_text(root, 'data/a.txt', 'alpha')
+    _write_text(root, 'data/nested/b.txt', 'bravo')
+    _write_manifest(root, {'count': 0, 'writers': []})
+    baseline = _snapshot_tree(root / 'data')
+    baseline_digest = _tree_digest(root / 'data')
+
+    _bump_guarded(root, 'import')
+    _bump_guarded(root, 'autosave')
+    manifest = _read_manifest(root)
+    _require(manifest['count'] == 2 and manifest['writers'] == ['import', 'autosave'],
+             f'the guarded call sites did not both land: {manifest}')
+
+    # A change that fails half-way is rolled back to the exact baseline tree.
+    _write_text(root, 'data/a.txt', 'alpha-changed')
+    _write_text(root, 'data/extra.txt', 'delta')
+    _restore_tree(root / 'data', baseline)
+    tree_matches = _tree_digest(root / 'data') == baseline_digest
+    _require(tree_matches, f'rollback left the tree different: {_residue(root / "data", baseline)}')
+
+    # The lock is gone after the operation and can be taken again.
+    lock_released = not (root / LOCK_NAME).exists()
+    _require(lock_released, 'the lock file survived a completed operation')
+    with _MutationLock(root, 'operation-3'):
+        refused = _expect_refused(lambda: _MutationLock(root, 'operation-4').__enter__(),
+                                  'LOCK_HELD', 'second holder while the lock is live')
+
+    entries = ctx.sandbox / 'entries'
+    _write_text(entries, 'ok-1.txt', 'one')
+    _write_text(entries, 'ok-2.txt', 'two')
+    scan = _scan_entries(entries)
+    _require(scan['status'] == 'OK' and not scan['errors'] and not scan['skipped'],
+             f'a clean directory scan reported a problem: {scan}')
+    _require(scan['processed'] == scan['total'] == 2, f'the scan lost entries: {scan}')
+
+    return ['guarded call sites: count=2, writers=[import, autosave]',
+            'tree matches baseline: True (exact rollback, no residue)',
+            'lock released: True',
+            f'second holder refused while the lock is live: {refused}',
+            f'entry scan: {scan["status"]} over {scan["total"]} entries, 0 findings']
+
+
+def scenario_c7(ctx):
+    """One unguarded call site is enough: the shared counter loses an update."""
+    root = ctx.sandbox / 'shared'
+    _write_manifest(root, {'count': 0, 'writers': []})
+
+    def second_writer():
+        _bump_guarded(root, 'autosave')
+
+    # The defect: the autosave call site runs the cycle without taking the lock.
+    _bump_manifest(root, 'import', pause=second_writer)
+    lossy = _read_manifest(root)
+    lost_update = lossy['count'] != 2 or 'autosave' not in lossy['writers']
+    _require(lost_update, f'the unguarded interleaving was expected to lose an update: {lossy}')
+    _require(lossy['count'] == 1, f'expected count=1 after the lost update, got {lossy["count"]}')
+
+    # The same two call sites, both guarded: exclusion holds and both land.
+    _write_manifest(root, {'count': 0, 'writers': []})
+    with _MutationLock(root, 'import'):
+        refused = _expect_refused(lambda: _MutationLock(root, 'autosave').__enter__(),
+                                  'LOCK_HELD', 'second holder while the first call site runs')
+        _bump_manifest(root, 'import')
+    _bump_guarded(root, 'autosave')
+    fixed = _read_manifest(root)
+    _require(fixed['count'] == 2 and fixed['writers'] == ['import', 'autosave'],
+             f'the guarded call sites did not preserve both updates: {fixed}')
+
+    findings = _call_site_findings(SHARED_STATE_SOURCE)
+    unguarded = [item['call_site'] for item in findings if not item['guarded']]
+    _require(unguarded == ['update_autosave'],
+             f'the call-site inventory did not isolate the defect: {findings}')
+    _require(len(findings) == 3, f'expected three call sites to be inventoried, got {findings}')
+    return [f'call sites inventoried: {[item["call_site"] for item in findings]}',
+            'unguarded call site: update_autosave',
+            f'second holder refused while the guarded site runs: {refused}',
+            f'lost update: count={lossy["count"]}, writers={lossy["writers"]} '
+            '(the autosave increment disappeared)',
+            f'guarded rerun: count={fixed["count"]}, writers={fixed["writers"]}']
+
+
+def scenario_c8(ctx):
+    """Rolling back only the remembered files leaves the extra files behind."""
+    root = ctx.sandbox / 'recovery'
+    _write_text(root, 'data/a.txt', 'alpha')
+    _write_text(root, 'data/nested/b.txt', 'bravo')
+    baseline = _snapshot_tree(root / 'data')
+    baseline_digest = _tree_digest(root / 'data')
+
+    _write_text(root, 'data/a.txt', 'alpha-changed')
+    _write_text(root, 'data/new.txt', 'delta')
+    _write_text(root, 'data/nested/late.txt', 'echo')
+
+    # The defect: restore the files the backup remembers, forget the new ones.
+    for rel, payload in baseline.items():
+        (root / 'data' / rel).write_bytes(payload)
+    residue = _residue(root / 'data', baseline)
+    _require(residue == ['nested/late.txt', 'new.txt'],
+             f'expected two residue files, got {residue}')
+    _require(_tree_digest(root / 'data') != baseline_digest,
+             'the residue did not survive the "rollback", so the defect is not modelled')
+
+    _restore_tree(root / 'data', baseline)
+    restored = _tree_digest(root / 'data') == baseline_digest
+    _require(restored, f'the exact rollback still differs: {_residue(root / "data", baseline)}')
+    return [f'residue after memory-only rollback: {", ".join(residue)}',
+            'the tree still differed from the baseline after that rollback',
+            'tree matches baseline: True (after restoring the exact snapshot)']
+
+
+def scenario_c9(ctx):
+    """A business rollback that restores the whole directory deletes the lock file."""
+    root = ctx.sandbox / 'locks'
+    _write_text(root, 'data/a.txt', 'alpha')
+    whole_root = _snapshot_tree(root)
+
+    def acquire(holder):
+        _MutationLock(root, holder).__enter__()
+
+    def release(holder):
+        lock = root / LOCK_NAME
+        if lock.is_file() and lock.read_text(encoding='utf-8') == holder:
+            lock.unlink()
+
+    # The defect: the snapshot is taken before the lock exists and covers the
+    # whole root, so restoring it removes the lock while the operation is live.
+    acquire('operation-1')
+    _write_text(root, 'data/a.txt', 'alpha-changed')
+    _write_text(root, 'data/tmp.txt', 'written-before-the-failure')
+    _restore_tree(root, whole_root)
+    lock_deleted = not (root / LOCK_NAME).exists()
+    _require(lock_deleted, 'the whole-root rollback kept the lock; the defect is not modelled')
+    acquirer = _MutationLock(root, 'operation-2')
+    acquirer.__enter__()
+    second_writer_in = (root / LOCK_NAME).read_text(encoding='utf-8') == 'operation-2'
+    _require(second_writer_in, 'the second writer did not take the orphaned lock')
+    acquirer.__exit__(None, None, None)
+
+    # The correct order: snapshot the data subtree only, so the lock survives.
+    data_baseline = _snapshot_tree(root / 'data')
+    data_digest = _tree_digest(root / 'data')
+    acquire('operation-1')
+    _write_text(root, 'data/tmp.txt', 'written-before-the-failure')
+    _restore_tree(root / 'data', data_baseline)
+    lock_survives = (root / LOCK_NAME).is_file()
+    _require(lock_survives, 'a data-only rollback removed the lock')
+    refused = _expect_refused(lambda: acquire('operation-2'), 'LOCK_HELD',
+                              'second writer while the lock survives')
+    release('operation-1')
+    acquire('operation-2')
+    release('operation-2')
+    _require(_tree_digest(root / 'data') == data_digest,
+             f'the data tree did not return to its baseline: '
+             f'{_residue(root / "data", data_baseline)}')
+    _require(_residue(root / 'data', data_baseline) == [],
+             'the data rollback left residue behind')
+    return ['lock file deleted by rollback: True',
+            'second writer acquired the lock: True (mutual exclusion was lost)',
+            f'correct rollback keeps it: lock survives a data rollback: {lock_survives}',
+            f'second writer after the fix: {refused}',
+            'lock released and reused: True; the data tree is back to its baseline']
+
+
+def scenario_c10(ctx):
+    """A failure after a partial commit must not be reported as a complete rollback."""
+    root = ctx.sandbox / 'commit'
+    report = _stage_report(root, fail_at=2)
+    _require(report['failed_stage'] == 'write-b',
+             f'the report does not name the failed stage: {report}')
+    _require(report['completed_stages'] == ['write-a'],
+             f'the report hides the completed stage: {report}')
+    _require(report['side_effects'] == ['write-a.txt'],
+             f'the report does not list the side effects: {report}')
+    _require(report['rollback'] == 'NONE',
+             f'the honest report claimed a rollback it did not perform: {report}')
+    _require(report['backup'] == 'backup/',
+             f'the report does not say where the backup is: {report}')
+
+    # The defect: the same partial commit, reported as a complete rollback.
+    lie_root = ctx.sandbox / 'commit-claim'
+    lie = _stage_report(lie_root, fail_at=2, claim_complete=True)
+    remaining = sorted(path.name for path in (lie_root / 'data').iterdir())
+    contradicted = lie['rollback'] == 'COMPLETE' and bool(remaining)
+    _require(contradicted,
+             f'the false complete-rollback claim was not contradicted by the tree: {lie}')
+    _require(remaining == ['write-a.txt'],
+             f'expected exactly the stage-1 side effect, got {remaining}')
+    return [f'failed stage: {report["failed_stage"]}',
+            f'completed stages: {report["completed_stages"]}; '
+            f'side effects: {report["side_effects"]}; rollback: {report["rollback"]}',
+            f'backup location reported: {report["backup"]}',
+            f'a "complete rollback" claim is contradicted by {len(remaining)} remaining '
+            'file(s): True']
+
+
+def scenario_c11(ctx):
+    """An unreadable directory entry hidden behind a success report is a swallowed error."""
+    entries = ctx.sandbox / 'scan'
+    _write_text(entries, 'ok-1.txt', 'one')
+    _write_text(entries, 'ok-2.txt', 'two')
+    (entries / 'broken.json').mkdir(parents=True, exist_ok=True)  # cannot be read as a file
+
+    lossy = _scan_entries(entries, swallow=True)
+    _require(lossy['skipped'] == ['broken.json'],
+             f'the swallowing scan did not skip the unreadable entry: {lossy}')
+    _require(lossy['status'] == 'OK',
+             f'the swallowing scan already reported a failure: {lossy}')
+    contradiction = lossy['status'] == 'OK' and lossy['processed'] != lossy['total']
+    _require(contradiction,
+             f'the success report is not contradicted by the entry count: {lossy}')
+
+    honest = _scan_entries(entries)
+    _require(honest['status'] == 'FAILED',
+             f'the corrected scan still reported success: {honest}')
+    _require(any('broken.json' in error for error in honest['errors']),
+             f'the corrected scan did not name the unreadable entry: {honest}')
+    _require(honest['skipped'] == [], 'the corrected scan still swallowed the entry')
+    return [f'skipped with a success report: {", ".join(lossy["skipped"])}',
+            f'report claims OK while {lossy["total"] - lossy["processed"]} of '
+            f'{lossy["total"]} entries were skipped: True',
+            f'surface the error instead: {honest["status"]} naming broken.json '
+            f'({len(honest["errors"])} error(s), 0 skipped)']
+
+
+# --------------------------------------------------------------------------- #
 # Group D - orchestration base and evidence decay
 # --------------------------------------------------------------------------- #
 def scenario_d1(ctx):
@@ -889,6 +1319,49 @@ SCENARIOS = (
              'runner: the crash is recorded as an error, the traceback is kept, later tests run',
              'testsRun / errors / failures counts, preserved traceback, execution order',
              'in-memory only', scenario_c5),
+    Scenario('C6', 'C', 'positive', 'guarded shared state with an exact recovery',
+             'a synthetic data tree, a shared manifest and a lock file in one sandbox',
+             'none (positive control)',
+             'shared state: every call site is guarded, the rollback matches the baseline tree, '
+             'the lock is released and the directory scan reports no finding',
+             'manifest counters, tree digest vs baseline, lock state, scan report',
+             'synthetic sandbox removed with the scenario', scenario_c6),
+    Scenario('C7', 'C', 'negative', 'one shared-state call site left unguarded',
+             'a shared manifest with two writers, the second one interleaved inside the '
+             'first read-modify-write window',
+             'the autosave call site runs the cycle without taking the lock',
+             'shared state: the inventory names the unguarded call site and the final counter '
+             'shows a lost update; the guarded rerun keeps both',
+             'call-site inventory, final count and writer list before/after the fix',
+             'synthetic sandbox removed with the scenario', scenario_c7),
+    Scenario('C8', 'C', 'negative', 'rollback leaves files the backup never knew',
+             'a synthetic data tree with a snapshot taken before the change',
+             'the rollback restores the remembered files and keeps the newly created ones',
+             'recovery: the residue is reported and the tree still differs from the baseline; '
+             'the exact restore then matches it',
+             'residue list, tree comparison before/after the exact rollback',
+             'synthetic sandbox removed with the scenario', scenario_c8),
+    Scenario('C9', 'C', 'negative', 'business rollback deletes the lock file',
+             'a data tree plus a lock file created after the whole-root snapshot',
+             'the rollback restores the whole root, removing the live lock',
+             'lock lifecycle: the second writer acquires the orphaned lock; the data-only '
+             'rollback keeps the lock and still refuses the second writer',
+             'lock presence, second-writer acquisition, LOCK_HELD refusal, tree digest',
+             'synthetic sandbox removed with the scenario', scenario_c9),
+    Scenario('C10', 'C', 'negative', 'partial commit reported as a complete rollback',
+             'a three-stage multi-file commit that fails at the second stage',
+             'the report claims rollback COMPLETE although stage 1 is still on disk',
+             'staged failure: the honest report names the failed stage, the completed stage, '
+             'the side effects and the backup, and the false claim is contradicted by the tree',
+             'stage report fields, remaining files in the data tree',
+             'synthetic sandbox removed with the scenario', scenario_c10),
+    Scenario('C11', 'C', 'negative', 'directory read error swallowed',
+             'a directory holding two readable files and one entry that cannot be read as a file',
+             'the scan skips the unreadable entry and still reports success',
+             'error semantics: the success report is contradicted by processed != total; the '
+             'corrected scan reports FAILED and names the entry',
+             'scan report before/after the fix, skipped and error lists',
+             'synthetic sandbox removed with the scenario', scenario_c11),
     Scenario('D1', 'D', 'positive', 'legal edition with a declared resource',
              'a local project with resource_lease_ttl configured',
              'none (positive control)',
