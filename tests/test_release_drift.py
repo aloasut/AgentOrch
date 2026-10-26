@@ -12,6 +12,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -168,6 +169,91 @@ class ManifestGenerationTests(unittest.TestCase):
             with zipfile.ZipFile(first) as archive:
                 self.assertEqual(sorted(archive.namelist()), sorted(
                     f'agentorch-20260101/{rel}' for rel in files))
+
+
+@unittest.skipUnless(BUILD.is_file(), 'build_release.py is repository-only')
+class ReleaseAssetNamingTests(unittest.TestCase):
+    """The public release name is a naming choice, not a format change.
+
+    `--release-version 1.6` must produce `AgentOrch-1.6.zip` whose single
+    top-level directory is `AgentOrch-1.6/`; the default date naming has to keep
+    working because CI and the baseline-rebuild instructions still use it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.builder = load('build_release_naming_under_test', BUILD)
+
+    def test_release_version_names_the_asset_and_top_dir(self):
+        stem = self.builder.release_asset_stem(None, '1.6')
+        self.assertEqual(stem, 'AgentOrch-1.6')
+        self.assertEqual(f'{stem}.zip', 'AgentOrch-1.6.zip')
+        self.assertEqual(f'{stem}/{drift.MANIFEST_NAME}', 'AgentOrch-1.6/MANIFEST.json')
+
+    def test_patch_release_version_is_allowed(self):
+        self.assertEqual(self.builder.release_asset_stem(None, '1.6.1'), 'AgentOrch-1.6.1')
+
+    def test_default_date_naming_still_works(self):
+        self.assertEqual(self.builder.release_asset_stem('20261026'), 'agentorch-20261026')
+        today = date.today().strftime('%Y%m%d')
+        self.assertEqual(self.builder.release_asset_stem(), f'agentorch-{today}')
+
+    def test_release_and_date_naming_never_combine(self):
+        with self.assertRaises(SystemExit):
+            self.builder.release_asset_stem('20261026', '1.6')
+
+    def test_invalid_release_versions_are_rejected(self):
+        for bad in ('v1.6', '1', '1.6.0.1', '1.6-rc1', 'latest', ''):
+            with self.subTest(version=bad):
+                with self.assertRaises(SystemExit):
+                    self.builder.release_asset_stem(None, bad)
+
+    def test_invalid_date_stamps_are_rejected(self):
+        for bad in ('2026-10-26', '2026102', '202610266'):
+            with self.subTest(stamp=bad):
+                with self.assertRaises(SystemExit):
+                    self.builder.release_asset_stem(bad)
+
+    def test_archive_follows_the_release_stem_and_keeps_the_format_version(self):
+        files = {
+            'kit/orchestration.md': b'# core\n',
+            'editions/local/master.md': b'# edition\n',
+        }
+        manifest = drift.build_manifest(files, SUITE, FORMAT)
+        self.assertEqual(manifest['format_version'], FORMAT)
+        files[drift.MANIFEST_NAME] = drift.dumps_manifest(manifest).encode('utf-8')
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / 'AgentOrch-1.6.zip'
+            second = Path(tmp) / 'second.zip'
+            self.builder.write_zip(first, files, 'AgentOrch-1.6')
+            self.builder.write_zip(second, files, 'AgentOrch-1.6')
+            self.assertEqual(drift.sha256_bytes(first.read_bytes()),
+                             drift.sha256_bytes(second.read_bytes()))
+            with zipfile.ZipFile(first) as archive:
+                names = sorted(archive.namelist())
+                shipped = json.loads(archive.read(f'AgentOrch-1.6/{drift.MANIFEST_NAME}'))
+            self.assertEqual(names, sorted(f'AgentOrch-1.6/{rel}' for rel in files))
+            self.assertIn('AgentOrch-1.6/MANIFEST.json', names)
+            self.assertEqual(shipped['format_version'], FORMAT)
+
+    def test_cli_rejects_a_v_prefixed_version_without_building(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, '-B', str(BUILD), '--release-version', 'v1.6',
+                 '--output-dir', tmp], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn('--release-version', result.stderr)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
+    def test_cli_rejects_date_and_release_version_together(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            result = subprocess.run(
+                [sys.executable, '-B', str(BUILD), '--date', '20261026',
+                 '--release-version', '1.6', '--output-dir', tmp],
+                capture_output=True, text=True)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('not allowed with argument', result.stderr)
+            self.assertEqual(list(Path(tmp).iterdir()), [])
 
 
 class ManifestValidationTests(unittest.TestCase):

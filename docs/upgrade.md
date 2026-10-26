@@ -333,9 +333,14 @@ note: this is a diagnosis only; reading and using the project is not blocked
 
 ### 6.3 登记基线（两条来源）
 
-**来源 A：当初那份发行包。** 把安装时那个 zip 里的 `MANIFEST.json` 放到项目根即可——它记录的正是你这棵树的上游基线。
+**来源 A：当初那份发行包。** 把安装时那个 zip 里的 `MANIFEST.json` 放到项目根即可——它记录的正是你这棵树的上游基线。zip 名与包内顶层目录名相同：正式 Release 是 `AgentOrch-<X.Y>.zip` / `AgentOrch-<X.Y>/`，日期构建是 `agentorch-<日期>.zip` / `agentorch-<日期>/`。
 
 ```bash
+# 正式 Release（示例：1.6）
+python -m zipfile -e AgentOrch-1.6.zip <解压目录>
+cp <解压目录>/AgentOrch-1.6/MANIFEST.json .
+
+# 日期构建
 python -m zipfile -e agentorch-<日期>.zip <解压目录>
 cp <解压目录>/agentorch-<日期>/MANIFEST.json .
 ```
@@ -358,6 +363,14 @@ Release self-check passed (checks a-f).
   zip path      : /tmp/baseline/agentorch-20261023.zip
 # exit 0
 ```
+
+正式 Release 资产（如 `AgentOrch-1.6.zip`）用 `--release-version 1.6` 重建，顶层目录为 `AgentOrch-1.6/`：
+
+```bash
+python scripts/build_release.py --release-version 1.6 --output-dir /tmp/baseline
+```
+
+参数写 `1.6`，不要写 `v1.6`（`v1.6` 是 tag，不是资产名）；`--date` 与 `--release-version` 互斥，同时给出会直接报错。两种命名模式只改变 zip 名与顶层目录，不改变包内文件集合与 `MANIFEST.json` 的 `format_version`。
 
 注意两点事实：
 
@@ -519,7 +532,8 @@ checked: 47 manifest file(s); missing 0, modified 1, unknown 0, project-profile 
   ```bash
   uv run python scripts/validate_kit.py     # 0：旧根位置（PLAN/ORCHESTRATION-PROJECT）不存在即通过
   uv run python scripts/orchestrator.py init  # 0：edition 从 docs/PROJECT.md 读取
-  uv run python scripts/build_release.py      # 0：包 34 文件（33 REQUIRED + MANIFEST），format 1.5
+  uv run python scripts/build_release.py      # 0：包 91 文件（90 REQUIRED + MANIFEST），format 1.5
+  uv run python scripts/build_release.py --release-version 1.6  # 0：AgentOrch-1.6.zip，format 仍 1.5
   ```
 
 - **不要这样做**：保留旧根文件副本（validate 会报 legacy）；只改一半路径（validate 链接扫描会逐个指出断链）。
@@ -574,6 +588,8 @@ python3 -m scripts.update_agentorch.entry --project . \
 | 清单损坏 / schema 不支持 | 否 | `STOPPED_INVALID_BASELINE` | `NOT_RUN` | 只读诊断 + 手工迁移（`HD-08`） |
 
 **这张表只声称合成测试覆盖的行为。** 真实 GitHub Release 获取、真实已发布 1.3 / 1.4 / 1.5 包、真实项目的网络与权限均为 `NOT_RUN`；未实测的平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
+
+**已知限制（Release 1.6）**：包校验第 10 步 `VERSION_MATCH` 要求 release tag 的 major.minor 等于包内 `MANIFEST.json` 的 `format_version`（`scripts/update_agentorch/versions.py` 的 `tag_matches_format()`）。正式 Release `v1.6` 的 `format_version` 仍是 `1.5`，因此该包会被「更新 AgentOrch」判为 `UNSAFE_PACKAGE`，不会自动应用；人工下载 / 解压使用不受影响，真实 `v1.5 → 1.6` 升级仍归 #71。在项目所有者决定升 Format 或调整发布策略之前，**不得**把 v1.6 描述为可通过本入口自动升级。
 
 ### 13.4 冲突、删除与重命名
 

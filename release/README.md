@@ -5,10 +5,13 @@
 ## 1. 用途与命名规范
 
 - 用途：把套件打包成可被任意项目复用的通用分发版本；包内只保留与具体项目无关的可复用产出。
-- 命名规范：`release/agentorch-{YYYYMMDD}.zip`，`{YYYYMMDD}` 为发布当天日期。
-- zip 顶层目录固定为 `agentorch-{YYYYMMDD}/`，包内路径相对该目录。
-- 产物不纳入 git：`.gitignore` 忽略 `release/*.zip`；仓库只保留流程文档、构建脚本与本标准；历史版本记录由 GitHub Releases 承担。`release/README.md` 不入忽略范围。
-- 产物可随时重建：运行 `uv run python scripts/build_release.py`（默认输出到 `release/`）。构建是**可复现**的：同一仓库状态下，包内文件集合、各文件内容与 zip 的校验和均一致（归档时间戳使用固定值），因此 zip 的校验和可被任何人重建复核。可复现性不依赖检出行尾：构建时文本文件按 LF 归一后打包、二进制文件原样打包（仓库以 `.gitattributes` 统一 LF），故任何检出（含 Windows 上 `core.autocrlf=true`）重建都得到同一校验和。
+- **两种命名模式，互不组合**：
+  - **正式 Release 资产**：`uv run python scripts/build_release.py --release-version 1.6` 产出 `release/AgentOrch-1.6.zip`，zip 顶层目录与资产 stem 一致，即 `AgentOrch-1.6/`。对应 Git tag 为 `v1.6`、资产名为 `AgentOrch-1.6.zip`。参数写 `1.6`，**不要写 `v1.6`**：`v1.6` 是 tag 名而不是资产名，带 `v` 前缀或预发布后缀会被构建直接拒绝。
+  - **日期构建（默认，保持不变）**：`uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD` 产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`。CI 与 `docs/upgrade.md` 的基线重建继续用这个模式。
+  - `--date` 与 `--release-version` **互斥**：同时给出即报错退出（`argparse` 退出码 2），不存在"谁覆盖谁"的隐含优先级；不带任何命名参数时仍按今天日期命名。
+- **发布名只决定资产名与顶层目录**：包内文件集合、`MANIFEST.json` schema 与 `format_version` 在两种模式下完全相同。**Release 版本号不是 Format 版本**：`Release 1.6` 的包内 `VERSION.md` 仍是 `Format version: 1.5`，`MANIFEST.json` 的 `format_version` 仍是 `1.5`；两者的区别与 `Release 1.6` 记录见第 5 节。
+- 产物不纳入 git：`.gitignore` 忽略 `release/*.zip`；仓库只保留流程文档、构建脚本与本标准；历史版本记录由 GitHub Releases 承担。`release/README.md` 不入忽略范围。**已发布的历史资产（如 `agentorch-20261023.zip`）不删除、不覆盖、不改写**；新 Release 用新的资产名。
+- 产物可随时重建：运行 `uv run python scripts/build_release.py`（默认输出到 `release/`），或按上面的正式 Release 命令指定 `--release-version`。构建是**可复现**的：同一仓库状态下（同一命名模式与同一 top dir），包内文件集合、各文件内容与 zip 的校验和均一致（归档时间戳使用固定值），因此 zip 的校验和可被任何人重建复核。可复现性不依赖检出行尾：构建时文本文件按 LF 归一后打包、二进制文件原样打包（仓库以 `.gitattributes` 统一 LF），故任何检出（含 Windows 上 `core.autocrlf=true`）重建都得到同一校验和。
 
 ## 2. 包内容规范
 
@@ -34,6 +37,8 @@
 ## 3. 自检清单（发布前必须全过）
 
 自检内置在 `scripts/build_release.py`，随构建自动执行，任何一项失败即非零退出并逐条列出原因；**没有跳过自检的开关**。
+
+自检 a–l 与命名模式无关：脚本把本次命名决定的顶层目录（`AgentOrch-1.6/` 或 `agentorch-YYYYMMDD/`）传给全部自检，`MANIFEST.json` 的路径解析、包内 `validate_kit.py` 与 `unittest` 都在该目录下进行。命名模式不改变自检项、不删除任何检查，也不降低强度。
 
 - a. 包内容文件集合 == `REQUIRED` + `MANIFEST.json`（数量与名称一致）；解压后 `MANIFEST.json` 必须能解析每条 `path`、`sha256` 与 `size` 与实际文件一致、`category` 只用合法分类，且清单列出的路径集合与 `REQUIRED` 完全一致。
 - b. 解压到临时目录后，`scripts/validate_kit.py` 退出码为 0。
@@ -65,19 +70,45 @@
 - **失败即红**：没有 `continue-on-error`、`|| true` 或跳过开关；产物只写到 runner 的 `release/`（`.gitignore` 已忽略），不提交、不上传、不使用密钥。
 - **行尾与可复现性**：Windows 检出不会破坏可复现性 —— 仓库 `.gitattributes` 统一 `eol=lf`，打包前还会把文本文件归一为 LF，自检 f 断言包内文本不含 CRLF；场景沙箱里的 git 仓库也固定 `core.autocrlf=false` / `core.eol=lf`，不依赖 runner 的全局 git 配置。
 - **CI 证明什么**：包能构建，且内置自检 a–l 在该平台 / Python 版本上通过 —— 覆盖"打包内容集合 / 包内结构校验 / 发布扫描 / 可复现归档 / 包内合成回归与指标口径"这类回归。
-- **CI 不证明什么**：**不证明发布本身**。CI 不校验 `{YYYYMMDD}` 命名、不生成 GitHub Release、不写发布记录，也不覆盖真实安装器与用户桌面环境（这些平台承诺仍标 `UNKNOWN`）。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
+- **CI 不证明什么**：**不证明发布本身**。CI 不校验发布命名（`AgentOrch-<X.Y>.zip` 或 `agentorch-{YYYYMMDD}.zip`）、不生成 GitHub Release、不写发布记录，也不覆盖真实安装器与用户桌面环境（这些平台承诺仍标 `UNKNOWN`）。发布仍按第 4 节由 Master 执行并逐项留证；CI 绿灯不能替代第 4 节的审查记录。
 
 ## 4. 发布流程
 
-1. 在任务库登记发布任务（唯一 ID、单一目标、允许路径与验收）。
-2. 从最新本地主分支创建独立分支 / Worktree；不在共享工作区直接构建。
-3. 构建：运行 `uv run python scripts/build_release.py` 生成 `release/agentorch-{YYYYMMDD}.zip`。
+1. 在任务载体登记发布任务（唯一 ID、单一目标、允许路径与验收）。
+2. 从最新主分支创建独立分支 / Worktree；不在共享工作区直接构建。
+3. 构建：正式 Release 用 `uv run python scripts/build_release.py --release-version 1.6` 生成 `release/AgentOrch-1.6.zip`；日期构建仍用 `uv run python scripts/build_release.py`（或 `--date YYYYMMDD`）生成 `release/agentorch-{YYYYMMDD}.zip`。
 4. 自检：确认脚本内置 a–l 全部通过并记录退出码；产物路径、字节数与校验和一并留证。CI 虽已在 PR 上跑过同一自检（见 3.1），发布时仍须在本分支上重跑并在发布记录里写入实际输出，不能用 CI 绿灯代替。
-5. Master 独立审查（逐条对照本文件的自检清单与验收标准）。
-6. 合并到本地主分支；合并后重新运行验证并记录结果。
-7. 发布后清理本任务分支 / Worktree（独立记账，清理由此与"合并成功"分开记录）。
+5. 可复现性：用同一命令再构建一次到另一个输出目录（例如 `--output-dir /tmp/release-b`），比对两份 zip 的 SHA256 一致。
+6. Master 独立审查（逐条对照本文件的自检清单与验收标准）。
+7. 合并到主分支；合并后重新运行验证并记录结果。
+8. 发布（由 Master 执行，执行代理不自行打 tag / 建 Release）：在合并后的主分支上创建 tag `v1.6`，把 `release/AgentOrch-1.6.zip` 作为唯一 zip 资产上传，并在发布说明中写入产物 SHA256、本轮能力与未验证项。命令形如 `gh release create v1.6 release/AgentOrch-1.6.zip --title "AgentOrch 1.6" --notes-file <notes>`；**该命令依赖 GitHub 权限与网络，本仓库的本次发布准备任务未执行它（`NOT_RUN`）**，执行前须确认 tag 与资产名未被占用，冲突时停下报告、不覆盖历史版本。
+9. 发布后清理本任务分支 / Worktree（独立记账，清理由此与"合并成功"分开记录）。
 
-## 5. 版本变更（`VERSION.md` 的 `Format version`）
+## 5. 版本：Format version 与对外 Release 版本
+
+`VERSION.md` 里的 `Format version` 是**套件格式契约**版本（决定包结构、模板与必需文件清单的兼容语义）；对外 Release 版本是**发行号**（Git tag 与 GitHub Release 资产名）。两者不是同一个序列，也不互相替代：
+
+- 只有格式真的变化（例如 1.2 → 1.3 新增资源锁载体字段、1.4 → 1.5 根目录瘦身与文件合并）才升 `Format version`，并同步模板、校验清单与 `docs/upgrade.md` 的迁移说明。
+- 只增加能力、不改包格式时，`Format version` 保持不变，只升对外 Release 版本。
+- `scripts/check_drift.py` 只解析 `VERSION.md` 的 `Format version:` 一行来生成 `MANIFEST.json` 的 `format_version`；`VERSION.md` 里的 `Release version` 行仅作记录，**不参与** Format 解析，也不会让下游把 Format 当成 `1.6`。
+- 下游判断兼容性看 `MANIFEST.json` 的 `format_version` 与 Release tag；下载安装看 Release 资产名。
+
+### 5.1 发行记录：Release 1.6
+
+- tag：`v1.6`；资产：`AgentOrch-1.6.zip`（顶层目录 `AgentOrch-1.6/`）；`Format version`：`1.5`（包内 `MANIFEST.json` 的 `format_version` 也是 `1.5`）。
+- 相对 v1.5 的公开能力（均已在本仓库主分支落地，有单元测试 / 包内自检 / CI 覆盖）：
+  - 自我完善闭环：来源注册表、采集、Lesson 生命周期、规划与闭环报告；
+  - 「更新 AgentOrch」安全更新入口：来源白名单、包校验 10 步、逐文件分类、备份 / 回滚与 `HD-*` 人工决策；
+  - 58 个合成回归场景（A–D 组，含正负控制组）；包内文件 91 个（90 `REQUIRED` + `MANIFEST.json`）；
+  - 四档 CI（3 个 runner、4 个 OS / Python 组合）：Linux（Python 3.12 / 3.13）、macOS（3.13）、Windows（3.13）；包内自检 a–l 在每一档真实执行。
+- **未验证 / 已知限制（不得写成已验证）**：
+  - 真实 `v1.5 → 1.6` 旧包升级为 `NOT_RUN`，归 #71 用真实发布资产验证；本任务不声称旧包升级成功。
+  - 真实 GitHub Release 的创建、下载与 SHA256 复核依赖网络与权限，发布前为 `NOT_RUN`，由 Master 在发布后补证（Issue 的 AC-4）。
+  - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
+  - **自动更新入口的 `VERSION_MATCH` 规则要求 release tag 的 major.minor 等于 `MANIFEST.json` 的 `format_version`**（`scripts/update_agentorch/versions.py` 的 `tag_matches_format()`）。因此 `v1.6` + Format `1.5` 的包会被「更新 AgentOrch」在包校验第 10 步判为 `UNSAFE_PACKAGE`，不会自动应用；人工下载解压使用不受影响。本任务不修改该规则（属产品语义），需项目所有者决定后续是升 `Format version` 还是调整发布策略；在此之前**不得**在发布说明里宣称可从 v1.5 自动更新到 v1.6。
+- 历史 `v1.5` Release 与其资产保留原样，不删除、不覆盖、不改写。
+
+### 5.2 Format version 变更
 
 - **1.5（当前）** 相对 1.4：
   - **根目录瘦身至 3 文件**：根只保留 `AGENTS.md`、`LICENSE.md`、`VERSION.md`（原 txt→md）；`README.md`→`docs/README.md`（GitHub 仍渲染仓库首页）、`ORCHESTRATION-PROJECT.md`→`docs/PROJECT.md`（配置权威，旧根位置 fail-closed）。
