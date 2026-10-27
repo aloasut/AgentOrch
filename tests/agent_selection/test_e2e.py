@@ -132,7 +132,9 @@ class StoreCase(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
-        self.root = Path(self._tmp.name)
+        # Resolve once: macOS `/var` and Windows short paths are symlinked or
+        # re-cased by the store, and comparing an unresolved root would fail.
+        self.root = Path(self._tmp.name).resolve()
 
     def make_scope(self, namespace=SCOPE_A, tty='/dev/pts/9'):
         resolution = scope.resolve_scope(
