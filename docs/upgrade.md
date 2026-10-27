@@ -581,7 +581,7 @@ python3 -m scripts.update_agentorch.entry --project . \
 
 | 已安装 Format | 自动更新是否可判定 | 本任务实测 | 真实已发布包 | 说明 |
 | --- | --- | --- | --- | --- |
-| `1.7`（当前） | 是 | 合成 / 单元：`tag_matches_format('v1.7.0','1.7')` 为真（`v1.7` 同），v1.7.0 目标包通过 `VERSION_MATCH` 与包校验；历史 `v1.6.x` tag 在 Format 1.7 下不匹配 | `NOT_RUN` | 当前 Format；真实 `v1.6.3 → 1.7.0` 下载与升级尚未执行，归发布后验证。入口按 `VERSION_MATCH` 接受 tag `v1.7.0`（major.minor = 1.7），再按单调性比较 **target release `1.7.0`** 与已安装 `format_version`（`1.6` 记作 `1.6.0`）：`1.7.0 > 1.6.0`，因此可判定升级；该判定只说明入口会处理，不等于升级已验证 |
+| `1.7`（当前） | 是 | 合成 / 单元：`tag_matches_format('v1.7.0','1.7')` 为真（`v1.7` 同），v1.7.0 目标包通过 `VERSION_MATCH` 与包校验；历史 `v1.6.x` tag 在 Format 1.7 下不匹配 | `PASS`（2026-10-27） | 当前 Format；真实 `v1.6.3 → 1.7.0` 隔离升级已于 2026-10-27 实测为 `APPLIED`（Format 1.6 → 1.7、`MANIFEST.json` files 92 → 117、117/117 包内文件逐字节一致、项目自有文件 SHA256 不变、备份 `verified=true`、head 前后不变），见 §14.6。入口按 `VERSION_MATCH` 接受 tag `v1.7.0`（major.minor = 1.7），再按单调性比较 **target release `1.7.0`** 与已安装 `format_version`（`1.6` 记作 `1.6.0`）：`1.7.0 > 1.6.0`，因此可判定升级；该判定只说明入口会处理，真实升级证据只覆盖 §14.6 那一次 |
 | `1.6`（历史） | 是 | 合成 / 单元：`tag_matches_format('v1.6.3','1.6')` 为真（`v1.6` / `v1.6.1` / `v1.6.2` 同），v1.6 目标包通过 `VERSION_MATCH` 与包校验 | `PASS`（2026-10-27，#113） | 历史 Format；真实 v1.6 包已下载并作为 v1.5 → 1.6 的目标包校验通过。入口按 `VERSION_MATCH` 接受 tag `v1.6.3`（major.minor = 1.6），再按单调性比较 **target release `1.6.3`** 与已安装 `format_version`（`1.6` 记作 `1.6.0`）：`1.6.3 > 1.6.0`，因此可判定升级。真实 `1.6.2` → `1.6.3` 隔离升级已于 2026-10-27 实测为 `APPLIED`（`MANIFEST.json` files 90 → 92、92/92 包内文件逐字节一致、项目自有文件 SHA256 不变、备份 `verified=true`、head 前后不变），见 §14.5；该结果只覆盖这一次升级，不延伸到未实测的旧版本 / 平台 |
 | `1.5` | 是 | 合成项目：`APPLIED`，项目自有文件逐字节不变 | `PASS`（2026-10-26，#71） | 真实 v1.5 Release 包（`agentorch-20261023.zip`）→ 真实 v1.6（`AgentOrch-1.6.zip`）：`APPLIED`，Format 1.5 → 1.6，项目自有文件逐字节不变；见 §14.2 |
 | `1.4` | 是 | 合成项目：`APPLIED`，根 `PLAN.md` 保持原样 | `NOT_RUN` | 未获取到真实已发布 1.4 资产（本仓库 Release 只有 v1.5 / v1.6，另有 v1.1 tag 但无 Release 资产）；合成目标为 v1.6，根计划按项目自有路径处理 |
@@ -589,7 +589,7 @@ python3 -m scripts.update_agentorch.entry --project . \
 | `1.1` / `1.2` | 否 | 无清单 → `STOPPED_INVALID_BASELINE`，零写入、零网络 | `NOT_RUN` | 无真实发布资产可获取；本轮只用真实 v1.5 包删除 `MANIFEST.json` 复现无基线停止（§14.3 第 1 行），不等于真实 1.1 / 1.2 包；登记基线见第 6 节 |
 | 清单损坏 / schema 不支持 | 否 | `STOPPED_INVALID_BASELINE` | `NOT_RUN` | 只读诊断 + 手工迁移（`HD-08`） |
 
-**上表的“本任务实测”只覆盖合成测试；“真实已发布包”一列只记录真实资产实测。** 2026-10-26，#71 在隔离项目上用真实 Release 补齐了 `1.5 → 1.6`、真实下载与网络 / 停止路径（§14.1–§14.3）；2026-10-27，#113 用真实资产补齐了 `1.6.2 → 1.6.3`（§14.5）。真实已发布 1.3 / 1.4 包仍为 `NOT_RUN`；签名校验为 `NOT_APPLICABLE`（各 Release 都只有一个 zip 资产，没有 `.sig` / `.asc` / checksum 附件）；未实测平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
+**上表的“本任务实测”只覆盖合成测试；“真实已发布包”一列只记录真实资产实测。** 2026-10-26，#71 在隔离项目上用真实 Release 补齐了 `1.5 → 1.6`、真实下载与网络 / 停止路径（§14.1–§14.3）；2026-10-27，#113 用真实资产补齐了 `1.6.2 → 1.6.3`（§14.5）；同日 #144 用真实资产补齐了 `1.6.3 → 1.7.0`（§14.6）。真实已发布 1.3 / 1.4 包仍为 `NOT_RUN`；签名校验为 `NOT_APPLICABLE`（各 Release 都只有一个 zip 资产，没有 `.sig` / `.asc` / checksum 附件）；未实测平台（大小写不敏感文件系统、Windows 路径、macOS）为 `UNKNOWN`。
 
 **Release 1.6.1（补丁）**：`1.6.0 → 1.6.1` 是**补丁升级，Format 不变**（仍为 `1.6`）；`tag_matches_format('v1.6.1', '1.6')` 为真，`v1.6.1` 仍满足 `VERSION_MATCH`。补丁内容是 #85 的下游包修复（已有 `docs/` 的项目可通过 `validate_kit` 与包内测试），不改变更新引擎的校验 / 分类 / 备份 / 回滚语义，也不改变 `MANIFEST.json` schema。真实 `v1.6.1` 下载与 `1.6.0 → 1.6.1` 升级为 `NOT_RUN`，归发布后验证；发布准备任务只证明构建、包内自检与 1.6.1 包的下游回归。
 
@@ -599,7 +599,7 @@ python3 -m scripts.update_agentorch.entry --project . \
 
 **Release 1.6 的版本对齐**：本轮把 `Format version` 与 release tag 都设为 `1.6`，`v1.6` 包通过包校验第 10 步 `VERSION_MATCH`，可被「更新 AgentOrch」接受（合成测试：`tests/update_agentorch/test_entry_release.py` 的 v1.5 基线 → v1.6 目标为 `APPLIED`，场景 B5 同）。**真实** v1.5 → v1.6 下载与升级已于 2026-10-26 实测（§14.2）：资产 SHA256 `bc0a64e3…` 与 Release 记录一致，结果为 `APPLIED`。真实已发布 1.3 / 1.4 包与以 1.6 为已安装基线的升级仍为 `NOT_RUN`；`1.6.0 → 1.6.1` 的补丁升级同样为 `NOT_RUN`。
 
-**Release 1.7.0**：`1.6.3 → 1.7.0` 是 **Format 1.6 → 1.7 的格式升级**，也是 Phase D 的功能发行；`tag_matches_format('v1.7.0', '1.7')` 为真（major.minor = 1.7），满足 `VERSION_MATCH`。把 Format 留在 `1.6` 会让 `v1.7.0` 因 major.minor 不一致被拒绝，因此本次同时升 Format。包内文件集合从 93 个（92 `REQUIRED` + `MANIFEST.json`）增至 118 个（117 + 1），新增的 25 个 `REQUIRED` 文件全部是 Phase D 的 `scripts/agent_selection/` 资产族与随包测试（`tests/agent_selection/`，含 E1–E13 端到端）；无移动 / 改名 / 删除，`MANIFEST.json` schema 1 不变。更新引擎的校验 / 分类 / 备份 / 回滚语义未改动，升级按“新增上游文件”处理，不需要手工搬迁。真实 `v1.6.3 → 1.7.0` 下载与隔离升级为 `NOT_RUN`，归发布后验证；真实 1.3 / 1.4 资产、真实 `1.6.0` / `1.6.1` → `1.6.2` 升级与真实断网 / 限速 / DNS 仍为 `NOT_RUN` / `UNKNOWN`，不因本版本改变。
+**Release 1.7.0**：`1.6.3 → 1.7.0` 是 **Format 1.6 → 1.7 的格式升级**，也是 Phase D 的功能发行；`tag_matches_format('v1.7.0', '1.7')` 为真（major.minor = 1.7），满足 `VERSION_MATCH`。把 Format 留在 `1.6` 会让 `v1.7.0` 因 major.minor 不一致被拒绝，因此本次同时升 Format。包内文件集合从 93 个（92 `REQUIRED` + `MANIFEST.json`）增至 118 个（117 + 1），新增的 25 个 `REQUIRED` 文件全部是 Phase D 的 `scripts/agent_selection/` 资产族与随包测试（`tests/agent_selection/`，含 E1–E13 端到端）；无移动 / 改名 / 删除，`MANIFEST.json` schema 1 不变。更新引擎的校验 / 分类 / 备份 / 回滚语义未改动，升级按“新增上游文件”处理，不需要手工搬迁。`v1.7.0` 已于 2026-10-27 发布（[Release v1.7.0](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.7.0)，tag `v1.7.0` → `ac3e87f`，资产 `AgentOrch-1.7.0.zip`，602,273 bytes，SHA256 `cbc35fcf…`，与 GitHub API `assets[].digest` 一致）；真实下载与 `1.6.3 → 1.7.0` 隔离升级为 `PASS`（`APPLIED`，Format 1.6 → 1.7、`MANIFEST.json` files 92 → 117、117/117 包内文件逐字节一致、项目自有文件 SHA256 不变、备份 `verified=true`、head 前后不变；§14.6）。真实 1.3 / 1.4 资产、真实 `1.6.0` / `1.6.1` → `1.6.2` 升级与真实断网 / 限速 / DNS 仍为 `NOT_RUN` / `UNKNOWN`，不因本版本改变。
 
 ### 13.4 冲突、删除与重命名
 
@@ -769,3 +769,23 @@ APPLY 后的可核对事实：
 - 升级后项目 `python3 scripts/validate_kit.py` 退出码 `0`（`tree mode downstream`）；项目内 `python3 -m unittest discover -s tests` 675 tests `OK`（skip 19）。
 
 本节只覆盖 `1.6.2 → 1.6.3` 这一次真实升级，不改写 §14.1–§14.4；真实 `1.6.0` / `1.6.1` → `1.6.2`、真实 1.3 / 1.4 资产、真实断网 / 限速 / DNS 与 `HD-11` 仍为 `NOT_RUN` / `UNKNOWN`，不得用本节结果替代。
+
+### 14.6 真实 v1.6.3 → v1.7.0 隔离升级（#144，2026-10-27 UTC）
+
+环境：Linux x86_64、Python 3.13.5、`github` 底座仓库检出（基线 `main@ac3e87f2840eb35e6c0e18205990ad38dbc282aa`）。升级对象是仓库外的隔离项目：解压真实 `AgentOrch-1.6.3.zip`（461,829 bytes，SHA256 `dcce5b242997ccac44ee1dea225ca13c2e9af6583dc6bca3d5bdc35acb046885`，`MANIFEST.json` files 92，Format 1.6）作为已安装基线，补项目自有 `docs/PROJECT.md`（`edition: local`）、`docs/PLAN.md` 与 `LOCAL-NOTES.md`，`git init` 并提交（fixture commit 只存在于临时项目，不进入本仓库）。目标为 [Release v1.7.0](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.7.0) 的资产 `AgentOrch-1.7.0.zip`（602,273 bytes，SHA256 `cbc35fcf5ddf2aa8c7c799e52c7f5fa83ec8943a7691e1053155cc85988a4c10`，与 GitHub API `assets[].digest` 一致）。升级命令从仓库检出运行，`--project` 指向临时项目：
+
+| # | 步骤 | 命令 | 退出码 | 结果 |
+| --- | --- | --- | --- | --- |
+| 1 | PLAN | `python3 -m scripts.update_agentorch.entry --project <tmp> --request "更新 AgentOrch" --mode PLAN` | `0` | `PLANNED`；基线 Format 1.6；目标 tag `v1.7.0`（报告版本 `1.7.0`）/ 资产 `AgentOrch-1.7.0.zip`；10 项包校验全 `PASS`；`UPSTREAM_UNCHANGED=37`、`ALREADY_CURRENT=81`、`PROJECT_OWNED=2`、`UNKNOWN_FILE=1`，冲突 / 删除 / 重命名均为 0 |
+| 2 | APPLY | `python3 -m scripts.update_agentorch.entry --project <tmp> --request "更新 AgentOrch" --mode APPLY` | `0` | `APPLIED`；写入 37 个文件（含 `MANIFEST.json` 与新增的 25 个 `REQUIRED` 文件），`ALREADY_CURRENT=81` |
+
+APPLY 后的可核对事实：
+
+- 项目根 `MANIFEST.json` 的 `format_version` 从 **1.6** 变为 **1.7**（Format 1.6 → 1.7），`files` 从 92 变为 **117**；
+- 117 / 117 包内文件与解压后的真实 v1.7.0 目标包逐字节相同（逐文件 sha256 比对，0 不匹配）；
+- 项目自有文件未被覆盖：`docs/PROJECT.md`、`docs/PLAN.md`（`PROJECT_OWNED`）与 `LOCAL-NOTES.md`（`UNKNOWN_FILE`）的 SHA256 前后一致；
+- 备份与回滚字段可定位：`backup.required=true`、`backup.verified=true`、`backup.location=/tmp/agentorch-update-backup-<随机后缀>`（项目外）、`backup.created_at` 有值；`rollback.required=false`、`result=NOT_NEEDED`；
+- `head_sha_before == head_sha_after`：引擎不提交、不合并，变更留在临时项目工作区，符合设计；
+- 升级后项目 `python3 scripts/validate_kit.py` 退出码 `0`（`tree mode downstream`，117 required）；包内 `python3 -m unittest discover -s tests` 968 tests `OK`（skip 19）。
+
+本节的命令与结果来自 2026-10-27 派发会话的真实运行记录（证据见 Issue #144）；记录发布后文档的同步任务未重跑该升级。本节只覆盖 `1.6.3 → 1.7.0` 这一次真实升级，不改写 §14.1–§14.5；真实 `1.6.0` / `1.6.1` → `1.6.2` 升级、真实 1.3 / 1.4 资产、真实断网 / 限速 / DNS、`HD-11` 与非 GitHub-hosted 平台仍为 `NOT_RUN` / `UNKNOWN`，不得用本节结果替代。
