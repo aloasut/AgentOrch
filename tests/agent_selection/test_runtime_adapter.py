@@ -155,9 +155,25 @@ class PathAndEvidenceHelperTests(unittest.TestCase):
         self.assertTrue(runtime_adapter.covers_command(('*',), 'python3'))
         self.assertFalse(runtime_adapter.covers_command((), 'python'))
 
-    def test_network_observation_must_not_contradict_the_scope(self):
+    def test_covers_command_ignores_blank_entries(self):
+        self.assertFalse(runtime_adapter.covers_command(('',), 'python'))
+        self.assertFalse(runtime_adapter.covers_command(('   ',), 'python'))
+        self.assertFalse(runtime_adapter.covers_command(('', '   '), 'python'))
+        self.assertTrue(runtime_adapter.covers_command(('*',), 'python3'))
+
+    def test_permission_scope_rejects_blank_command_entries(self):
+        for commands in (('',), ('   ',), ('python', '')):
+            with self.subTest(commands=commands):
+                with self.assertRaises(runtime_adapter.RuntimeAdapterError):
+                    runtime_adapter.PermissionScope(commands=commands)
+
+    def test_network_enabled_cannot_be_observed_off(self):
         with self.assertRaises(runtime_adapter.RuntimeAdapterError):
             runtime_adapter.PermissionScope(network=True, network_observed=False)
+
+    def test_network_disabled_cannot_be_observed_on(self):
+        with self.assertRaises(runtime_adapter.RuntimeAdapterError):
+            runtime_adapter.PermissionScope(network=False, network_observed=True)
 
     def test_evidence_age_uses_the_supplied_now(self):
         self.assertAlmostEqual(

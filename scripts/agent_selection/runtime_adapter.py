@@ -150,16 +150,20 @@ def _normalise_path(value):
 def covers_command(scope_commands, needed):
     """Whether one observed command permission covers *needed*.
 
-    Commands are exact names or an explicit ``*``; a prefix of a command name
-    is not treated as the command. This helper never grants a command that was
-    not observed.
+    Only an exact command name or the explicit wildcard ``*`` matches. Blank or
+    whitespace-only entries are ignored: an empty string is never a wildcard,
+    and this helper never grants a command that was not observed.
     """
     wanted = str(needed).strip()
     if not wanted:
         return False
     for allowed in scope_commands or ():
-        candidate = str(allowed).strip()
-        if candidate in ('', '*') or candidate == wanted:
+        if not isinstance(allowed, str):
+            continue
+        candidate = allowed.strip()
+        if not candidate:
+            continue
+        if candidate == '*' or candidate == wanted:
             return True
     return False
 
@@ -372,10 +376,17 @@ class PermissionScope:
         if self.network_observed not in (True, False, None):
             raise RuntimeAdapterError(
                 'network_observed must be True, False or None (unknown)')
-        if self.network and self.network_observed is False:
+        if self.network_observed is not None \
+                and bool(self.network) != bool(self.network_observed):
             raise RuntimeAdapterError(
-                'network access cannot be enabled while network_observed is '
-                'False')
+                'network_observed must agree with network: '
+                f'network={self.network!r}, '
+                f'network_observed={self.network_observed!r}')
+        for command in self.commands:
+            if not isinstance(command, str) or not command.strip():
+                raise RuntimeAdapterError(
+                    'command permissions must be non-empty strings; an empty '
+                    'entry is not a wildcard')
 
     def as_dict(self):
         return {
