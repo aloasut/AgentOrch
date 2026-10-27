@@ -58,7 +58,7 @@ Event vocabulary read by the report (unknown actions are ignored and counted, ne
 | `TASK_DISPATCHED` | Locks acquired, task handed to an execution instance | — |
 | `CHECK_RECORDED` | One validation / CI check result | `data.result` (`PASS` / `FAIL`), `data.kind`, `data.attempt` |
 | `ACCEPTANCE_RECORDED` | One acceptance criterion result | `data.ac_id`, `data.status` |
-| `CONFLICT_RECORDED` | A dispatch or lock conflict was refused | `data.kind` (`path` / `resource`), `data.resource_id` |
+| `CONFLICT_RECORDED` | A dispatch or lock conflict was refused | `data.kind` (`path` / `resource`), `data.resource_id`; a refused path also carries `data.conflicts[]` (`path` / `held_path` / `holder_task`, locating the conflict and the holder) |
 | `PATH_PREFLIGHT_REFUSED` | A `task ready` path preflight was refused; audit only, not counted by M4 | `data.kind` (`path`), `data.conflicts[]` |
 | `REGRESSION_REPORTED` | A defect traced back to a merged change | `data.merge_sha`, `data.severity` |
 | `APPROVAL_INVALIDATED` | Head changed after `APPROVED`; the approval no longer holds | — |
