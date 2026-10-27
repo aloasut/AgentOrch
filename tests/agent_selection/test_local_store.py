@@ -244,6 +244,21 @@ class CorruptAndMissingTests(StoreFixture):
         with self.assertRaises(local_store.StoreCorruptError):
             store.read_scope_metadata()
 
+    def test_readme_scope_id_mismatch_is_reported(self):
+        store = self.initialized()
+        path = self.doc(store, 'README.md')
+        path.write_text(path.read_text(encoding='utf-8').replace(
+            '- scope_id: `term-a`', '- scope_id: `term-b`'), encoding='utf-8')
+        with self.assertRaises(local_store.StoreCorruptError) as caught:
+            store.read_scope_metadata()
+        self.assertIn('does not match', str(caught.exception))
+        state = store.read_document('README.md')
+        self.assertEqual(state.status, 'UNKNOWN')
+        self.assertFalse(state.passing)
+        self.assertTrue(any('does not match' in issue for issue in state.issues))
+        with self.assertRaises(local_store.StoreCorruptError):
+            store.initialize(now=LATER)
+
 
 class WriteFailureTests(StoreFixture):
     def test_write_failure_is_reported_and_does_not_add_a_record(self):

@@ -40,6 +40,7 @@ __all__ = [
     'TERMINAL_SESSION_ENV_VARS',
     'NAMESPACE_ENV',
     'MAX_SCOPE_ID_LENGTH',
+    'MAX_SCOPE_ID_BYTES',
     'ScopeError',
     'ScopeIdentityError',
     'UnsafeScopeId',
@@ -76,6 +77,14 @@ TERMINAL_SESSION_ENV_VARS = (
 IDENTITY_ENV_VARS = RUNTIME_SESSION_ENV_VARS + TERMINAL_SESSION_ENV_VARS
 
 MAX_SCOPE_ID_LENGTH = 128
+# A directory name is limited to 255 bytes on ext4/APFS/NTFS. Stay below that
+# even when the id contains multi-byte characters; 200 leaves room for future
+# suffixes without silently depending on ASCII-only input.
+MAX_SCOPE_ID_BYTES = 200
+# Long explicit namespaces keep a short readable prefix and add the *full*
+# namespace digest, so truncation cannot collide two namespaces that share a
+# prefix. 40 chars * at most 4 UTF-8 bytes + the two 16-hex digests = 196 bytes.
+LONG_NAMESPACE_PREFIX_CHARS = 40
 _DIGEST_HEX = 16
 _SAFE_EXTRA = frozenset('._-')
 _UNSET = object()
@@ -179,7 +188,8 @@ def validate_scope_id(value: str) -> str:
 
     Rejections: absolute paths, path separators, ``..``, any whitespace,
     control / format characters, a leading dot / underscore, a trailing dot,
-    and names longer than :data:`MAX_SCOPE_ID_LENGTH`.
+    names longer than :data:`MAX_SCOPE_ID_LENGTH` characters, and names longer
+    than :data:`MAX_SCOPE_ID_BYTES` UTF-8 bytes.
     """
     if not isinstance(value, str):
         raise UnsafeScopeId('scope id must be a string')
@@ -198,6 +208,9 @@ def validate_scope_id(value: str) -> str:
     if len(value) > MAX_SCOPE_ID_LENGTH:
         raise UnsafeScopeId(
             f'scope id is longer than {MAX_SCOPE_ID_LENGTH} characters')
+    if len(value.encode('utf-8')) > MAX_SCOPE_ID_BYTES:
+        raise UnsafeScopeId(
+            f'scope id is longer than {MAX_SCOPE_ID_BYTES} UTF-8 bytes')
     if value.startswith(('/', '\\')):
         raise UnsafeScopeId('scope id must not be an absolute path')
     if len(value) >= 2 and value[1] == ':':
@@ -270,6 +283,26 @@ def _first_env(env, variables) -> tuple[str | None, str | None]:
     return None, None
 
 
+def _namespaced_scope_id(namespace: str, fingerprint: str) -> str:
+    """Scope id for ``namespace + identity`` that never exceeds the limits.
+
+    A short namespace keeps its natural ``<namespace>--<identity>`` form. A long
+    one keeps a readable prefix plus the *full* SHA-256 digest of the namespace,
+    so two namespaces sharing a long prefix never collide. The identity digest
+    is always appended, so the same namespace still separates two terminals.
+    """
+    suffix = fingerprint[:_DIGEST_HEX]
+    natural = f'{namespace}--{suffix}'
+    if (len(natural) <= MAX_SCOPE_ID_LENGTH
+            and len(natural.encode('utf-8')) <= MAX_SCOPE_ID_BYTES):
+        return natural
+    namespace_digest = hashlib.sha256(
+        b'agentorch-scope-namespace-v1\x00' + namespace.encode('utf-8')
+    ).hexdigest()[:_DIGEST_HEX]
+    prefix = namespace[:LONG_NAMESPACE_PREFIX_CHARS]
+    return f'{prefix}--{namespace_digest}--{suffix}'
+
+
 def resolve_scope(project_root=None, *, env=None, tty_name=_UNSET,
                   runtime_session_id=None, namespace=None,
                   namespace_claims=None) -> ScopeResolution:
@@ -339,9 +372,8 @@ def resolve_scope(project_root=None, *, env=None, tty_name=_UNSET,
     history_allowed = True
 
     if fingerprint is not None:
-        suffix = fingerprint[:_DIGEST_HEX]
         if namespace_value is not None:
-            scope_id = f'{namespace_value}--{suffix}'
+            scope_id = _namespaced_scope_id(namespace_value, fingerprint)
             mode = 'namespace+identity'
         else:
             kind = 'session' if all(c[0] == 'runtime-session' for c in components) \

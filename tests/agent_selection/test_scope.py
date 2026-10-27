@@ -5,6 +5,7 @@ explicitly, so no test needs a real terminal, a personal machine fact or a
 network connection. Filesystem cases use a throwaway temporary project root.
 """
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -67,6 +68,35 @@ class ScopeResolutionTests(unittest.TestCase):
         first = self.resolve(dict(env, AGENTORCH_RUNTIME_SESSION_ID='one'))
         second = self.resolve(dict(env, AGENTORCH_RUNTIME_SESSION_ID='two'))
         self.assertNotEqual(first.scope_id, second.scope_id)
+
+    def test_longest_explicit_namespace_with_identity_stays_within_limit(self):
+        namespace = 'x' * scope.MAX_SCOPE_ID_LENGTH
+        resolution = self.resolve({SCOPE_ENV: namespace}, tty_name='/dev/pts/1')
+        self.assertTrue(resolution.has_scope)
+        self.assertLessEqual(len(resolution.scope_id), scope.MAX_SCOPE_ID_LENGTH)
+        self.assertLessEqual(len(resolution.scope_id.encode('utf-8')),
+                             scope.MAX_SCOPE_ID_BYTES)
+        self.assertEqual(scope.validate_scope_id(resolution.scope_id),
+                         resolution.scope_id)
+        other_terminal = self.resolve({SCOPE_ENV: namespace}, tty_name='/dev/pts/2')
+        self.assertNotEqual(resolution.scope_id, other_terminal.scope_id)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = scope.scope_directory(tmp, resolution.scope_id)
+            expected_parent = (Path(tmp).resolve() / '.local' / 'agent-orch').resolve()
+            self.assertEqual(path.resolve().parent, expected_parent)
+
+    def test_long_namespaces_sharing_a_prefix_do_not_collide(self):
+        first = self.resolve(
+            {SCOPE_ENV: 'a' * (scope.MAX_SCOPE_ID_LENGTH - 1) + 'b'},
+            tty_name='/dev/pts/1')
+        second = self.resolve(
+            {SCOPE_ENV: 'a' * (scope.MAX_SCOPE_ID_LENGTH - 1) + 'c'},
+            tty_name='/dev/pts/1')
+        self.assertNotEqual(first.scope_id, second.scope_id)
+        # Both keep the same readable prefix; the full namespace digest is what
+        # prevents a truncation collision.
+        self.assertGreaterEqual(len(os.path.commonprefix(
+            [first.scope_id, second.scope_id])), 40)
 
     def test_runtime_session_alone_is_enough(self):
         resolution = self.resolve(

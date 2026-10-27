@@ -24,6 +24,15 @@ Guarantees:
 * a privacy scan refuses credential shapes, private-key headers and absolute
   terminal / home paths before anything is written.
 
+Two operational boundaries are explicit rather than automatic:
+
+* a lock file left by a crash is reported as :class:`StoreConflictError` and is
+  never reclaimed automatically (a human decides whether the old writer is
+  really gone);
+* ``_namespace-claims/`` is an internal Markdown index of which explicit
+  namespace has been used. It is not a scope directory and holds no selection
+  record for any scope.
+
 Standard library only. Tests always use a temporary project root; the real
 ``.local`` directory is never touched.
 """
@@ -628,7 +637,11 @@ class LocalStore:
                 issues=(f'{name}: not a regular file',))
         text = self._read_text(path)
         if name == DOC_README:
-            _meta, issues = _parse_scope_meta(text)
+            meta, issues = _parse_scope_meta(text)
+            if meta.get('scope_id') != self.scope_id:
+                issues.append(
+                    f'{DOC_README}: scope_id {meta.get("scope_id")!r} does not match '
+                    f'{self.scope_id!r}')
             if INDEX_START not in text or INDEX_END not in text:
                 issues.append(f'{DOC_README}: index block is missing')
             return DocumentState(
@@ -666,6 +679,10 @@ class LocalStore:
         meta, issues = _parse_scope_meta(self._read_text(self._doc_path(DOC_README)))
         if issues:
             raise StoreCorruptError('; '.join(issues))
+        if meta.get('scope_id') != self.scope_id:
+            raise StoreCorruptError(
+                f'{DOC_README}: scope_id {meta.get("scope_id")!r} does not match '
+                f'{self.scope_id!r}')
         return meta
 
     # --- appending ---------------------------------------------------------
