@@ -82,7 +82,18 @@
 - 运行时无法 introspect 宿主工具时，由 Master 自己核验并写进任务载体（`github`：Issue 评论或 PR 评论；`local`：任务记录）。**进程内 CLI 不能替代这一步**：`scripts/agent_selection/` 只读取被显式提供的事实，不能读取宿主 Agent 的工具列表，也不得声称已读取。
 - 无法核验的能力一律记 `UNKNOWN` 并按不可用处理；`UNKNOWN` / `STALE` 不得当作 `PASS`，也不得解锁自动派发（C1–C4 见 `kit/orchestration.md` 第二部分 §5）。
 
+### 角色选择（派发前，github）
+
 角色匹配（`scripts/agent_selection/` 的 adapter / discovery / roles 模块）只消费这些事实与既有 C1–C8 记录：发现不等于推荐，选择不等于派发。它不创建、不授权 Agent，不扩大任务允许路径；缺少合格 Execution / Reviewer 时按现有契约人工交接或保持未审查，不声称已派发。
+
+1. **先决 C1–C4**：按 `kit/orchestration.md` 第二部分 §5 的探测记录判断；任一项不是 `PASS`（含 `UNKNOWN` / `STALE` 或已过期），就停止自动派发并改走人工多会话交接。`github` 底座的登记块只在真实派发时写入。
+2. **只用实际工具事实**：模态、文件 / 命令 / 网络边界与真实 spawn / wait / collect 由 Master 自己核验并写进 Issue 评论；进程内 CLI 不读取宿主工具列表。
+3. **Scope 与记录**：只使用当前终端 / 会话的 scope；解析失败或本地写入失败时明确报告“记录未落盘”，不回退共享目录，也不读其他 scope 的能力结论。
+4. **发现与匹配**：优先运行时正式枚举，其次读当前 scope 的 `agent-registry.md`；两者都没有时报 `NO_ADAPTER` / `EMPTY`，不虚构 Agent。
+5. **可选数据**：S3 模型数据与 S4 本机反馈都是可选项；不可用、过期或样本不足时如实标 `BLOCKED` / `UNKNOWN` / `STALE`，不阻断基础治理。
+6. **准确报告缺口**：缺角色、不能真实 spawn / wait / collect、模型数据过期、无合格候选或 scope 无法隔离时，在 Issue 评论写出**具体原因与降级方案**；`UNKNOWN` / `NOT_RUN` / `BLOCKED` 不得写成 `PASS`，也不得把“提示用户创建角色”与“运行时无法启动角色”混成同一种错误。
+
+选择报告只是建议：不是派发凭据、不是验收证据、不是权限授予。派发仍按本文件“任务生命周期”取得登记块并通过开放 PR 路径检查。
 
 ## 任务生命周期
 

@@ -488,6 +488,30 @@ class AgentSelectionAssetTests(unittest.TestCase):
             self.assertNotIn(forbidden, source, f'{feedback.__name__}: '
                              f'{forbidden} is outside the offline feedback store')
 
+    def test_end_to_end_selection_test_ships_and_is_registered(self):
+        """S5's composed regression runs inside the release package too."""
+        self.assertIn('tests/agent_selection/test_e2e.py', validate.REQUIRED)
+        self.assertIn('scripts/run_delivery_scenarios.py', validate.REQUIRED)
+        package = ROOT / 'tests' / 'agent_selection' / '__init__.py'
+        self.assertIn("'test_e2e'", package.read_text(encoding='utf-8'))
+
+    def test_scenario_registry_declares_the_agent_selection_group(self):
+        """The S5 scenarios are registered as their own group with both kinds."""
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            's5_scenario_registry',
+            ROOT / 'scripts' / 'run_delivery_scenarios.py')
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        group = [item for item in module.SCENARIOS if item.group == 'E']
+        self.assertGreaterEqual(len(group), 13)
+        self.assertTrue(any(item.kind == 'positive' for item in group))
+        self.assertTrue(any(item.kind == 'negative' for item in group))
+        self.assertIn('E', module.GROUPS)
+
 
 class ContractTemplateTests(unittest.TestCase):
     """The reusable contract templates are structure-checked, not trusted.

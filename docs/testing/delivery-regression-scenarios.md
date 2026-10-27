@@ -12,6 +12,7 @@
 - 证明**自我完善闭环的治理门**在真实管线（`scripts/self_improvement/`）上生效：有合成来源证据的经验要经过验证、重新分类与泛化才能形成任务；来源不可达 / 无权限、提示词注入、重复、冲突、未验证缺陷与硬风险都会在计划或登记之前停下。规则见 [self-improvement-loop.md](../self-improvement/self-improvement-loop.md) 与 [sources-and-trust.md](../self-improvement/sources-and-trust.md)；本文件只列场景。
 - 证明**安全更新引擎**（`scripts/update_agentorch/`）在旧版升级、双边冲突、坏清单、路径穿越、未知文件、上游删除、旧版无基线、未提交改动、半更新与回滚失败时要么安全应用、要么零写入停止，并留下可定位报告。语义见 [update-safety.md](../self-improvement/update-safety.md)；本文件只列场景。
 - 证明**交付指标报告**不把空输入算成 0、不把缺事件算成零时长、不给每行丢掉样本量 / 窗口 / 缺失率，也不凭空发明“耦合度 / 内聚度”分数。口径只在 [templates/metrics.md](../../templates/metrics.md)；本文件只验证报告行为。
+- 证明 **Phase D 角色选择链路**（S5）把 S1 scope / Markdown 记录、S2 发现与角色匹配、S3 可选模型数据、S4 本机反馈真正串起来时仍然：C1–C4 未通过就停、缺角色 / Reviewer 就停、外部数据过期或不可用不冒充最新、scope 不隔离或写入失败如实报告、任何选择都不会被读成“已派发”。规则见 [agent-role-discovery-and-model-selection.md](../design/agent-role-discovery-and-model-selection.md) §10–§13 与 [kit/orchestration.md](../../kit/orchestration.md) 第一部分的角色选择入口；本文件只列场景。
 - 给“该失败的地方失败了”留下可复现的证据：每条场景都输出实际断言值与拦截文本。
 - 供套件重大变更时回归：改核心契约、`validate_kit.py`、模板、锁/状态机或发行流程后，必须重跑。
 
@@ -25,6 +26,7 @@
 | B 迁移 / 版本 | 旧格式升级、幂等重跑、半迁移、版本混用；安全更新：干净升级、双边冲突、坏清单、路径穿越、未知文件、上游删除、无基线、未提交改动、半更新、回滚失败 | B1 正向；B2–B4 负向；B5 正向；B6–B14 负向 |
 | C 跨模块闭环 | 冻结规则接线、所有权、事件屏障、非断言异常；共享状态调用点、回滚完整性、锁生命周期、部分提交、吞错；架构契约对齐（适配器隔离、单一应用服务、证据标签、终局语义、能力声明、依赖方向与循环） | C1 正向；C2–C5 负向；C6 正向；C7–C11 负向；C12 正向；C13–C17 负向；C18 正向；C19 正向；C20 负向 |
 | D 编排底座 | edition、资源锁、旧 head、修复轮数、阶段收口；指标诚实性（窗口 / 样本 / 缺失 / 覆盖，空输入不等于 0，不发明分数） | D1 正向；D2–D7 负向（D6 含正向子表）；D8 正向；D9 负向 |
+| E 角色选择链路 | S1 scope / 本地记录、S2 发现与角色匹配、S3 可选模型数据、S4 本机反馈的端到端组合；C1–C4 门、缺角色、Reviewer 同模型、模态、外部数据不可用 / 过期、预算、scope 隔离与写入失败 | E1 正向；E2–E13 负向 |
 
 判定口径只有三种结果，不允许“部分通过”：
 
@@ -98,6 +100,19 @@
 | C20 | C | 负向 | 模块间互相 `import` | 依赖循环被当成可接受结构 | `NO_CYCLE`：阻断 `ERROR`，点名两个模块、循环路径与具体文件 / 行 | 报告 blocking / counts、循环命中 modules / message / file / line；沙箱删除 |
 | D8 | D | 正向 | `templates/metrics.md` 内固定的金样本 | 无（控制组） | 指标诚实性：七项指标、每行都有 sample / eligible / missing / missing_rate / coverage、窗口显式，且不发明耦合 / 内聚分数 | metric 行、window、summary coverage、人类输出、被禁分数词；纯内存 |
 | D9 | D | 负向 | 空事件文件；以及只有 `READY`、没有 `VERIFIED` 的任务 | 空输入被算成 0；缺事件被算成零时长 | 指标诚实性：每项 `no_data`、value `null`、coverage `0.0`；`READY`-only 任务使 M1 为 `partial`、sample 0 / missing 1、value `null` | 指标状态 / 值 / coverage、headline、M1 detail；临时事件文件随沙箱删除 |
+| E1 | E | 正向 | 一个已初始化的 scope，`agent-registry.md` 列出 Master / Execution / 独立 Reviewer；一份固定合成模型快照 | 无（控制组） | S1–S4 串联：C1–C4 `PASS`、scope 隔离、注册表发现、硬筛选先于外部排序、Reviewer 独立、本机反馈只作建议；报告保持 `executed=False`，选择不是派发 | gate / scope ID、发现结果与候选、选中的 Agent / 模型、来源状态 / 新鲜度 / 索引版本、反馈指标与样本 / coverage、`selection-history.md` 的 `executed=false`、scope 目录清单；沙箱删除 |
+| E2 | E | 负向 | `PARTIAL` 能力记录且 C1 为 `UNKNOWN` | 未探测的 spawn 能力被当作可用 | C1–C4 门：`callable` 保持 `UNKNOWN`，没有角色被选中，任务人工交接，自动派发关闭；选择模块里不存在 spawn API | gate 状态 / 原因、Execution 选择 / 交接、callable 过滤、降级说明；沙箱删除 |
+| E3 | E | 负向 | 一份 C4 `FAIL` 记录，一份探针超过新鲜度窗口的记录 | 失败或过期的能力解锁自动派发 | C1–C4 门：两种情况都 `BLOCKED`（过期一种带 stale），没有角色被选中，自动派发关闭 | gate 状态 / stale 标志 / 原因、选择结果、automatic 标志；沙箱删除 |
+| E4 | E | 负向 | 发现结果只有 Master 与 Reviewer | 选择器虚构或自动派发 Execution | 角色匹配：Execution `selected=None`、人工交接并给出注册指引，任务保持未派发，自动派发关闭 | Execution 选择、提醒文本、降级清单；沙箱删除 |
+| E5 | E | 负向 | 发现结果只有 Master 与 Execution | 用执行者自审替代独立 Reviewer | 角色匹配：Reviewer `selected=None`、交接，提醒写明自审不可替代，任务保持未审查，自动派发关闭 | Reviewer 选择 / 提醒、降级清单；沙箱删除 |
+| E6 | E | 负向 | Reviewer 候选的模型 ID 与已选 Execution 相同 | 高外部评分让同一底层模型被当成“独立” | 独立性硬筛选：同模型 ID 判 `FAIL`，不选 Reviewer，Reviewer 维度保持 `UNKNOWN`，自动选择被扣住 | 被排除候选的过滤结果、independence 详情、评估信号、automatic 标志；沙箱删除 |
+| E7 | E | 负向 | 只能接收文本的 Master 候选，其余证据有效 | 纯文本 Master 满足多模态硬要求 | 模态硬筛选：`FAIL` 并点名缺少 image，不选 Master，自动派发关闭 | modality 状态 / 详情、Master 选择、降级说明；沙箱删除 |
+| E8 | E | 负向 | 同一批候选上 `AUTH_FAILED` 的抓取与过期的 `STALE_CACHE` | 失败或过期的数据被当成最新证据，或反过来阻断治理 | 来源诚实性：评估为 `UNLINKED` / `STALE` 且等级全 `UNKNOWN`；S2 选择仍成立；要求新鲜数据的策略扣住自动选择 | 抓取状态 / live / freshness、评估、降级、策略决策；纯内存批次，沙箱删除 |
+| E9 | E | 负向 | Execution 候选成本高于任务成本上限 | 强候选越过预算硬限制被选中 | 预算硬筛选：`FAIL` 写明上限与实际成本，不选 Execution，自动派发关闭 | budget 过滤详情、选择结果、automatic 标志；沙箱删除 |
+| E10 | E | 负向 | 没有会话 / TTY / 命名空间的项目根；随后两个不同 scope | 解析器回退共享目录，或记录跨 scope 写入 | scope 隔离：解析失败关闭且不建目录；跨 scope 记录被拒，两个 store 都没有记录 | 解析字段、`open_store` 拒绝、scope ID、每 scope 记录数、目录清单；沙箱删除 |
+| E11 | E | 负向 | 一个已初始化 scope，原子替换失败 | 失败的反馈 / 选择写入被报告成完整审计链 | 写入诚实性：`FeedbackWriteError` 说明记录未写入，两份文档都保持 0 条记录 | 两条拒绝消息、记录计数；沙箱删除 |
+| E12 | E | 负向 | 一个不满足工具 / 权限的候选，以及一次空发现 | 从零合格候选里静默选出一个角色 | 角色匹配：三个角色全部 `selected=None` 且交接，报告写明没有候选通过全部硬筛选，自动派发关闭 | 三个角色选择、原因、降级、空发现结果；沙箱删除 |
+| E13 | E | 负向 | 无 spawn + 缺 Reviewer + 模型数据过期 + 跨 scope + 写入失败同时出现 | 把零散证据拼成“已派发 / 已通过”的结论 | 选择器停止：Execution 与 Reviewer 均为 `None` 且交接，降级说明点名缺 Execution / Reviewer 与过期来源；跨 scope 记录被拒，失败写入如实报告 | 降级清单、角色选择、scope 错误、记录计数、executed 标志；沙箱删除 |
 
 ## 4. 运行方式
 
@@ -135,6 +150,7 @@ python scripts/run_delivery_scenarios.py --list
 - 自我完善 fixture 使用虚构的下游仓库、虚构的 PR / commit / CI 记录与 `_SyntheticGh`（回答真实收集器构造的同一组 `gh api` argv）；`scripts/self_improvement/` 的来源注册、收集、去重、生命周期、规划与闭环代码都是**真实模块**，没有网络、没有令牌、没有第三方模型。
 - 更新 fixture 在沙箱内构造合成旧项目树与合成 v1.6 发行 zip，`scripts/update_agentorch/` 的包校验、分类、备份、回滚与报告代码都是**真实模块**；`_UpdateSource` 只在内存中提供 release 记录与字节，调用计数用于证明没有网络。
 - 指标 fixture 直接读取 `templates/metrics.md` 内嵌的金样本，并额外写一个空事件文件；不访问任务库、不读取任务备注或提示词正文。
+- 角色选择 fixture（E 组）在沙箱内建临时项目根与一个初始化 scope，`agent-registry.md`、`observed-performance.md` 与 `selection-history.md` 都由**真实 S1 store** 写入；发现使用内存中的固定 adapter 或该 scope 的注册表，模型数据是内存里的 `SnapshotBatch`，`UNKNOWN` / `STALE` / `AUTH_FAILED` 由真实 S3 判定，不访问网络、不需要 API Key，也不读真实 `.local`。没有任何场景在运行时真正 spawn 子代理。
 - 需要 git 的只有 B12（隔离 worktree）；`git init` / `commit` / `worktree` 都在场景沙箱内执行，`GIT_CONFIG_NOSYSTEM=1`、`GIT_TERMINAL_PROMPT=0`，不读写真实仓库。
 - 同一个场景重复运行得到同样的判定与摘要（迁移摘要由内容决定，不写时间戳）。
 
@@ -155,6 +171,7 @@ python scripts/run_delivery_scenarios.py --list
 | 自我完善来源治理 / 去重 / 冲突 / 风险门 | 离线可验证（A8–A15，来源为合成替身） | 同一套模块与判定；Issue / PR 载体由合成载体代替，**真实 gh 权限与写操作未运行** |
 | 安全更新引擎（校验 / 分类 / 备份 / 回滚） | 离线可验证（B5–B14，release 为内存替身） | 同一引擎；真实 GitHub Releases 下载、平台保护与合并后重验**未运行** |
 | 交付指标报告 | 离线可验证（D8–D9，金样本与空输入） | 同一脚本；`github` 事件尚未接入真实时间线 |
+| 角色选择链路（scope / 发现 / 模型数据 / 反馈） | 离线可验证（E1–E13，内存 adapter 与固定快照） | 同一套模块与判定；`github` 的 Issue / PR 载体只作为外部记录，选型记录仍只写本机 scope，**真实 spawn 与真实模型 API 未运行** |
 | Issue / PR / CI 端到端 | 不适用 | **`BLOCKED`：本次未运行**，需真实仓库权限与 Actions |
 
 ## 8. 未验证范围
@@ -166,6 +183,7 @@ python scripts/run_delivery_scenarios.py --list
 - 并发与崩溃恢复的真实时序：资源锁的原子性只在 `local` 单机语义内被验证，跨主机或网络文件系统不在范围内。
 - 架构契约的**语义项**：Mock 与真实运行的边界（C15 只验证标注规则会拒绝越级声明，没有跑任何真实运行时）、入口行为一致性（C14 只比较合成入口的决策结果）、终局可区分性（C16 是合成模型，真实运行时终局仍需 C1–C4 探测）、能力证据真伪（C17 只能判断结构完整性与是否越级）。这些项必须由契约测试与 Reviewer 判定，见 [agentmgr-contract-rules.md](../architecture/agentmgr-contract-rules.md)。
 - 运行时能力 C1–C4：本运行器不探测真实 Agent 运行时，能力登记仍以 [templates/runtime-capability.md](../../templates/runtime-capability.md) 的实际探测为准。
+- **角色选择链路**：E 组使用合成 Runtime、固定模型快照与临时 scope，只证明 S1–S4 组合后的判定与降级语义；它不证明任何真实 Runtime 的 spawn / wait / collect 可用、不证明外部模型 API 可达、不调用任何模型，也不代表任何真实 Agent 已被选中或派发。真实选型仍须由 Master 按 C1–C4 探测与当前 scope 的记录完成。
 - **模型 / 外部服务**：自我完善场景不调用任何模型 API、不使用真实密钥；真实来源仓库的私有数据、真实 Issue / PR 写入、真实 GitHub Releases 下载都没有运行，标 `NOT_RUN` / `BLOCKED`。
 - **Windows / macOS**：本轮的场景只在 Linux + Python 3.13 上真实执行；其他平台标 `UNKNOWN`，不得据 Linux 结果推断。
 - **指标趋势**：金样本与空输入只证明报告口径；样本量不足以支持任何跨窗口趋势结论，未采集的事件类型仍为 `unknown`。
