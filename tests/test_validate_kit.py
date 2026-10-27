@@ -371,12 +371,12 @@ class PlanLayerSplitTests(unittest.TestCase):
 
 
 class AgentSelectionAssetTests(unittest.TestCase):
-    """Phase D S1 / S2 / S3 ship their modules and tests.
+    """Phase D S1 / S2 / S3 / S4 ship their modules and tests.
 
     Every module is pure standard library and reads no ``docs/`` file, so it
     can be REQUIRED (and therefore packaged) rather than repository-only. S3
     may import ``urllib`` only in the optional online adapter; the role
-    selector itself stays offline.
+    selector and the S4 feedback store stay offline.
     """
 
     FILES = (
@@ -387,6 +387,7 @@ class AgentSelectionAssetTests(unittest.TestCase):
         'scripts/agent_selection/discovery.py',
         'scripts/agent_selection/roles.py',
         'scripts/agent_selection/model_selection.py',
+        'scripts/agent_selection/feedback.py',
         'scripts/agent_selection/model_sources/__init__.py',
         'scripts/agent_selection/model_sources/snapshot.py',
         'scripts/agent_selection/model_sources/artificial_analysis.py',
@@ -398,6 +399,7 @@ class AgentSelectionAssetTests(unittest.TestCase):
         'tests/agent_selection/test_discovery.py',
         'tests/agent_selection/test_roles.py',
         'tests/agent_selection/test_model_selection.py',
+        'tests/agent_selection/test_feedback.py',
         'tests/agent_selection/model_sources/__init__.py',
         'tests/agent_selection/model_sources/fixtures.py',
         'tests/agent_selection/model_sources/test_snapshot.py',
@@ -466,6 +468,25 @@ class AgentSelectionAssetTests(unittest.TestCase):
                              'the adapter must stay standard-library only')
         self.assertIn('select_roles', Path(
             model_selection.__file__).read_text(encoding='utf-8'))
+
+    def test_feedback_module_is_required_and_stays_advisory(self):
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from scripts.agent_selection import feedback, local_store, roles
+        self.assertIn('scripts/agent_selection/feedback.py', validate.REQUIRED)
+        self.assertIn('tests/agent_selection/test_feedback.py', validate.REQUIRED)
+        self.assertIn(feedback.FEEDBACK_DOCUMENT, local_store.DOCUMENTS)
+        self.assertEqual(set(feedback.METRICS_BY_ROLE), set(roles.ROLES))
+        self.assertEqual(feedback.EVIDENCE_KINDS[0], 'task_record')
+        for kind in ('chat_memory', 'self_assessment', 'merge_record', 'ci_result'):
+            self.assertIn(kind, feedback.INSUFFICIENT_EVIDENCE_KINDS)
+        source = Path(feedback.__file__).read_text(encoding='utf-8')
+        self.assertIn('applied_automatically', source)
+        self.assertIn('changes_configuration', source)
+        for forbidden in ('import urllib', 'import http', 'requests.',
+                          'import socket', 'scripts.orchestrator'):
+            self.assertNotIn(forbidden, source, f'{feedback.__name__}: '
+                             f'{forbidden} is outside the offline feedback store')
 
 
 class ContractTemplateTests(unittest.TestCase):

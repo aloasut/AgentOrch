@@ -43,6 +43,7 @@
 - **本机记录隔离（Phase D）**：每个终端 / Agent 会话解析独立的 scope，选型与能力记录只以 Markdown 保存在 `.local/agent-orch/<scope-id>/`，不入 Git、不进发行包；无法可靠识别 scope 时安全失败，不回退共享目录。
 - **角色发现与匹配（Phase D S2）**：优先使用运行时正式枚举，无法枚举时读取显式注册表；按硬筛选（可调用性、模态、工具、权限、Reviewer 独立性）后接可解释排序，给出 Master / Execution / Reviewer 建议。能力 `UNKNOWN` / `STALE` 或缺少角色时降级人工交接，不自动创建或授权 Agent，选择不等于派发。
 - **模型评测与角色专项选型（Phase D S3）**：可选接入 Artificial Analysis 官方 Data API，把官方返回映射为带来源、索引版本、查询时间与新鲜度的供应商无关快照；外部数据只在 S2 硬筛选之后补充角色相关证据与排序。API Key 只从受保护环境变量读取，离线时基础治理不受影响；Reviewer 没有专项证据时标 `UNKNOWN`，不用通用总分冒充。
+- **本机角色表现反馈与可解释校准（Phase D S4）**：把 Master / Execution / Reviewer 在**当前 scope** 内的真实任务表现（任务类别、首次验收、返工轮次、合并后回归缺陷、真实可采集的耗时 / 成本；Reviewer 的确认问题、误报与需要独立对照的漏报；Master 的计划遗漏与拆分返工）追加记录到 `.local/agent-orch/<scope-id>/observed-performance.md`。报告只给可解释建议：每项指标带样本量、窗口、任务类别、缺失值与 coverage；样本不足、模型 / Runtime 身份变化或证据过期时标 `UNKNOWN` / `STALE` 且不排名；不自动改提示词、权限或模型配置，也不把聊天记忆、自评、合并成功或 CI 绿灯当质量证据。
 
 ## 两种协作底座
 
