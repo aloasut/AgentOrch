@@ -149,7 +149,7 @@
   - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
 - 历史 `v1.6.1`、`v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
 
-### 5.1.3 发行记录：Release 1.6.3（补丁）
+### 5.1.3 发行记录：Release 1.6.3
 
 - tag：`v1.6.3`；资产：`AgentOrch-1.6.3.zip`（顶层目录 `AgentOrch-1.6.3/`）；`Format version`：`1.6`（包内 `MANIFEST.json` 的 `format_version` 也是 `1.6`）。
 - 这是 **1.6.2 的补丁发行**，不是 Format 变更：`VERSION.md` 只改 `Release version`，`Format version` 保持 `1.6`；`MANIFEST.json` schema 1 与 `format_version` 均不变。`tag_matches_format('v1.6.3', '1.6')` 为真，`v1.6.3` 仍满足更新引擎的 `VERSION_MATCH`（major.minor = 1.6）。
