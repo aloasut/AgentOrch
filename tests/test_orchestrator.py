@@ -145,6 +145,41 @@ class LocalOrchestratorTests(unittest.TestCase):
             self.assertEqual(hit,1)
         finally: con.close()
 
+    # Gate C: VERIFIED cannot be reached without an audit note.
+    def test_verified_requires_audit_note(self):
+        head='f'*40
+        self.drive_to_approved('TASK-0109','src/',head)
+        self.advance('TASK-0109','MERGED',merge_sha='9'*40)
+        class A: pass
+        a=A(); a.id='TASK-0109'; a.status='VERIFIED'; a.head_sha=None; a.merge_sha=None; a.note=''
+        with self.assertRaises(RuntimeError) as cm: orch.task_status(self.root,a)
+        self.assertIn('VERIFIED requires an audit note',str(cm.exception))
+        con=orch.connect(self.root)
+        try: self.assertEqual(con.execute('SELECT status FROM tasks WHERE id=?',('TASK-0109',)).fetchone()['status'],'MERGED')
+        finally: con.close()
+
+    # Gate C: an illegal transition is refused and the audit trail is left intact.
+    def test_illegal_task_transition_is_refused_and_events_are_kept(self):
+        head='1'*40
+        self.drive_to_approved('TASK-0110','src/',head)
+        self.advance('TASK-0110','MERGED',merge_sha='2'*40)
+        before=self.count('SELECT COUNT(*) FROM events WHERE task_id=?',('TASK-0110',))
+        class A: pass
+        a=A(); a.id='TASK-0110'; a.status='MERGED'; a.head_sha=None; a.merge_sha='3'*40; a.note='illegal back'
+        with self.assertRaises(RuntimeError) as cm: orch.task_status(self.root,a)
+        self.assertIn('illegal transition MERGED -> MERGED',str(cm.exception))
+        self.assertEqual(self.count('SELECT COUNT(*) FROM events WHERE task_id=?',('TASK-0110',)),before)
+        con=orch.connect(self.root)
+        try:
+            row=con.execute('SELECT status,merged_sha FROM tasks WHERE id=?',('TASK-0110',)).fetchone()
+            self.assertEqual(row['status'],'MERGED')
+            self.assertEqual(row['merged_sha'],'2'*40)
+            actions=[r['action'] for r in con.execute('SELECT action FROM events WHERE task_id=? ORDER BY id',('TASK-0110',))]
+        finally: con.close()
+        self.assertEqual(actions.count('TASK_CREATED'),1)
+        self.assertEqual(actions.count('TASK_DISPATCHED'),1)
+        self.assertEqual(actions.count('STATUS_CHANGED'),6)
+
     # Gate B: FAILED keeps the lock; only an explicit reasoned unlock releases it.
     def test_failed_keeps_lock_and_force_unlock(self):
         self.add('TASK-0105',['src/app.py']); orch.task_ready(self.root,'TASK-0105'); orch.task_dispatch(self.root,'TASK-0105')
@@ -1259,6 +1294,120 @@ class ResourceLifecycleOnStatusTests(unittest.TestCase):
             actions = [r[0] for r in con.execute("SELECT action FROM events WHERE task_id='TASK-ONLY'")]
             self.assertEqual(actions.count('LOCKS_RELEASED'), 1)
         finally: con.close()
+
+
+class TaskAddRepeatableOptionTests(unittest.TestCase):
+    """Issue #93: repeating a multi-value option must merge, not overwrite.
+
+    The defect lived in argparse (`nargs` with the default `store` action), so
+    these tests drive the real CLI entry point instead of calling task_add().
+    """
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
+        (self.root / 'docs').mkdir(parents=True, exist_ok=True)
+        (self.root / 'docs' / 'PROJECT.md').write_text(
+            '# Project\n\n## 运行配置\n\n- `edition`：`local`\n', encoding='utf-8')
+        with contextlib.redirect_stdout(io.StringIO()): orch.init(self.root)
+
+    def tearDown(self): self.tmp.cleanup()
+
+    def cli(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(sys, 'argv', ['orchestrator.py', '--root', str(self.root), *argv]):
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                code = orch.main()
+        return code, out.getvalue(), err.getvalue()
+
+    def add(self, tid, *extra):
+        return self.cli('task', 'add', '--id', tid, '--title', tid, *extra)
+
+    def row(self, tid):
+        con = orch.connect(self.root)
+        try: return con.execute('SELECT * FROM tasks WHERE id=?', (tid,)).fetchone()
+        finally: con.close()
+
+    def show(self, tid):
+        code, out, err = self.cli('task', 'show', tid)
+        self.assertEqual(code, 0, err)
+        return out
+
+    def test_repeated_acceptance_keeps_every_criterion_in_order(self):
+        code, out, err = self.add('TASK-9301', '--paths', 'src/',
+                                  '--acceptance', 'AC-1: first', '--acceptance', 'AC-2: second')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(self.row('TASK-9301')['acceptance_json']),
+                         ['AC-1: first', 'AC-2: second'])
+        shown = self.show('TASK-9301')
+        self.assertIn('- [ ] AC-1: first', shown)
+        self.assertIn('- [ ] AC-2: second', shown)
+        self.assertLess(shown.index('AC-1: first'), shown.index('AC-2: second'))
+
+    def test_single_acceptance_occurrence_with_multiple_values_still_works(self):
+        code, out, err = self.add('TASK-9302', '--paths', 'src/', '--acceptance', 'AC-1', 'AC-2')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(self.row('TASK-9302')['acceptance_json']), ['AC-1', 'AC-2'])
+
+    def test_dispatch_keeps_every_acceptance_in_the_task_packet(self):
+        code, out, err = self.add('TASK-9303', '--paths', 'src/',
+                                  '--acceptance', 'AC-1: first', '--acceptance', 'AC-2: second')
+        self.assertEqual(code, 0, err)
+        for cmd in (('task', 'ready', 'TASK-9303'), ('task', 'dispatch', 'TASK-9303')):
+            code, out, err = self.cli(*cmd)
+            self.assertEqual(code, 0, err)
+        shown = self.show('TASK-9303')
+        self.assertIn('Status: DISPATCHED', shown)
+        self.assertIn('- [ ] AC-1: first', shown)
+        self.assertIn('- [ ] AC-2: second', shown)
+
+    def test_repeated_paths_are_merged_sorted_and_deduplicated(self):
+        code, out, err = self.add('TASK-9304', '--paths', 'tests/', '--paths', 'src/', '--paths', 'src/',
+                                  '--acceptance', 'AC-1')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(self.row('TASK-9304')['paths_json']), ['src', 'tests'])
+
+    def test_single_paths_occurrence_with_multiple_values_still_works(self):
+        code, out, err = self.add('TASK-9305', '--paths', 'tests/', 'src/', '--acceptance', 'AC-1')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(self.row('TASK-9305')['paths_json']), ['src', 'tests'])
+
+    def test_invalid_path_is_still_rejected(self):
+        code, out, err = self.add('TASK-9306', '--paths', 'src/', '--paths', '../secret', '--acceptance', 'AC-1')
+        self.assertEqual(code, 1)
+        self.assertIn('invalid relative path', err)
+        self.assertIsNone(self.row('TASK-9306'))
+
+    def test_repeated_depends_keeps_every_dependency(self):
+        for dep in ('TASK-9307-A', 'TASK-9307-B'):
+            code, out, err = self.add(dep, '--paths', dep.lower() + '/', '--acceptance', 'AC-1')
+            self.assertEqual(code, 0, err)
+        code, out, err = self.add('TASK-9307', '--paths', 'src/', '--acceptance', 'AC-1',
+                                  '--depends', 'TASK-9307-B', '--depends', 'TASK-9307-A')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(self.row('TASK-9307')['depends_json']),
+                         ['TASK-9307-A', 'TASK-9307-B'])
+
+    def test_repeated_resources_keeps_every_declaration(self):
+        code, out, err = self.add('TASK-9308', '--paths', 'src/', '--acceptance', 'AC-1',
+                                  '--resources', 'db:issue93/a:shared', '--resources', 'db:issue93/b:exclusive')
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(self.row('TASK-9308')['resources_json']),
+                         ['db:issue93/a:shared', 'db:issue93/b:exclusive'])
+
+    def test_invalid_resource_is_still_rejected(self):
+        code, out, err = self.add('TASK-9309', '--paths', 'src/', '--acceptance', 'AC-1',
+                                  '--resources', 'db:issue93/a:shared', '--resources', 'DB:Issue93/B:shared')
+        self.assertEqual(code, 1)
+        self.assertIn('uppercase', err)
+        self.assertIsNone(self.row('TASK-9309'))
+
+    def test_empty_depends_and_resources_stay_empty(self):
+        code, out, err = self.add('TASK-9310', '--paths', 'src/', '--acceptance', 'AC-1',
+                                  '--depends', '--resources')
+        self.assertEqual(code, 0, err)
+        row = self.row('TASK-9310')
+        self.assertEqual(json.loads(row['depends_json']), [])
+        self.assertEqual(json.loads(row['resources_json']), [])
 
 
 if __name__=='__main__': unittest.main()

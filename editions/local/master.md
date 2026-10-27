@@ -40,7 +40,7 @@ python scripts/orchestrator.py task status TASK-0001 REVIEW_READY --head-sha <sh
 python scripts/orchestrator.py backup
 ```
 
-`python` 指代当前环境的 Python 3 解释器；本套件不引入第三方依赖。完整流程见本目录 [master.md](master.md) 与 [execution.md](execution.md)。
+`python` 指代当前环境的 Python 3 解释器；本套件不引入第三方依赖。`--paths`、`--depends`、`--acceptance`、`--resources` 可重复出现，也可一次给多个值，二者都会合并保留（`--acceptance` 保序；`--paths` / `--depends` 排序去重）。完整流程见本目录 [master.md](master.md) 与 [execution.md](execution.md)。
 
 ## 证据
 
