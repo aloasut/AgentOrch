@@ -4,9 +4,9 @@
 > 设计目标（为什么做、做到什么程度、原则与边界）只在 [PLAN.md](PLAN.md)（1.4 起位于 `docs/`）；字段、状态取值与合并门语义只在 [kit/orchestration.md](../kit/orchestration.md) 4.1 与第 5 节，本文件只引用不重述。
 > 本文件只经任务分支 + PR 修改。与 `PLAN.md` 的设计目标冲突时，以设计目标为准并停下对齐，不得各写一套。
 
-- 版本：v3.0（发布后同步：#99–#104 收口与本轮 1.6.3 发布事实；真实 `1.6.2 → 1.6.3` 升级 `APPLIED`）
+- 版本：v3.1（Phase D 阶段计划登记：#117/#119/#120–#125；上一版 v3.0 记录 #99–#104 收口与本轮 1.6.3 发布事实，真实 `1.6.2 → 1.6.3` 升级 `APPLIED`）
 - 日期：2026-10-27
-- 状态：Phase A / B / C 已交付；Epic #46 的 S0–S6 与两项支撑修复均已合并并 `VERIFIED`，Epic 已按阶段审计关闭（[审计评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46#issuecomment-6415751115)）；**`v1.6.3` 是最新发布**（[Release v1.6.3](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.6.3)，tag `v1.6.3` → `2adf431`，资产 `AgentOrch-1.6.3.zip`，461,829 bytes，SHA256 `dcce5b24…`），发布属性为 Format 1.6、754 tests、92 个 `REQUIRED` 文件（发行包 93 = 92 + `MANIFEST.json`）、58/58 场景、四平台 CI 通过；上一个发布 `v1.6.2`（[Release v1.6.2](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.6.2)，资产 `AgentOrch-1.6.2.zip`，SHA256 `096e1fba…`）为 Format 1.6、715 tests、91 文件包（90 `REQUIRED` + `MANIFEST.json`）、58/58 场景、四平台 CI 通过；#85、#86、#93、#95、#99–#104 与 #113 均已 `VERIFIED`；真实 `1.6.2 → 1.6.3` 隔离升级结果为 `APPLIED`（§12）；当前唯一未完成硬化项为 #73（`NON_BLOCKING_HARDENING`），#71、#72 已由后续任务收口并 `VERIFIED`
+- 状态：Phase A / B / C 已交付；Epic #46 的 S0–S6 与两项支撑修复均已合并并 `VERIFIED`，Epic 已按阶段审计关闭（[审计评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46#issuecomment-6415751115)）；**`v1.6.3` 是最新发布**（[Release v1.6.3](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.6.3)，tag `v1.6.3` → `2adf431`，资产 `AgentOrch-1.6.3.zip`，461,829 bytes，SHA256 `dcce5b24…`），发布属性为 Format 1.6、754 tests、92 个 `REQUIRED` 文件（发行包 93 = 92 + `MANIFEST.json`）、58/58 场景、四平台 CI 通过；上一个发布 `v1.6.2`（[Release v1.6.2](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.6.2)，资产 `AgentOrch-1.6.2.zip`，SHA256 `096e1fba…`）为 Format 1.6、715 tests、91 文件包（90 `REQUIRED` + `MANIFEST.json`）、58/58 场景、四平台 CI 通过；#85、#86、#93、#95、#99–#104 与 #113 均已 `VERIFIED`；真实 `1.6.2 → 1.6.3` 隔离升级结果为 `APPLIED`（§12）；当前唯一未完成硬化项为 #73（`NON_BLOCKING_HARDENING`），#71、#72 已由后续任务收口并 `VERIFIED`；**Phase D（Agent 角色发现、Subagent 能力考核与动态模型选型）已按 §13 登记**：设计冻结 #117 已通过 PR #118 合并 `ceb2c0a` 并 `VERIFIED`，Epic #119 与 S1–S5（#120–#124）已登记，#120–#124 在阶段计划登记任务 #125 `VERIFIED` 前保持 `BLOCKED`；Phase D 是新增阶段，不改变 #73 仍是唯一未完成硬化项的结论
 - 适用范围：AgentOrch 核心规则、local/github edition、任务模板、验证脚本与发行机制
 - 设计目标来源：[PLAN.md](PLAN.md)
 
@@ -124,6 +124,7 @@
 - #9 可提前起草场景，最终集成验收必须等依赖能力完成并在当前 head 上重跑。
 - 全量测试资源用独占资源锁；并发数按机器余量与任务冲突判断，不以固定数字取代检查。
 - 任何修改超出任务路径必须停下、更新授权并重新检查冲突。
+- Phase D（#117 / #119 / #120–#124）的顺序、依赖与出口条件见 §13。
 
 ## 6. 跨项目合成回归矩阵（Phase C 的输入）
 
@@ -217,6 +218,13 @@
 | [#103](https://github.com/ctrlshiftaltdel/AgentOrch/issues/103) | Risks 填写深度口径（不新增字段） | 无阻塞依赖 | 已完成 / `VERIFIED`（PR [#108](https://github.com/ctrlshiftaltdel/AgentOrch/pull/108) 合并 `4e8922e`；统一 G-2 / G-3 的 Risks 填写深度，未新增字段；Issue 已关闭并标 `status:verified`） |
 | [#104](https://github.com/ctrlshiftaltdel/AgentOrch/issues/104) | 可选文档收口：P1-3 未覆盖范围 + O-1～O-3 口径 + metrics 同步 | 无阻塞依赖（与 #101 文件重叠时可协作） | 已完成 / `VERIFIED`（PR [#110](https://github.com/ctrlshiftaltdel/AgentOrch/pull/110) 合并 `51e418f`；收口 P1-3 与 O-1～O-3 文档口径并同步 metrics 数据来源；Issue 已关闭并标 `status:verified`） |
 | [#113](https://github.com/ctrlshiftaltdel/AgentOrch/issues/113) | 发布 AgentOrch 1.6.3（`AgentOrch-1.6.3.zip`，Format 1.6 不变） | #99–#104（均已 `VERIFIED`） | 已完成 / `VERIFIED`（PR [#114](https://github.com/ctrlshiftaltdel/AgentOrch/pull/114) 合并 `2adf431`；[Release v1.6.3](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.6.3)，资产 461,829 bytes，SHA256 `dcce5b24…` 与 GitHub API `assets[].digest` 一致；真实 `1.6.2 → 1.6.3` 隔离升级 `APPLIED`，证据见 §12 与 `docs/upgrade.md` §14.5；Issue 已关闭并标 `status:verified`） |
+| [#117](https://github.com/ctrlshiftaltdel/AgentOrch/issues/117) | Phase D S0 设计冻结：角色契约、能力分层、发现与降级、动态选型、终端私有记录 | 无阻塞依赖 | 已完成 / `VERIFIED`（PR [#118](https://github.com/ctrlshiftaltdel/AgentOrch/pull/118) 合并 `ceb2c0a`；设计文档 `docs/design/agent-role-discovery-and-model-selection.md`；Issue 已关闭并标 `status:verified`） |
+| [#119](https://github.com/ctrlshiftaltdel/AgentOrch/issues/119) | Phase D Epic：汇总 #117、#125 与 S1–S5（#120–#124） | 汇总 #117、#125、#120–#124 | `OPEN` / 进行中（Epic；子任务 #120–#124 均 `BLOCKED`） | Epic Issue；阶段顺序、依赖与出口见 §13 |
+| [#120](https://github.com/ctrlshiftaltdel/AgentOrch/issues/120) | Phase D S1：每终端独立 scope 与 Markdown 私有记录基座 | #117、#125 | `BLOCKED`（等待 #125 `VERIFIED`；#125 通过后由 Master 另行置 READY / 派发，在此之前不得 READY / 开始实现） | Issue 正文；§13 |
+| [#121](https://github.com/ctrlshiftaltdel/AgentOrch/issues/121) | Phase D S2：Runtime adapter、Agent 发现与角色匹配 | #117、#120、#125 | `BLOCKED`（等待 #120、#125 `VERIFIED`） | Issue 正文；§13 |
+| [#122](https://github.com/ctrlshiftaltdel/AgentOrch/issues/122) | Phase D S3：Artificial Analysis 官方数据源与角色专项动态选型 | #117、#120、#121、#125 | `BLOCKED`（等待 #120–#121、#125 `VERIFIED`） | Issue 正文；§13 |
+| [#123](https://github.com/ctrlshiftaltdel/AgentOrch/issues/123) | Phase D S4：本机角色表现反馈与可解释校准 | #120–#122、#125 | `BLOCKED`（等待 #120–#122、#125 `VERIFIED`） | Issue 正文；§13 |
+| [#124](https://github.com/ctrlshiftaltdel/AgentOrch/issues/124) | Phase D S5：入口集成与端到端合成回归 | #120–#123、#125 | `BLOCKED`（等待 #120–#123、#125 `VERIFIED`） | Issue 正文；§13 |
 
 **Epic #46 收口与残留任务：** Epic [#46](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46) 已按 `templates/milestone-audit.md` 于 2026-10-26 完成阶段审计并关闭（[审计评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46#issuecomment-6415751115)），S0–S6 全部完成。审计 `BLOCKING` / `NEEDS_HUMAN_DECISION` 均为 0，登记的三项 `NON_BLOCKING_HARDENING` 中 [#71](https://github.com/ctrlshiftaltdel/AgentOrch/issues/71)、[#72](https://github.com/ctrlshiftaltdel/AgentOrch/issues/72) 已由后续任务收口（#71 → PR #82；#72 → #77 的跨平台 CI）；审计后的 [#85](https://github.com/ctrlshiftaltdel/AgentOrch/issues/85)、[#86](https://github.com/ctrlshiftaltdel/AgentOrch/issues/86) 也已 `VERIFIED`（#85 → PR #87；#86 → PR #88，发布 1.6.1），不属于审计硬化项；1.6.1 之后的 [#93](https://github.com/ctrlshiftaltdel/AgentOrch/issues/93)（PR #94，1.6.2 补丁）与 [#95](https://github.com/ctrlshiftaltdel/AgentOrch/issues/95)（PR #96，发布 1.6.2）同样已 `VERIFIED`，也不属于审计硬化项；1.6.2 之后的 [#99](https://github.com/ctrlshiftaltdel/AgentOrch/issues/99)–[#104](https://github.com/ctrlshiftaltdel/AgentOrch/issues/104) 六项（PR #105–#110）同样已 `VERIFIED`，它们是 1.6.2 之后的独立改进与文档收口批次，**不属于审计硬化项**，也不改变本审计结论。**只剩下列一项未完成、未验证，不属于本轮 `VERIFIED` 结论**：
 
@@ -245,3 +253,62 @@
 - **发布后补证（已完成）**：从 Release 下载资产并复核 SHA256 已执行；真实 `1.6.2 → 1.6.3` 隔离升级为 `APPLIED`——`PLAN` 的 10 项包校验全 `PASS`，`APPLY` 后 Format 1.6 → 1.6、`MANIFEST.json` files 90 → 92、92/92 包内文件与目标包逐字节一致、项目自有 `docs/PROJECT.md` / `docs/PLAN.md` / `LOCAL-NOTES.md` SHA256 前后不变、备份 `required=true` / `verified=true`、head 前后不变；升级后项目 `validate_kit` 退出码 0（downstream 模式），包内 `unittest` 675 tests `OK`（skip 19）。详细记录见 `docs/upgrade.md` §14.5。
 - **范围边界**：本节只覆盖 `1.6.2 → 1.6.3` 这一次真实升级；真实 `1.6.0` / `1.6.1` → `1.6.2`、真实 1.3 / 1.4 资产、真实断网 / 限速 / DNS、`HD-11`、非 GitHub-hosted 平台仍为 `NOT_RUN` / `UNKNOWN`，不得用本次结果替代。
 - 当前 `main` 的 754 tests、92 个 `REQUIRED` 文件（发行包 93 = 92 + `MANIFEST.json`）与 58/58 场景即 `v1.6.3` 发布基线的属性；`v1.6.2` 的 715 tests、91 文件包与资产 SHA256 `096e1fba…` 保持为历史发布事实。
+
+## 13. Phase D — Agent 角色发现、Subagent 能力考核与动态模型选型（2026-10-27）
+
+**目标**：在真实运行时能力、候选 Agent / 模型证据与本机私有记录的基础上，为每个任务选择 Execution 与 Reviewer；能力缺失、数据过期或来源不可用时安全降级并如实报告。设计冻结见 [agent-role-discovery-and-model-selection.md](design/agent-role-discovery-and-model-selection.md)。
+
+本阶段是增量能力：不改变任务状态机、路径 / 资源锁、G1–G6 合并门，也不改变 C1–C4 / C1–C8 的能力语义。这些定义仍只在 [kit/orchestration.md](../kit/orchestration.md) 与 [templates/runtime-capability.md](../templates/runtime-capability.md) 中，本节只引用不重述。
+
+### 13.1 阶段顺序、交付与出口条件
+
+| 阶段 | 承接 Issue | 交付 | 依赖 | 出口条件 |
+|---|---|---|---|---|
+| S0 设计冻结 | [#117](https://github.com/ctrlshiftaltdel/AgentOrch/issues/117) | 设计文档 `docs/design/agent-role-discovery-and-model-selection.md`、文档导航、`.local/README.md` 的用途 / 隔离 / 隐私说明 | 无 | PR [#118](https://github.com/ctrlshiftaltdel/AgentOrch/pull/118) 合并到主分支且主分支 `VERIFIED` |
+| P 阶段计划登记 | [#125](https://github.com/ctrlshiftaltdel/AgentOrch/issues/125) | 本节与第 1 节的登记；不实现运行时逻辑 | S0 已 `VERIFIED` | #125 `VERIFIED`；此前 S1–S5 不得进入 `READY`，也不得开始实现 |
+| S1 每终端 scope + Markdown store | [#120](https://github.com/ctrlshiftaltdel/AgentOrch/issues/120) | 每终端独立 scope 解析、路径安全校验、仅 Markdown 的读写接口与写入失败语义 | #117、#125 | scope 隔离、路径安全、Markdown-only、写入失败语义与对应测试证据齐备 |
+| S2 Runtime adapter / Agent discovery / 角色匹配 | [#121](https://github.com/ctrlshiftaltdel/AgentOrch/issues/121) | 运行时适配接口、候选注册、C1–C4 门与角色匹配报告、缺角色提醒 | #117、#120、#125 | C1–C4 门先于任何排序、显式注册表回退可用、缺角色提醒与 fixture 测试齐备 |
+| S3 Artificial Analysis 数据源 + 动态选型 | [#122](https://github.com/ctrlshiftaltdel/AgentOrch/issues/122) | 官方 Data API 适配、供应商无关数据对象、硬筛选与解释性排序、新鲜度与降级记录 | #117、#120、#121、#125 | 官方 API 条款 / 字段 / 配额核验、密钥处理、硬筛选优先于排序、离线 / 过期降级与 fixture 测试齐备 |
+| S4 本机项目反馈 | [#123](https://github.com/ctrlshiftaltdel/AgentOrch/issues/123) | 按 scope 记录 Master / Execution / Reviewer 的项目内表现与可解释校准建议 | #120–#122、#125 | 每 scope Markdown、样本量与 coverage 口径、无跨 scope 读取、不自动切换模型 |
+| S5 入口集成 + 端到端合成回归 | [#124](https://github.com/ctrlshiftaltdel/AgentOrch/issues/124) | 会话入口接线、正向与负向合成场景、场景注册与发行检查 | #120–#123、#125 | 正向 / 负向场景均覆盖、两个 edition 语义一致、场景注册与发行检查通过 |
+
+表中不含当前状态：任务状态只写第 1 节（见 §10 维护规则）。
+
+### 13.2 依赖图与启动门
+
+```text
+#117 (S0 设计冻结)
+  └─ #125 (P 阶段计划登记)
+       └─ #120 (S1)
+            └─ #121 (S2)
+                 └─ #122 (S3)
+                      └─ #123 (S4)
+                           └─ #124 (S5)
+```
+
+- 无环依赖链：#117 → #125 → #120 → #121 → #122 → #123 → #124。
+- 链上叠加的依赖：#122 同时依赖 #120 与 #121；#123 依赖 #120–#122；#124 依赖 #120–#123。
+- Epic [#119](https://github.com/ctrlshiftaltdel/AgentOrch/issues/119) 汇总 #117、#125 与 #120–#124；它不替代任何单任务的验收，也不单独构成门。
+
+启动门：
+
+- #125 自身须在 #117 / PR #118 合并并 `VERIFIED` 后才可派发；本节的登记动作不改变 #125 的状态。
+- #125 `VERIFIED` 之前，S1–S5 不得进入 `READY`，也不得开始实现；#125 通过后由 Master 按上表依赖逐任务另行置 `READY` / 派发。
+- 每个实现任务派发前仍须按自身允许路径重新核对最新 `main` 与开放 PR 的路径冲突。
+- 本文件不声称 S1–S5 已开始或已完成；它们的真实状态只以任务载体上的证据为准。
+
+### 13.3 阶段边界与失败处理
+
+- 不改任务状态机、路径 / 资源锁、G1–G6、C1–C4 或 C1–C8；不新增角色级门禁，也不建立第二套证据定义。
+- 只用 Python 3 标准库，不引入第三方依赖；基础 CLI 在离线条件下照常可用。
+- Artificial Analysis 是可选适配器：不可用、限流或数据过期时不阻塞治理流程，相关数据如实标 `UNKNOWN` / `STALE` / `BLOCKED`，不冒充实时查询成功。
+- `.local/agent-orch/<scope-id>/` 的记录不入 Git、不进发行包、不跨终端同步；不同 scope 之间不得互相读取或继承。
+- Reviewer 与 Execution 必须使用不同底层模型 ID；不同模型别名、温度或系统提示词不算独立。
+- 不自动切换模型、不自动授权、不自动创建 Subagent；无合格候选时停止自动选择并请求 Master / 用户决策。
+- 失败保持 `BLOCKED` / `NEEDS_HUMAN_DECISION`，并写明缺失项与降级方式；登记动作本身不得把任何后续阶段置 `READY`。
+
+### 13.4 与历史阶段 / 设计目标的关系
+
+- Phase A / B / C 与 1.6.x 的发布 / 验收事实（第 1 节、§11、§12）原样保留；Phase D 是增量阶段，不改写历史数字与结论。
+- [PLAN.md](PLAN.md) 仍是设计目标权威；本文件只登记阶段顺序、依赖与当前状态，状态只落在第 1 节。
+- 本节与设计冻结文档或 `PLAN.md` 冲突时，停下对齐，不在两处各写一套。
