@@ -69,6 +69,7 @@ REQUIRED = [
     'tests/agent_selection/test_roles.py',
     'tests/agent_selection/test_model_selection.py',
     'tests/agent_selection/test_feedback.py',
+    'tests/agent_selection/test_e2e.py',
     'tests/agent_selection/model_sources/__init__.py',
     'tests/agent_selection/model_sources/fixtures.py',
     'tests/agent_selection/model_sources/test_snapshot.py',

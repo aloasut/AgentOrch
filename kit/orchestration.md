@@ -74,6 +74,24 @@ gh pr list --state open --limit 100
 
 共享提示词固定为 `templates/project-charter.md` 与 `templates/review-checklist.md`；其余启动与 Master 提示词一律从 `editions/<edition>/` 读取，不要跨底座加载。
 
+### 角色选择入口（Phase D，只路由，不定义能力或门禁）
+
+Master 在把任务推进到 `DISPATCHED` 或交给执行实例**之前**，或用户明确要求“选角色 / 选模型 / 看有哪些子代理”时，按下列顺序走一次角色选择。它只编排已有模块的调用顺序，不新增状态、门禁或字段；C1–C4、状态机与 G1–G6 的唯一权威仍是本文件第二部分。
+
+1. **先决：C1–C4。** 以第二部分 §5 的探测记录为唯一依据。任一项不是 `PASS`、记录为 `UNKNOWN` / `STALE` 或已过期，就停止自动派发，改走人工交接；不得用“提示词里写了支持”代替探测。
+2. **实际工具事实。** 第一步已核验的宿主事实（模态、文件 / 命令 / 网络边界、真实 spawn / wait / collect）由 Master 记录；`scripts/agent_selection/` 只读取显式提供的事实，不读取宿主工具列表，也不得声称读取过。无法核验记 `UNKNOWN`，按不可用处理。
+3. **Scope 与本地记录（`scripts/agent_selection/scope.py`、`local_store.py`）。** 每个终端 / 会话只使用自己的 scope；解析失败或隔离无法证明时停止写持久记录，不回退共享目录，也不读取其他 scope 的能力结论。
+4. **发现与匹配（`scripts/agent_selection/runtime_adapter.py`、`discovery.py`、`roles.py`）。** 优先运行时正式枚举，无法枚举时读当前 scope 的 `agent-registry.md`；两者都没有时报 `NO_ADAPTER` / `EMPTY`。硬筛选先于排序，Reviewer 独立性按底层模型 ID 判定。
+5. **可选模型数据（`scripts/agent_selection/model_selection.py` 与 `model_sources/`）。** 外部评测是可选参考：不可用、限流或缓存过期时如实标 `BLOCKED` / `UNKNOWN` / `STALE`，基础治理照常运行，不阻断任务登记、状态流转与人工交接。
+6. **可选本机反馈（`scripts/agent_selection/feedback.py`）。** 只在当前 scope 内读取；样本不足、身份变化或证据过期时不排名、不自动改配置。
+
+**出口规则**：
+
+- 选择结果写入当前 scope 的 Markdown 记录，至少包含候选、替代项、硬筛选结果、来源 / 时间、新鲜度、降级状态与限制；不写入 Issue、PR 或任务库，也不跨底座同步。
+- **选择不等于派发**：角色匹配报告只是建议，不构成派发、验收或权限授予，不扩大任务允许路径。真正派发仍按第二部分 §3 取得活动任务锁并推进状态。
+- 缺 Execution / Reviewer、不能真实 spawn / wait / collect、模型数据过期、无合格候选、scope 无法隔离或本地写入失败时，输出**具体原因**并降级为人工交接或保持未审查；`UNKNOWN` / `NOT_RUN` / `BLOCKED` 不得当作 `PASS`。
+- 不自动创建或授权 Agent；发现、推荐与派发都是不同动作。
+
 ### 自我完善的触发（只路由，不定义流程）
 
 用户以明确执行意图说出“进行自我完善”或其同义表述（例如“根据其他 AgentOrch 项目的经验改进本项目”“总结近期开发教训并推进改进”）时，先按本部分第一步、第二步恢复状态，再加载 `docs/self-improvement/self-improvement-loop.md`（仓库检出中读取；发行包内读取 `templates/self-improvement/README.md` 的操作说明）并按其闭环执行；触发语与非触发的完整边界见 `docs/self-improvement/entrypoints-and-decisions.md` §1（仓库检出中读取）。
@@ -314,7 +332,7 @@ G1 的“逐条验收”以**证据矩阵**记账：每条验收标准（AC）�
 
 能力记录的载体是 [templates/runtime-capability.md](../templates/runtime-capability.md)：逐条记录 C1–C4 的探测结论，以及调度真正依赖的更细边界（spawn 句柄、上下文隔离、wait-collect、终局分类、取消、文件 / 命令 / CI 权限、工具与测试环境、探测时间、证据引用与限制）。未探测、证据已失效、或运行时 / 版本 / 底座 / 执行模式变化的能力一律写 `UNKNOWN`，并先降级再重测，不得沿用旧结论。**能力记录只说明“运行时被观察到能做什么”，不授予工具权限，也不替代项目的访问控制和 G1–G6。**
 
-**角色选择只消费这些记录。** `scripts/agent_selection/` 的 adapter / discovery / roles 模块把 C1–C8 记录与显式提供的事实作为输入，优先使用运行时的正式 Agent 枚举，无法枚举时回退到当前 scope 的显式注册表（`agent-registry.md`），两者都没有时报告 `NO_ADAPTER` / `EMPTY`。它们不重新定义 C1–C8、不创建或授权 Agent、不扩大任务允许路径；发现不等于推荐，选择不等于派发。任一关键能力 `UNKNOWN` / `STALE` 时不进入自动派发，缺少合格 Execution / Reviewer 时按现有契约人工交接或保持未审查。
+**角色选择只消费这些记录。** `scripts/agent_selection/` 的 adapter / discovery / roles 模块把 C1–C8 记录与显式提供的事实作为输入，优先使用运行时的正式 Agent 枚举，无法枚举时回退到当前 scope 的显式注册表（`agent-registry.md`），两者都没有时报告 `NO_ADAPTER` / `EMPTY`。它们不重新定义 C1–C8、不创建或授权 Agent、不扩大任务允许路径；发现不等于推荐，选择不等于派发。任一关键能力 `UNKNOWN` / `STALE` 时不进入自动派发，缺少合格 Execution / Reviewer 时按现有契约人工交接或保持未审查。会话入口的调用顺序与出口规则见第一部分「角色选择入口」。
 
 ## 6. 底座切换
 

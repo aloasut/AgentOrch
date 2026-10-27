@@ -49,7 +49,7 @@ class RegistryTests(unittest.TestCase):
     def test_scenario_ids_are_unique_and_groups_are_complete(self):
         ids = runner.scenario_ids()
         self.assertEqual(len(ids), len(set(ids)))
-        for group in 'ABCD':
+        for group in 'ABCDE':
             self.assertTrue(any(item.group == group for item in runner.SCENARIOS),
                             f'group {group} has no scenario')
 
@@ -59,13 +59,20 @@ class RegistryTests(unittest.TestCase):
         positives = [item for item in runner.SCENARIOS if item.kind == 'positive']
         self.assertGreaterEqual(len(positives), 4)
 
+    def test_agent_selection_group_keeps_its_positive_control(self):
+        group = [item for item in runner.SCENARIOS if item.group == 'E']
+        self.assertTrue(any(item.kind == 'positive' for item in group),
+                        'group E has no positive control')
+        self.assertGreaterEqual(sum(1 for item in group if item.kind == 'negative'), 10,
+                                'group E lost negative coverage')
+
     def test_every_scenario_declares_its_contract(self):
         for item in runner.SCENARIOS:
             for field in ('id', 'group', 'kind', 'title', 'precondition', 'defect',
                           'gate', 'evidence', 'cleanup'):
                 self.assertTrue(getattr(item, field), f'{item.id} has an empty {field}')
             self.assertIn(item.kind, ('positive', 'negative'))
-            self.assertIn(item.group, 'ABCD')
+            self.assertIn(item.group, 'ABCDE')
 
     def test_select_rejects_unknown_ids(self):
         with self.assertRaises(runner.ToolError):
