@@ -8,6 +8,29 @@ SCRIPT=Path(__file__).resolve().parents[1]/'scripts'/'orchestrator.py'
 spec=importlib.util.spec_from_file_location('orch',SCRIPT)
 orch=importlib.util.module_from_spec(spec); spec.loader.exec_module(orch)
 
+# Worker for the amend --paths race test: two blocked tasks try to claim the same
+# new path at a synchronised instant, so the lock rewrite and the conflict check
+# in one BEGIN IMMEDIATE must let exactly one of them through.
+AMEND_PATHS_WORKER = r'''
+import importlib.util, json, sys, time
+from pathlib import Path
+from types import SimpleNamespace
+spec = importlib.util.spec_from_file_location('orch_amend_worker', sys.argv[1])
+orch = importlib.util.module_from_spec(spec); spec.loader.exec_module(orch)
+root, task, path, start = Path(sys.argv[2]), sys.argv[3], sys.argv[4], float(sys.argv[5])
+while time.time() < start:
+    time.sleep(0.005)
+out = {'task': task, 'path': path}
+try:
+    orch.task_amend(root, SimpleNamespace(id=task, merge_sha=None,
+                                          note='re-scope after block; authorised in the task thread',
+                                          paths=[path]))
+    out['status'] = 'AMENDED'
+except Exception as exc:
+    out['status'] = 'REFUSED'; out['error'] = f'{type(exc).__name__}: {exc}'
+print(json.dumps(out))
+'''
+
 class LocalOrchestratorTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
@@ -325,6 +348,230 @@ class LocalOrchestratorTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.amend('TASK-0304',merge_sha='z'*40,note='non-hex')
         self.assertEqual(self.count("SELECT merged_sha FROM tasks WHERE id=?",('TASK-0304',)),head)
+
+    # --- task amend --paths: re-scope a non-active task and rewrite its locks ---
+    AMEND_PATH_REFUSED_STATES=('PLANNED','READY','DISPATCHED','IN_PROGRESS','REVIEW_READY',
+                               'MASTER_REVIEW','APPROVED','MERGED','VERIFIED','CANCELED')
+    def drive_to_state(self, tid, dest, head='a'*40, merge='d'*40):
+        """Drive a fresh task to `dest`; return the allowed path it was created with."""
+        path=f'{tid.lower()}/file.py'
+        self.add(tid,[path])
+        if dest=='PLANNED': return path
+        if dest=='CANCELED':
+            self.advance(tid,'CANCELED',note='scope withdrawn'); return path
+        orch.task_ready(self.root,tid)
+        if dest=='READY': return path
+        orch.task_dispatch(self.root,tid)
+        chains={
+            'DISPATCHED':[],
+            'IN_PROGRESS':[('IN_PROGRESS',{})],
+            'REVIEW_READY':[('IN_PROGRESS',{}),('REVIEW_READY',{'head_sha':head})],
+            'MASTER_REVIEW':[('IN_PROGRESS',{}),('REVIEW_READY',{'head_sha':head}),
+                             ('MASTER_REVIEW',{})],
+            'APPROVED':[('IN_PROGRESS',{}),('REVIEW_READY',{'head_sha':head}),
+                        ('MASTER_REVIEW',{}),('APPROVED',{'head_sha':head})],
+            'MERGED':[('IN_PROGRESS',{}),('REVIEW_READY',{'head_sha':head}),
+                      ('MASTER_REVIEW',{}),('APPROVED',{'head_sha':head}),
+                      ('MERGED',{'merge_sha':merge})],
+            'VERIFIED':[('IN_PROGRESS',{}),('REVIEW_READY',{'head_sha':head}),
+                        ('MASTER_REVIEW',{}),('APPROVED',{'head_sha':head}),
+                        ('MERGED',{'merge_sha':merge}),('VERIFIED',{})],
+            'NEEDS_HUMAN_DECISION':[('NEEDS_HUMAN_DECISION',{})],
+            'FAILED':[('FAILED',{})],
+        }
+        for step,kwargs in chains[dest]: self.advance(tid,step,**kwargs)
+        return path
+    def amend_paths(self, tid, paths, note=''):
+        orch.task_amend(self.root,SimpleNamespace(id=tid,merge_sha=None,note=note,paths=paths))
+    def snapshot(self, tid):
+        """(paths_json verbatim, sorted lock paths) for one task."""
+        con=orch.connect(self.root)
+        try:
+            paths_json=con.execute('SELECT paths_json FROM tasks WHERE id=?',(tid,)).fetchone()['paths_json']
+            locks=[x['path'] for x in con.execute('SELECT path FROM locks WHERE task_id=? ORDER BY path',(tid,))]
+        finally: con.close()
+        return paths_json,locks
+    def block_after_dispatch(self, tid, path):
+        self.add(tid,[path]); orch.task_ready(self.root,tid); orch.task_dispatch(self.root,tid)
+        self.advance(tid,'BLOCKED',note='scope under review: re-scope requested')
+
+    # --- AC-1: every state outside BLOCKED / NEEDS_HUMAN_DECISION / FAILED is refused ---
+    def test_amend_paths_is_refused_outside_the_three_recoverable_states(self):
+        for index,dest in enumerate(self.AMEND_PATH_REFUSED_STATES,1):
+            tid=f'TASK-06{index:02d}'
+            with self.subTest(state=dest):
+                path=self.drive_to_state(tid,dest)
+                before=self.snapshot(tid)
+                self.assertEqual(json.loads(before[0]),[path])
+                with self.assertRaises(RuntimeError) as cm:
+                    self.amend_paths(tid,[f'{tid.lower()}/new.py'],
+                                     note='re-scope; authorised by the project owner')
+                message=str(cm.exception)
+                for needle in ('BLOCKED','NEEDS_HUMAN_DECISION','FAILED',dest):
+                    self.assertIn(needle,message)
+                self.assertEqual(self.snapshot(tid),before)
+                self.assertEqual(self.count("SELECT COUNT(*) FROM events WHERE task_id=? "
+                                            "AND action='RECORD_AMENDED'",(tid,)),0)
+
+    # --- AC-2 / AC-6: success path rewrites paths + locks and stays auditable ---
+    def test_amend_paths_on_blocked_task_rewrites_paths_locks_and_shows_before_after(self):
+        self.block_after_dispatch('TASK-0620','old/dir')
+        self.assertEqual(self.snapshot('TASK-0620'),(json.dumps(['old/dir']),['old/dir']))
+        note='re-scope after block: split work; authorised by the project owner in Issue #100'
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.amend_paths('TASK-0620',['new/a.py','new/b.py'],note=note)
+        paths_json,locks=self.snapshot('TASK-0620')
+        self.assertEqual(json.loads(paths_json),['new/a.py','new/b.py'])
+        self.assertEqual(locks,['new/a.py','new/b.py'])   # exactly the new set, no leftovers
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks WHERE task_id=?',('TASK-0620',)),2)
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks WHERE path=?',('old/dir',)),0)
+        con=orch.connect(self.root)
+        try:
+            rows=con.execute("SELECT note,data_json FROM events WHERE task_id=? AND action='RECORD_AMENDED' "
+                             'ORDER BY id',('TASK-0620',)).fetchall()
+        finally: con.close()
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0]['note'],note)
+        payload=json.loads(rows[0]['data_json'])
+        self.assertEqual(payload['field'],'paths')
+        self.assertEqual(payload['before'],['old/dir'])
+        self.assertEqual(payload['after'],['new/a.py','new/b.py'])
+        self.assertEqual(payload['reason'],note)
+        # AC-6: the before/after summary is visible to a human in `task show`.
+        out=io.StringIO()
+        with contextlib.redirect_stdout(out): orch.task_show(self.root,'TASK-0620')
+        shown=out.getvalue()
+        self.assertIn('[paths: old/dir -> new/a.py, new/b.py]',shown)
+        self.assertIn('Allowed paths:\n- new/a.py\n- new/b.py',shown)
+        # Shrinking uses the same channel and deletes the dropped lock row.
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.amend_paths('TASK-0620',['new/b.py'],
+                             note='narrow scope: new/a.py moved to another task')
+        self.assertEqual(self.snapshot('TASK-0620'),(json.dumps(['new/b.py']),['new/b.py']))
+        # The amended registry is what `task ready` now checks against.
+        with contextlib.redirect_stdout(io.StringIO()): orch.task_ready(self.root,'TASK-0620')
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks WHERE task_id=?',('TASK-0620',)),1)
+        self.assertEqual(self.count('SELECT status FROM tasks WHERE id=?',('TASK-0620',)),'READY')
+
+    # --- BLOCKED task that never held a lock gains exactly the new set ---
+    def test_amend_paths_creates_the_lock_set_for_a_blocked_task_that_held_none(self):
+        self.add('TASK-0623',['preblock'])
+        self.advance('TASK-0623','BLOCKED',note='blocked before dispatch')
+        self.assertEqual(self.snapshot('TASK-0623'),(json.dumps(['preblock']),[]))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.amend_paths('TASK-0623',['after'],note='re-scope while blocked without locks')
+        self.assertEqual(self.snapshot('TASK-0623'),(json.dumps(['after']),['after']))
+
+    # --- AC-3: a conflicting new path refuses the whole rewrite ---
+    def test_amend_paths_conflicting_with_another_active_task_is_refused_atomically(self):
+        self.block_after_dispatch('TASK-0621','holder/')
+        self.block_after_dispatch('TASK-0622','mover/')
+        before_holder=self.snapshot('TASK-0621'); before_mover=self.snapshot('TASK-0622')
+        with self.assertRaises(RuntimeError) as cm:
+            self.amend_paths('TASK-0622',['mover/','holder/child.py'],
+                             note='would overlap the holder lock')
+        message=str(cm.exception)
+        self.assertIn('path conflict',message)
+        self.assertIn('holder/child.py',message)
+        self.assertIn('TASK-0621',message)
+        self.assertEqual(self.snapshot('TASK-0621'),before_holder)
+        self.assertEqual(self.snapshot('TASK-0622'),before_mover)
+        self.assertEqual(self.count("SELECT COUNT(*) FROM events WHERE task_id=? "
+                                    "AND action='RECORD_AMENDED'",('TASK-0622',)),0)
+
+    # --- AC-4: NEEDS_HUMAN_DECISION / FAILED behave like BLOCKED ---
+    def test_amend_paths_is_allowed_on_needs_human_decision_and_failed(self):
+        for tid,dest in (('TASK-0630','NEEDS_HUMAN_DECISION'),('TASK-0631','FAILED')):
+            with self.subTest(state=dest):
+                self.drive_to_state(tid,dest)
+                wanted=[f'{tid.lower()}/rescoped.py']
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.amend_paths(tid,wanted,note=f're-scope while {dest}')
+                self.assertEqual(self.snapshot(tid),(json.dumps(wanted),wanted))
+                self.assertEqual(self.count('SELECT status FROM tasks WHERE id=?',(tid,)),dest)
+
+    # --- AC-5: the merge-sha channel keeps its success and error behaviour ---
+    def test_merge_sha_amend_channel_keeps_its_behaviour(self):
+        old='a'*40; new='b'*40
+        self.merge('TASK-0640','file640.py',old,old)
+        self.amend('TASK-0640',merge_sha=new,note='backfill full SHA')
+        self.assertEqual(self.count('SELECT merged_sha FROM tasks WHERE id=?',('TASK-0640',)),new)
+        con=orch.connect(self.root)
+        try:
+            row=con.execute("SELECT data_json FROM events WHERE task_id=? AND action='RECORD_AMENDED'",
+                            ('TASK-0640',)).fetchone()
+        finally: con.close()
+        payload=json.loads(row['data_json'])
+        self.assertEqual((payload['field'],payload['old'],payload['new']),('merged_sha',old,new))
+        with self.assertRaises(RuntimeError) as cm: self.amend('TASK-0640',merge_sha='c'*40)
+        self.assertIn('--note',str(cm.exception))
+        with self.assertRaises(RuntimeError) as cm: self.amend('TASK-0640',merge_sha='abc123',note='short')
+        self.assertIn('40',str(cm.exception))
+        with self.assertRaises(RuntimeError) as cm: self.amend('TASK-0640',merge_sha='z'*40,note='non-hex')
+        self.assertIn('40',str(cm.exception))
+        self.assertEqual(self.count('SELECT merged_sha FROM tasks WHERE id=?',('TASK-0640',)),new)
+        # Illegal-state text is unchanged for the merge-sha channel.
+        self.add('TASK-0641',['file641.py'])
+        with self.assertRaises(RuntimeError) as cm: self.amend('TASK-0641',merge_sha='e'*40,note='too early')
+        self.assertEqual(str(cm.exception),
+                         'merge SHA can only be amended on MERGED or VERIFIED tasks; current status is PLANNED')
+        # The two modes are mutually exclusive; refusing both leaves the row untouched.
+        before=self.snapshot('TASK-0641')
+        with self.assertRaises(RuntimeError) as cm:
+            orch.task_amend(self.root,SimpleNamespace(id='TASK-0641',merge_sha='e'*40,
+                                                      note='ambiguous',paths=['file641.py']))
+        self.assertIn('not both',str(cm.exception))
+        self.assertEqual(self.snapshot('TASK-0641'),before)
+    def test_cli_amend_without_merge_sha_keeps_the_missing_argument_error(self):
+        self.add('TASK-0642',['file642.py'])
+        result=subprocess.run([sys.executable,str(SCRIPT),'--root',str(self.root),
+                               'task','amend','TASK-0642'],
+                              capture_output=True,text=True)
+        self.assertEqual(result.returncode,2,result.stderr)
+        self.assertIn('the following arguments are required: --merge-sha',result.stderr)
+        self.assertEqual(self.count("SELECT COUNT(*) FROM events WHERE task_id=?",('TASK-0642',)),1)
+
+    # --- AC-7: a real two-process race cannot leave two owners on one path ---
+    def test_concurrent_amend_paths_cannot_leave_two_tasks_holding_one_path(self):
+        self.block_after_dispatch('TASK-0650','race0600/one/')
+        self.block_after_dispatch('TASK-0651','race0600/two/')
+        worker=self.root/'amend_paths_worker.py'
+        worker.write_text(AMEND_PATHS_WORKER,encoding='utf-8')
+        start=time.time()+1.2
+        processes=[
+            subprocess.Popen([sys.executable,str(worker),str(SCRIPT),str(self.root),tid,
+                              'race0600/shared/x.py',str(start)],
+                             stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            for tid in ('TASK-0650','TASK-0651')
+        ]
+        results=[]
+        for process in processes:
+            stdout,stderr=process.communicate(timeout=120)
+            self.assertEqual(process.returncode,0,stderr)
+            results.append(json.loads(stdout.strip().splitlines()[-1]))
+        self.assertEqual(sorted(r['status'] for r in results),['AMENDED','REFUSED'],results)
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks WHERE path=?',
+                                    ('race0600/shared/x.py',)),1)
+        con=orch.connect(self.root)
+        try:
+            owners=[(r['task_id'],r['path']) for r in
+                    con.execute('SELECT task_id,path FROM locks ORDER BY task_id,path')]
+            tasks={r['id']:json.loads(r['paths_json'])
+                   for r in con.execute('SELECT id,paths_json FROM tasks')}
+        finally: con.close()
+        # Every task's locks are exactly its declared paths...
+        for tid in ('TASK-0650','TASK-0651'):
+            self.assertEqual(sorted(p for t,p in owners if t==tid),sorted(tasks[tid]))
+        # ...and no two tasks hold overlapping paths.
+        for left in owners:
+            for right in owners:
+                if left[0]!=right[0]:
+                    self.assertFalse(orch.overlaps(left[1],right[1]),f'{left} overlaps {right}')
+        amended=[r for r in results if r['status']=='AMENDED'][0]
+        refused=[r for r in results if r['status']=='REFUSED'][0]
+        self.assertEqual(tasks[amended['task']],['race0600/shared/x.py'])
+        self.assertNotIn('race0600/shared/x.py',tasks[refused['task']])
+        self.assertIn('path conflict',refused['error'])
 
     # --- a failing BEGIN must not be masked by a spurious ROLLBACK ---
     def test_begin_failure_propagates_original_error(self):
