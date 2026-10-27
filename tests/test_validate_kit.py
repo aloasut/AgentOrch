@@ -371,10 +371,12 @@ class PlanLayerSplitTests(unittest.TestCase):
 
 
 class AgentSelectionAssetTests(unittest.TestCase):
-    """Phase D S1 (#120) ships its scope / store modules and their tests.
+    """Phase D S1 / S2 / S3 ship their modules and tests.
 
-    Both modules are pure standard library and read no ``docs/`` file, so they
-    can be REQUIRED (and therefore packaged) rather than repository-only.
+    Every module is pure standard library and reads no ``docs/`` file, so it
+    can be REQUIRED (and therefore packaged) rather than repository-only. S3
+    may import ``urllib`` only in the optional online adapter; the role
+    selector itself stays offline.
     """
 
     FILES = (
@@ -384,6 +386,10 @@ class AgentSelectionAssetTests(unittest.TestCase):
         'scripts/agent_selection/runtime_adapter.py',
         'scripts/agent_selection/discovery.py',
         'scripts/agent_selection/roles.py',
+        'scripts/agent_selection/model_selection.py',
+        'scripts/agent_selection/model_sources/__init__.py',
+        'scripts/agent_selection/model_sources/snapshot.py',
+        'scripts/agent_selection/model_sources/artificial_analysis.py',
         'tests/agent_selection/__init__.py',
         'tests/agent_selection/test_scope.py',
         'tests/agent_selection/test_local_store.py',
@@ -391,6 +397,11 @@ class AgentSelectionAssetTests(unittest.TestCase):
         'tests/agent_selection/test_runtime_adapter.py',
         'tests/agent_selection/test_discovery.py',
         'tests/agent_selection/test_roles.py',
+        'tests/agent_selection/test_model_selection.py',
+        'tests/agent_selection/model_sources/__init__.py',
+        'tests/agent_selection/model_sources/fixtures.py',
+        'tests/agent_selection/model_sources/test_snapshot.py',
+        'tests/agent_selection/model_sources/test_artificial_analysis.py',
     )
 
     def test_scope_and_store_are_required_and_present(self):
@@ -423,6 +434,38 @@ class AgentSelectionAssetTests(unittest.TestCase):
         self.assertEqual(runtime_adapter.GATING_CAPABILITIES,
                          ('C1', 'C2', 'C3', 'C4'))
         self.assertEqual(roles.ROLES, ('master', 'execution', 'reviewer'))
+
+    def test_model_source_and_selection_modules_are_required(self):
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from scripts.agent_selection import model_selection
+        from scripts.agent_selection.model_sources import (
+            artificial_analysis, snapshot)
+        self.assertIn('scripts/agent_selection/model_selection.py',
+                      validate.REQUIRED)
+        self.assertIn('scripts/agent_selection/model_sources/snapshot.py',
+                      validate.REQUIRED)
+        self.assertIn(
+            'scripts/agent_selection/model_sources/artificial_analysis.py',
+            validate.REQUIRED)
+        self.assertEqual(artificial_analysis.DEFAULT_API_KEY_ENV,
+                         'ARTIFICIAL_ANALYSIS_API_KEY')
+        self.assertEqual(artificial_analysis.SOURCE_ID,
+                         'artificial-analysis')
+        for module in (model_selection, snapshot):
+            source = Path(module.__file__).read_text(encoding='utf-8')
+            for forbidden in ('import urllib', 'import http', 'requests.',
+                              'import socket', 'scripts.orchestrator'):
+                self.assertNotIn(forbidden, source, f'{module.__name__}: '
+                                 f'{forbidden} is outside the offline selector')
+        adapter_source = Path(
+            artificial_analysis.__file__).read_text(encoding='utf-8')
+        self.assertIn('urllib.request', adapter_source)
+        for forbidden in ('requests.', 'httpx', 'aiohttp', 'urllib3'):
+            self.assertNotIn(forbidden, adapter_source,
+                             'the adapter must stay standard-library only')
+        self.assertIn('select_roles', Path(
+            model_selection.__file__).read_text(encoding='utf-8'))
 
 
 class ContractTemplateTests(unittest.TestCase):

@@ -7,7 +7,9 @@ same modules up through the ``test_*.py`` naming.
 import importlib
 
 _TEST_MODULES = ('test_scope', 'test_local_store', 'test_runtime_adapter',
-                 'test_discovery', 'test_roles')
+                 'test_discovery', 'test_roles', 'test_model_selection',
+                 'model_sources.test_snapshot',
+                 'model_sources.test_artificial_analysis')
 
 
 def load_tests(loader, standard_tests, pattern):
