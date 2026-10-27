@@ -124,7 +124,7 @@ Reviewer 的目标是独立发现错误并提出可验证的修复方向，而�
 
 ### 6.1 数据来源
 
-Artificial Analysis 模型排行榜是第一外部参考来源，但不是唯一的事实来源或单一排序标准。实现阶段必须核实可用的官方页面 / API、数据字段、许可与调用限制；本设计不预设某个 API 端点一定存在或永久免费可用。
+Artificial Analysis 模型排行榜是第一外部参考来源，但不是唯一的事实来源或单一排序标准。设计起草时，Artificial Analysis 已公开文档化的 Data API，提供结构化的模型身份、评测、价格、延迟 / 吞吐量等数据；API 采用认证密钥，且不同订阅层级可用端点、配额不同。实现阶段仍必须重新核实当时的官方 API 文档、字段、条款和配额，不能把当前 API 形状或层级限制写死为永远不变的契约。见 [Artificial Analysis Data API](https://artificialanalysis.ai/data-api) 与 [API 文档](https://artificialanalysis.ai/data-api/docs)。API 密钥只能由调用运行时通过受保护的环境 / Secret 注入，不得保存在 Markdown 记录、源码、Issue 或日志中。
 
 按角色使用相关数据：
 
@@ -316,4 +316,5 @@ Scope ID 只能用作本机目录选择，不作为权限授权。实现需验�
 - [核心编排契约：状态机、合并门与 C1–C4](../../kit/orchestration.md)
 - [Runtime Capability Record：C1–C8](../../templates/runtime-capability.md)
 - [本机私有目录说明](../../.local/README.md)
+- [Artificial Analysis Data API](https://artificialanalysis.ai/data-api) 与 [API 文档](https://artificialanalysis.ai/data-api/docs)
 - [文档入口](../README.md)
