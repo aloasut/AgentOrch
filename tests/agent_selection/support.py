@@ -52,10 +52,11 @@ def capability_record(*, runtime_id='fixture-runtime',
 
 
 def permissions(*, read_paths=('src',), write_paths=(), commands=(),
-                network=False, read_only=False):
+                network=False, network_observed=None, read_only=False):
     return runtime_adapter.PermissionScope(
         read_paths=tuple(read_paths), write_paths=tuple(write_paths),
-        commands=tuple(commands), network=network, read_only=read_only)
+        commands=tuple(commands), network=network,
+        network_observed=network_observed, read_only=read_only)
 
 
 def evidence(role, dimension, grade='STRONG', *, origin='project', sample=5,
@@ -122,8 +123,8 @@ def task_requirements(*, execution_model_id='model-a',
             read_paths=('src',), write_paths=('src',)),
         roles.ROLE_REVIEWER: roles.reviewer_requirement(
             execution_model_id=execution_model_id,
-            read_paths=('src',),
-            reference_model_family=execution_family),
+            execution_model_family=execution_family,
+            read_paths=('src',)),
     }
 
 

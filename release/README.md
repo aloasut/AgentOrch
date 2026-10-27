@@ -171,7 +171,7 @@
 
 ### 5.1.4 当前开发树（未发布）
 
-- 本仓库开发树当前 `REQUIRED` 为 **105 个文件**（发行包 106 = 105 + `MANIFEST.json`），全量测试 **877 个**。相对 `v1.6.3` 的 92 个 `REQUIRED` 新增 13 个：S1（#120）6 个（`scripts/agent_selection/__init__.py`、`scope.py`、`local_store.py` 与 `tests/agent_selection/__init__.py`、`test_scope.py`、`test_local_store.py`），S2（#121）7 个（`scripts/agent_selection/runtime_adapter.py`、`discovery.py`、`roles.py` 与 `tests/agent_selection/support.py`、`test_runtime_adapter.py`、`test_discovery.py`、`test_roles.py`）。
+- 本仓库开发树当前 `REQUIRED` 为 **105 个文件**（发行包 106 = 105 + `MANIFEST.json`），全量测试 **885 个**。相对 `v1.6.3` 的 92 个 `REQUIRED` 新增 13 个：S1（#120）6 个（`scripts/agent_selection/__init__.py`、`scope.py`、`local_store.py` 与 `tests/agent_selection/__init__.py`、`test_scope.py`、`test_local_store.py`），S2（#121）7 个（`scripts/agent_selection/runtime_adapter.py`、`discovery.py`、`roles.py` 与 `tests/agent_selection/support.py`、`test_runtime_adapter.py`、`test_discovery.py`、`test_roles.py`）。
 - 以上是**当前开发树事实，尚未发布**；`v1.6.3` 的历史包内文件数（93 个 = 92 `REQUIRED` + `MANIFEST.json`）、675 tests 与资产 SHA256 保持不变（见 5.1.3）。
 
 ### 5.2 Format version 变更

@@ -149,6 +149,16 @@ class PathAndEvidenceHelperTests(unittest.TestCase):
         self.assertFalse(runtime_adapter.covers_path(('docs',), 'src/a.py'))
         self.assertFalse(runtime_adapter.covers_path((), 'docs/a.md'))
 
+    def test_covers_command_is_exact_or_explicit_wildcard(self):
+        self.assertTrue(runtime_adapter.covers_command(('python',), 'python'))
+        self.assertFalse(runtime_adapter.covers_command(('python',), 'python3'))
+        self.assertTrue(runtime_adapter.covers_command(('*',), 'python3'))
+        self.assertFalse(runtime_adapter.covers_command((), 'python'))
+
+    def test_network_observation_must_not_contradict_the_scope(self):
+        with self.assertRaises(runtime_adapter.RuntimeAdapterError):
+            runtime_adapter.PermissionScope(network=True, network_observed=False)
+
     def test_evidence_age_uses_the_supplied_now(self):
         self.assertAlmostEqual(
             runtime_adapter.evidence_age_days(support.PROBE, NOW), 1.0)

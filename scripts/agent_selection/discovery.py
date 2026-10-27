@@ -62,11 +62,11 @@ REPORT_OUTCOMES = (DISCOVERY_RUNTIME, DISCOVERY_REGISTRY, DISCOVERY_NO_ADAPTER,
 REGISTRY_DETAIL_KEYS = (
     'runtime_id', 'runtime_version', 'agent_id', 'model_id', 'model_family',
     'modalities', 'tools', 'read_paths', 'write_paths', 'commands', 'network',
-    'read_only', 'context_tokens', 'cost_per_mtok', 'latency_ms',
-    'capability_ref', 'evidence_time', 'source_class',
+    'network_observed', 'read_only', 'context_tokens', 'cost_per_mtok',
+    'latency_ms', 'capability_ref', 'evidence_time', 'source_class',
 )
 REQUIRED_REGISTRY_KEYS = ('runtime_id', 'runtime_version', 'agent_id',
-                          'model_id', 'evidence_time')
+                          'model_id', 'evidence_time', 'source_class')
 
 
 class RegistryError(ValueError):
@@ -181,8 +181,7 @@ def registry_candidates_from_records(records, *, capability_records=None):
                 'skipped (unknown fields are not guessed)')
             continue
         try:
-            source_class = str(details.get('source_class',
-                                           'OBSERVED')).strip().upper()
+            source_class = str(details['source_class']).strip().upper()
             if source_class not in EVIDENCE_CLASSES:
                 raise RegistryError(
                     f'source_class must be one of {EVIDENCE_CLASSES}, got '
@@ -216,6 +215,11 @@ def registry_candidates_from_records(records, *, capability_records=None):
                     commands=_csv(details.get('commands', '')),
                     network=_strict_bool(details.get('network', 'false'),
                                          'network'),
+                    network_observed=(
+                        _strict_bool(details['network_observed'],
+                                     'network_observed')
+                        if str(details.get('network_observed', '')).strip()
+                        else None),
                     read_only=_strict_bool(details.get('read_only', 'false'),
                                            'read_only'),
                 ),

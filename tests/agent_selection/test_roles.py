@@ -180,6 +180,16 @@ class MissingRoleTests(unittest.TestCase):
         self.assertIn('undispatched', selection.reminder)
         self.assertFalse(report.automatic_dispatch_allowed)
 
+    def test_missing_execution_blocks_reviewer_independence(self):
+        master, _, reviewer = support.standard_candidates()
+        report = support.report_with((master, reviewer))
+        selection = report.role('reviewer')
+        self.assertIsNone(selection.selected)
+        self.assertIn('no Execution model was selected',
+                      ' '.join(selection.missing))
+        self.assertIn('Reviewer independence', ' '.join(report.degradations))
+        self.assertFalse(report.automatic_dispatch_allowed)
+
     def test_missing_reviewer_keeps_the_task_unreviewed(self):
         master, execution, _ = support.standard_candidates()
         report = support.report_with((master, execution))
@@ -207,7 +217,30 @@ class ReviewerIndependenceTests(unittest.TestCase):
         report = support.report_with((master, execution, same_model))
         selection = report.role('reviewer')
         self.assertIsNone(selection.selected)
-        self.assertIn('same as the Execution', ' '.join(selection.missing))
+        self.assertIn('same as the selected Execution model',
+                      ' '.join(selection.missing))
+        self.assertFalse(report.automatic_dispatch_allowed)
+
+    def test_custom_reviewer_requirement_still_rejects_the_execution_model(self):
+        master, execution, reviewer = support.standard_candidates()
+        same_model = support.candidate(
+            'review-1', model_id='model-a', model_family='family-a',
+            modalities=('text',), tools=('file-read',),
+            permission=support.permissions(read_only=True),
+            role_evidence=reviewer.role_evidence)
+        requirements = support.task_requirements()
+        # Deliberately omit excluded_model_ids / reference fields: the selector
+        # must derive independence from the selected Execution model.
+        requirements[roles.ROLE_REVIEWER] = roles.RoleRequirement(
+            role=roles.ROLE_REVIEWER, required_modalities=('text',),
+            required_tools=('file-read',), read_paths=('src',),
+            require_read_only=True)
+        report = support.report_with((master, execution, same_model),
+                                     requirements=requirements)
+        selection = report.role('reviewer')
+        self.assertIsNone(selection.selected)
+        self.assertIn('same as the selected Execution model',
+                      ' '.join(selection.missing))
         self.assertFalse(report.automatic_dispatch_allowed)
 
     def test_unknown_model_family_is_reported_as_unknown(self):
@@ -264,7 +297,7 @@ class PermissionAndModalityTests(unittest.TestCase):
         report = support.report_with((master, limited, reviewer))
         selection = report.role('execution')
         self.assertIsNone(selection.selected)
-        self.assertIn('no observed write scope', ' '.join(selection.missing))
+        self.assertIn('write: NOT_COVERED (src)', ' '.join(selection.missing))
         self.assertEqual(
             selection.requirement.as_dict()['task_write_paths'], ['src'])
 
@@ -277,8 +310,55 @@ class PermissionAndModalityTests(unittest.TestCase):
                                      requirements=requirement)
         selection = report.role('execution')
         self.assertIsNone(selection.selected)
-        self.assertIn('no observed read scope for docs',
+        self.assertIn('read: NOT_COVERED (docs)',
                       ' '.join(selection.missing))
+
+    def test_execution_without_command_permission_is_excluded(self):
+        master, execution, reviewer = support.standard_candidates()
+        no_commands = support.candidate(
+            'exec-1', model_id='model-a', model_family='family-a',
+            permission=support.permissions(read_paths=('src',),
+                                           write_paths=('src',),
+                                           commands=()),
+            role_evidence=execution.role_evidence)
+        report = support.report_with((master, no_commands, reviewer))
+        selection = report.role('execution')
+        self.assertIsNone(selection.selected)
+        self.assertIn('commands: UNOBSERVED', ' '.join(selection.missing))
+        self.assertFalse(report.automatic_dispatch_allowed)
+        evaluation = selection.unverified[0]
+        permissions = next(item for item in evaluation.filters
+                           if item.filter_id == 'permissions')
+        self.assertEqual(permissions.status, 'UNKNOWN')
+        self.assertNotIn('covers the task paths', permissions.detail)
+
+    def test_required_command_must_be_observed(self):
+        master, execution, reviewer = support.standard_candidates()
+        requirement = support.task_requirements()
+        requirement[roles.ROLE_EXECUTION] = roles.execution_requirement(
+            read_paths=('src',), write_paths=('src',),
+            required_commands=('python3',))
+        wrong_command = support.candidate(
+            'exec-1', model_id='model-a', model_family='family-a',
+            permission=support.permissions(read_paths=('src',),
+                                           write_paths=('src',),
+                                           commands=('python',)),
+            role_evidence=execution.role_evidence)
+        report = support.report_with((master, wrong_command, reviewer),
+                                     requirements=requirement)
+        selection = report.role('execution')
+        self.assertIsNone(selection.selected)
+        self.assertIn('commands: NOT_COVERED (python3)',
+                      ' '.join(selection.missing))
+
+    def test_master_permissions_are_reported_as_not_required(self):
+        report = support.report_with(support.standard_candidates())
+        evaluation = report.role('master').selected
+        permissions = next(item for item in evaluation.filters
+                           if item.filter_id == 'permissions')
+        self.assertEqual(permissions.status, 'NOT_APPLICABLE')
+        self.assertIn('read: NOT_REQUIRED', permissions.detail)
+        self.assertIn('not an observed grant', permissions.detail)
 
     def test_master_without_image_input_is_excluded(self):
         master, execution, reviewer = support.standard_candidates()

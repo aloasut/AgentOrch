@@ -57,6 +57,7 @@ __all__ = [
     'parse_timestamp',
     'evidence_age_days',
     'covers_path',
+    'covers_command',
 ]
 
 # The capability ids are the existing contract ids: C1-C4 from
@@ -144,6 +145,23 @@ def _normalise_path(value):
     while text.startswith('./'):
         text = text[2:]
     return text.rstrip('/')
+
+
+def covers_command(scope_commands, needed):
+    """Whether one observed command permission covers *needed*.
+
+    Commands are exact names or an explicit ``*``; a prefix of a command name
+    is not treated as the command. This helper never grants a command that was
+    not observed.
+    """
+    wanted = str(needed).strip()
+    if not wanted:
+        return False
+    for allowed in scope_commands or ():
+        candidate = str(allowed).strip()
+        if candidate in ('', '*') or candidate == wanted:
+            return True
+    return False
 
 
 @dataclass(frozen=True)
@@ -333,18 +351,31 @@ class PermissionScope:
     A selector compares this against the task's already-approved paths. It may
     only narrow what the task already allows; a value here can never widen an
     allowed path, add a command or enable network access.
+
+    An empty ``read_paths`` / ``write_paths`` / ``commands`` tuple means *no
+    permission in that class was observed* — not "the candidate was observed to
+    have none". ``network_observed`` carries the same distinction for network
+    access: ``None`` is unobserved, ``False`` is observed as unavailable.
     """
 
     read_paths: tuple[str, ...] = ()
     write_paths: tuple[str, ...] = ()
     commands: tuple[str, ...] = ()
     network: bool = False
+    network_observed: bool | None = None
     read_only: bool = False
 
     def __post_init__(self):
         if self.read_only and self.write_paths:
             raise RuntimeAdapterError(
                 'a read-only permission scope must not declare write paths')
+        if self.network_observed not in (True, False, None):
+            raise RuntimeAdapterError(
+                'network_observed must be True, False or None (unknown)')
+        if self.network and self.network_observed is False:
+            raise RuntimeAdapterError(
+                'network access cannot be enabled while network_observed is '
+                'False')
 
     def as_dict(self):
         return {
@@ -352,6 +383,7 @@ class PermissionScope:
             'write_paths': list(self.write_paths),
             'commands': list(self.commands),
             'network': self.network,
+            'network_observed': self.network_observed,
             'read_only': self.read_only,
         }
 

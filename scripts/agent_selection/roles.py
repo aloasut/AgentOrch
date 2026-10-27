@@ -18,13 +18,15 @@ Two safety properties are structural rather than advisory:
 
 * capability ``PASS`` never widens a task path: the report echoes the task's
   own allowed paths and the selector has no API to add one;
+* Reviewer independence is enforced against the **selected Execution model**,
+  not against whatever the caller remembered to put in the requirement;
 * nothing here spawns, waits for or collects an agent. Selecting a role is not
   dispatching it, and the report says so.
 """
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from .discovery import (
     DISCOVERY_RUNTIME,
@@ -35,6 +37,7 @@ from .runtime_adapter import (
     AgentCandidate,
     DEFAULT_MAX_EVIDENCE_AGE_DAYS,
     ROLE_DIMENSIONS,
+    covers_command,
     covers_path,
     evidence_age_days,
 )
@@ -107,11 +110,14 @@ class RoleRequirement:
     required_tools: tuple[str, ...] = ()
     read_paths: tuple[str, ...] = ()
     write_paths: tuple[str, ...] = ()
+    required_commands: tuple[str, ...] = ()
+    require_command_access: bool = False
     network_required: bool = False
     min_context_tokens: int | None = None
     max_cost_per_mtok: float | None = None
     max_latency_ms: int | None = None
     excluded_model_ids: tuple[str, ...] = ()
+    reference_model_id: str | None = None
     reference_model_family: str | None = None
     require_read_only: bool = False
     allow_manual_review: bool = False
@@ -134,11 +140,14 @@ class RoleRequirement:
             'required_tools': list(self.required_tools),
             'task_read_paths': list(self.read_paths),
             'task_write_paths': list(self.write_paths),
+            'required_commands': list(self.required_commands),
+            'require_command_access': self.require_command_access,
             'network_required': self.network_required,
             'min_context_tokens': self.min_context_tokens,
             'max_cost_per_mtok': self.max_cost_per_mtok,
             'max_latency_ms': self.max_latency_ms,
             'excluded_model_ids': list(self.excluded_model_ids),
+            'reference_model_id': self.reference_model_id,
             'reference_model_family': self.reference_model_family,
             'require_read_only': self.require_read_only,
             'allow_manual_review': self.allow_manual_review,
@@ -152,22 +161,38 @@ def master_requirement(**kwargs):
     return RoleRequirement(role=ROLE_MASTER, **kwargs)
 
 
-def execution_requirement(*, read_paths=(), write_paths=(), **kwargs):
-    """Execution: coding, tools, goal following and delivery efficiency."""
+def execution_requirement(*, read_paths, write_paths, **kwargs):
+    """Execution: coding, tools, goal following and delivery efficiency.
+
+    ``read_paths`` / ``write_paths`` are mandatory keyword arguments: passing an
+    empty tuple is an explicit statement that the task needs no file access, so
+    a forgotten argument cannot silently skip the permission filter. Command
+    access is required by default (``require_command_access=True``).
+    """
+    if read_paths is None or write_paths is None:
+        raise ValueError('read_paths and write_paths must be passed explicitly '
+                         '(use () only when the task needs no file access)')
     kwargs.setdefault('required_modalities', ('text',))
     kwargs.setdefault('required_tools', ('file-write', 'command'))
+    kwargs.setdefault('require_command_access', True)
     return RoleRequirement(role=ROLE_EXECUTION, read_paths=tuple(read_paths),
                            write_paths=tuple(write_paths), **kwargs)
 
 
-def reviewer_requirement(*, execution_model_id, read_paths=(), **kwargs):
+def reviewer_requirement(*, execution_model_id, read_paths,
+                         execution_model_family=None, **kwargs):
     """Reviewer: defects / tests / security, read-only, different model id."""
+    if read_paths is None:
+        raise ValueError('read_paths must be passed explicitly '
+                         '(use () only when the task needs no file access)')
     kwargs.setdefault('required_modalities', ('text',))
     kwargs.setdefault('required_tools', ('file-read',))
     kwargs.setdefault('require_read_only', True)
     excluded = tuple(kwargs.pop('excluded_model_ids', ()) or ())
     if execution_model_id is not None:
         excluded = excluded + (execution_model_id,)
+    kwargs.setdefault('reference_model_id', execution_model_id)
+    kwargs.setdefault('reference_model_family', execution_model_family)
     return RoleRequirement(role=ROLE_REVIEWER, read_paths=tuple(read_paths),
                            excluded_model_ids=excluded, **kwargs)
 
@@ -308,33 +333,111 @@ def _context_filter(candidate, requirement):
 
 
 def _permissions_filter(candidate, requirement):
+    """Compare the observed boundary with what the task requires.
+
+    Each dimension is reported as ``COVERED``, ``NOT_COVERED``, ``UNOBSERVED``
+    or ``NOT_REQUIRED``. An unobserved dimension is never silently read as
+    covered, and a PASS is only emitted when at least one dimension was
+    required and every required dimension is covered.
+    """
     scope = candidate.permissions
-    problems = []
-    missing = [path for path in requirement.read_paths
-               if not covers_path(scope.read_paths, path)]
-    if missing:
-        problems.append(f'no observed read scope for {", ".join(missing)}')
+    covered = []
+    failures = []
+    unknowns = []
+
+    # --- read -------------------------------------------------------------
+    if requirement.read_paths:
+        if not scope.read_paths:
+            unknowns.append('read: UNOBSERVED (no read scope recorded)')
+        else:
+            missing = [path for path in requirement.read_paths
+                       if not covers_path(scope.read_paths, path)]
+            if missing:
+                failures.append(
+                    f'read: NOT_COVERED ({", ".join(missing)})')
+            else:
+                covered.append(
+                    f'read: COVERED ({", ".join(requirement.read_paths)})')
+    else:
+        covered.append('read: NOT_REQUIRED')
+
+    # --- write ------------------------------------------------------------
     if requirement.write_paths:
         if scope.read_only:
-            problems.append('candidate is read-only; this role must write')
+            failures.append('write: NOT_PERMITTED (candidate is read-only)')
+        elif not scope.write_paths:
+            unknowns.append('write: UNOBSERVED (no write scope recorded)')
         else:
             missing = [path for path in requirement.write_paths
                        if not covers_path(scope.write_paths, path)]
             if missing:
-                problems.append(
-                    f'no observed write scope for {", ".join(missing)}')
-    if requirement.require_read_only and not scope.read_only:
-        problems.append('reviewer must have an observed read-only boundary')
-    if requirement.network_required and not scope.network:
-        problems.append('network access is required but was not observed')
-    if problems:
-        status = 'UNKNOWN' if not (scope.read_paths or scope.write_paths) \
-            else 'FAIL'
-        return FilterResult('permissions', status, '; '.join(problems))
+                failures.append(
+                    f'write: NOT_COVERED ({", ".join(missing)})')
+            else:
+                covered.append(
+                    f'write: COVERED ({", ".join(requirement.write_paths)})')
+    else:
+        covered.append('write: NOT_REQUIRED')
+
+    # --- read-only constraint --------------------------------------------
+    if requirement.require_read_only:
+        if scope.read_only:
+            covered.append('read-only: OBSERVED')
+        else:
+            failures.append('read-only: NOT_OBSERVED (reviewer must be read-only)')
+    else:
+        covered.append('read-only: NOT_REQUIRED')
+
+    # --- commands ---------------------------------------------------------
+    required_commands = tuple(requirement.required_commands or ())
+    if required_commands:
+        if not scope.commands:
+            unknowns.append(
+                'commands: UNOBSERVED (no command permission recorded)')
+        else:
+            missing = [command for command in required_commands
+                       if not covers_command(scope.commands, command)]
+            if missing:
+                failures.append(
+                    f'commands: NOT_COVERED ({", ".join(missing)})')
+            else:
+                covered.append(
+                    f'commands: COVERED ({", ".join(required_commands)})')
+    elif requirement.require_command_access:
+        if not scope.commands:
+            unknowns.append(
+                'commands: UNOBSERVED (no command permission recorded)')
+        else:
+            covered.append(
+                f'commands: COVERED ({", ".join(scope.commands)})')
+    else:
+        covered.append('commands: NOT_REQUIRED')
+
+    # --- network ----------------------------------------------------------
+    if requirement.network_required:
+        if scope.network:
+            covered.append('network: COVERED')
+        elif scope.network_observed is False:
+            failures.append('network: NOT_PERMITTED (observed as disabled)')
+        else:
+            unknowns.append('network: UNOBSERVED (access was not observed)')
+    else:
+        covered.append('network: NOT_REQUIRED')
+
+    detail = '; '.join(failures + unknowns + covered)
+    if failures:
+        return FilterResult('permissions', 'FAIL', detail)
+    if unknowns:
+        return FilterResult('permissions', 'UNKNOWN', detail)
+    if all(item.endswith('NOT_REQUIRED') for item in covered):
+        return FilterResult(
+            'permissions', 'NOT_APPLICABLE',
+            detail + '; no permission requirement was declared, so nothing '
+                     'was evaluated (this is not an observed grant)')
     return FilterResult(
         'permissions', 'PASS',
-        'observed boundary covers the task paths; the selector does not '
-        'widen allowed paths, commands or network access')
+        detail + '; the selector does not widen allowed paths, commands or '
+                 'network access')
 
 
 def _independence_filter(candidate, requirement):
@@ -345,11 +448,19 @@ def _independence_filter(candidate, requirement):
         return FilterResult(
             'independence', 'UNKNOWN',
             'model identity is UNKNOWN; independence cannot be established')
-    if candidate.model_id in requirement.excluded_model_ids:
+    reference = requirement.reference_model_id
+    if reference is None:
+        return FilterResult(
+            'independence', 'UNKNOWN',
+            'no Execution model was selected; Reviewer independence cannot '
+            'be established')
+    if candidate.model_id == reference or \
+            candidate.model_id in requirement.excluded_model_ids:
         return FilterResult(
             'independence', 'FAIL',
-            f'model id {candidate.model_id!r} is the same as the Execution '
-            'model; the same model with another name is not independent')
+            f'model id {candidate.model_id!r} is the same as the selected '
+            'Execution model; the same model with another name is not '
+            'independent')
     reference_family = requirement.reference_model_family
     if candidate.model_family is None or reference_family is None:
         detail = ('model family UNKNOWN; family-level independence is '
@@ -519,10 +630,14 @@ def _selection(role, requirement, candidates, *, now, max_age_days,
                    'selected',)
 
     if candidates:
-        nearest = (unverified or excluded or [])
-        missing = tuple(
-            f'{evaluation.candidate.candidate_id} {item}'
-            for evaluation in nearest for item in evaluation.missing)
+        missing_items = []
+        for evaluation in list(unverified) + list(excluded):
+            for item in evaluation.missing:
+                entry = f'{evaluation.candidate.candidate_id} {item}'
+                if entry not in missing_items:
+                    missing_items.append(entry)
+        missing = tuple(missing_items) or (
+            'no candidate passed every hard filter',)
     else:
         missing = ('discovery returned no candidate at all',)
 
@@ -649,16 +764,42 @@ def select_roles(discovery, requirements, *, now=None,
             f'{", ".join(missing_requirements)} (no lenient default is used)')
     selections = {}
     degradations = []
-    for role in ROLES:
+    candidates = discovery.candidates if discovery.discovered else ()
+    for role in (ROLE_MASTER, ROLE_EXECUTION):
         requirement = requirements[role]
         if requirement.role != role:
             raise ValueError(
                 f'requirement for {role} declares role {requirement.role!r}')
-        candidates = discovery.candidates if discovery.discovered else ()
         selections[role] = _selection(
             role, requirement, candidates, now=now,
             max_age_days=max_age_days,
             project_min_samples=project_min_samples)
+
+    # Reviewer independence is a structural consequence of the *selected*
+    # Execution model, not of what a caller put in the requirement. Rebuild the
+    # reference from the real selection and re-evaluate.
+    reviewer_requirement_value = requirements[ROLE_REVIEWER]
+    if reviewer_requirement_value.role != ROLE_REVIEWER:
+        raise ValueError(
+            'requirement for reviewer declares role '
+            f'{reviewer_requirement_value.role!r}')
+    selected_execution = selections[ROLE_EXECUTION].selected
+    execution_model_id = (selected_execution.candidate.model_id
+                          if selected_execution is not None else None)
+    execution_model_family = (selected_execution.candidate.model_family
+                              if selected_execution is not None else None)
+    excluded = tuple(dict.fromkeys(
+        tuple(reviewer_requirement_value.excluded_model_ids)
+        + ((execution_model_id,) if execution_model_id else ())))
+    reviewer_requirement_value = replace(
+        reviewer_requirement_value,
+        excluded_model_ids=excluded,
+        reference_model_id=execution_model_id,
+        reference_model_family=execution_model_family)
+    selections[ROLE_REVIEWER] = _selection(
+        ROLE_REVIEWER, reviewer_requirement_value, candidates, now=now,
+        max_age_days=max_age_days,
+        project_min_samples=project_min_samples)
 
     master = selections[ROLE_MASTER]
     execution = selections[ROLE_EXECUTION]
@@ -677,9 +818,13 @@ def select_roles(discovery, requirements, *, now=None,
             'no qualified Execution Agent; the task stays undispatched and '
             'must be handed off manually')
     if reviewer.selected is None:
-        degradations.append(
-            'no independent Reviewer; the task stays unreviewed and Execution '
-            'self-review is not accepted')
+        if execution.selected is None:
+            reason = ('no qualified Execution Agent, so Reviewer independence '
+                      'cannot be established')
+        else:
+            reason = ('no independent Reviewer; the task stays unreviewed and '
+                      'Execution self-review is not accepted')
+        degradations.append(reason)
 
     automatic = (
         discovery.outcome in (DISCOVERY_RUNTIME, DISCOVERY_REGISTRY)
@@ -691,6 +836,8 @@ def select_roles(discovery, requirements, *, now=None,
         'selection is a recommendation, not a dispatch',
         'capability PASS never grants a path, a command or network access; the '
         'task keeps its own allowed paths',
+        'Reviewer independence was enforced against the selected Execution '
+        'model id (model family is reported, not assumed)',
     )
     return SelectionReport(
         discovery=discovery, selections=selections,

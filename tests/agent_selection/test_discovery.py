@@ -154,6 +154,16 @@ class ExplicitRegistryTests(unittest.TestCase):
         self.assertEqual(registry.entries, ())
         self.assertIn('missing model_id', ' '.join(registry.issues))
 
+    def test_record_without_source_class_is_not_a_candidate(self):
+        details = registry_record()
+        del details['source_class']
+        self.append(details)
+        registry = discovery.ExplicitRegistry.from_store(
+            self.store, capability_records=self.capabilities)
+        self.assertEqual(registry.entries, ())
+        self.assertIn('missing source_class', ' '.join(registry.issues))
+        self.assertEqual(registry.discover().outcome, 'EMPTY')
+
     def test_unexpected_detail_key_is_not_guessed(self):
         self.append(registry_record(prompt_name='execution'))
         registry = discovery.ExplicitRegistry.from_store(self.store)
