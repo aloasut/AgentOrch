@@ -59,7 +59,7 @@
 
 ## 每次接手
 
-1. 阅读 `docs/PROJECT.md`（确认 `edition` 为 `github`）、`AGENTS.md`、`kit/orchestration.md`。
+1. 阅读 `docs/PROJECT.md`（确认 `edition` 为 `github`）、`AGENTS.md`、`kit/orchestration.md` 第一、二部分与 `editions/github/master.md`；`kit/orchestration.md` 第三部分按需读（必读集合与触发条件的唯一权威见 `AGENTS.md` 的「阅读口径」段）。
 2. 运行：
    ```bash
    gh issue list --state open --limit 100

@@ -2,7 +2,14 @@
 
 # AGENTS.md — Agent Collaboration Contract
 
-本文件是仓库内所有 Agent 的唯一权威核心契约，与底座（edition）无关。每次接手先读本文件、`kit/orchestration.md` 与 `docs/PROJECT.md`，再读 `editions/<edition>/master.md` 和当前底座的提示词。有分歧时，以项目所有者最近一次明确决定为最高约束，其次是本文件，再到 `kit/orchestration.md`、底座手册与提示词；发现冲突必须登记为任务，不能自行发明权限。
+本文件是仓库内所有 Agent 的唯一权威核心契约，与底座（edition）无关。每次接手先读本文件、`docs/PROJECT.md` 与 `kit/orchestration.md` 的第一、二部分，再读 `editions/<edition>/master.md` 和当前底座的提示词；`kit/orchestration.md` 第三部分按需读，口径见下段。有分歧时，以项目所有者最近一次明确决定为最高约束，其次是本文件，再到 `kit/orchestration.md`、底座手册与提示词；发现冲突必须登记为任务，不能自行发明权限。
+
+**阅读口径（唯一权威）**：其他入口——`kit/orchestration.md` 第一部分与 `editions/<edition>/master.md` 的「每次接手」——只回指本段，不另立一套。三处列出的必读集合必须相同，列举顺序允许保留各自既有顺序。
+
+- **必读集合**：`AGENTS.md`（本文件）、`docs/PROJECT.md`、`kit/orchestration.md` 第一部分（会话入口）与第二部分（状态机与合并门）。
+- **随底座读**：按 `docs/PROJECT.md` 的 `edition` 再读 `editions/<edition>/master.md` 与当前底座的提示词；这是入口流程的一部分，不改变必读集合的定义。
+- **章程不并入必读集合**：`docs/charter.md` 由 `kit/orchestration.md` 第一部分第三步的路由读取（缺失或仍含 `FILL_IN` 时先补章程），不因不在必读集合里而跳过。
+- **按需读**：`kit/orchestration.md` 第三部分（通用验收程序）**不在必读集合内**，只在既有触发条件满足时执行——每次首次接入、变更调度器 / 提示词，或更换 Agent 运行时后执行。触发条件只由 `kit/orchestration.md` 第三部分开头那段定义，本段不新增、不删减既有触发项；触发条件未满足时，缺少该部分的逐段引用不构成验收缺失。
 
 ## 0. 底座（Edition）
 

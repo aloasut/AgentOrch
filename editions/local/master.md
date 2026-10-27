@@ -66,7 +66,7 @@ python scripts/orchestrator.py backup
 
 ## 每次接手
 
-1. 阅读 `AGENTS.md`、`kit/orchestration.md`、`docs/PROJECT.md`，确认 `edition` 为 `local`。
+1. 阅读 `AGENTS.md`、`docs/PROJECT.md`、`kit/orchestration.md` 第一、二部分与 `editions/local/master.md`，确认 `edition` 为 `local`；`kit/orchestration.md` 第三部分按需读（必读集合与触发条件的唯一权威见 `AGENTS.md` 的「阅读口径」段）。
 2. 运行：
    ```bash
    python scripts/orchestrator.py task list
