@@ -4,7 +4,7 @@ Use this checklist when reviewing an execution task's delivery, independently of
 
 ## Stage 1 — Spec Compliance (do first; decides whether to continue)
 
-- [ ] Delivered scope matches allowed paths; no out-of-scope changes
+- [ ] Delivered scope matches allowed paths; the review packet includes the `scripts/check_scope.py` output for this task (it prints the base SHA and exits 0 in scope / 2 out of scope / 1 undetermined); no out-of-scope changes
 - [ ] Every acceptance criterion checked individually against real evidence (diff, command output, exit codes)
 - [ ] Stated head SHA matches the delivered commit
 - [ ] No self-approval or self-merge happened

@@ -130,7 +130,7 @@
 | "把 config show 和 task list 的完整输出给我看" | `uv run python scripts/orchestrator.py config show`、`task list` | 退出码 0；`edition = local`；任务库为空 |
 | "登记 ID 为 TASK-0001 的示例任务…" | `uv run python scripts/orchestrator.py task add --id TASK-0001 --title "建立项目骨架" --paths src/ --acceptance "最小入口可运行" "验证命令退出码为 0"` | 输出 `TASK-0001: created in PLANNED` |
 | "置为 READY 再 DISPATCH" | `uv run python scripts/orchestrator.py task ready TASK-0001`、`task dispatch TASK-0001` | 退出码 0；`DISPATCHED; locks acquired for src`；任务包生成并展示 |
-| "运行结构自检并告诉我退出码" | `uv run python scripts/validate_kit.py` | 退出码 0；`Kit validation passed (90 required files checked; …)` |
+| "运行结构自检并告诉我退出码" | `uv run python scripts/validate_kit.py` | 退出码 0；`Kit validation passed (92 required files checked; …)` |
 | "把示例任务置为 CANCELED" | `uv run python scripts/orchestrator.py task status TASK-0001 CANCELED --note "冒烟结束"` | 退出码 0；路径锁释放 |
 
 ### 3.1 放入套件
@@ -398,7 +398,7 @@ uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until
 
 `validate_kit.py` 检查：
 
-- **90 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
+- **92 项必需文件**是否齐全（`REQUIRED` 列表同时是发布包清单，只有一份来源）。
 - **合约模板是否仍问对问题**：`templates/design.md`、`templates/milestone-audit.md`、`templates/contract-decision-log.md` 的必备章节缺一即失败，模板内的相对链接断链也失败（章节缺失会被静默当成“不需要回答”，因此单列一项检查）。
 - **能力登记与指标模板是否仍问对问题**：`templates/runtime-capability.md` 的身份 / 能力矩阵 / 扩展边界 / `UNKNOWN` 与重测 / 权限范围 / 证据与限制，以及 `templates/metrics.md` 的阅读规则 / 公共定义 / 指标定义 / 缺失与覆盖率 / 报告契约 / 金样本 / 限制，缺章节同样失败。
 - **发行包清单是否自洽**：根目录存在 `MANIFEST.json`（发行包内）时，校验其结构、分类、路径可解析与 `REQUIRED` 集合一致；SHA-256 与大小在纯净包与上游 checkout 严格比较，在下游项目只校验结构（见下方“三种树”）。仓库根目录没有该文件，检查自动跳过，不误报。
@@ -422,7 +422,7 @@ uv run python scripts/report_metrics.py --gold-sample --since 2026-01-01 --until
 
 `--project-ready` 的含义：在项目配置填完之后追加检查，只要 `docs/PROJECT.md` 里仍有 `FILL_IN` 占位符就以退出码 1 失败。发布包里的 `docs/PROJECT.md` 故意保持待填模板，因此**发布自检中该命令预期失败**；若它通过了，反而说明模板没有被正确替换。
 
-`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、`task add` 多值选项的重复出现与单次多值合并、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树、构建 / 缓存目录被跳过）、三种树下的校验模式（纯净包 / 下游 / 上游的文档集合与清单严格度、下游本地修改不触发哈希失败而 `check_drift` 仍报 `modified`）、shipped 文件不出现已改名路径、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 715 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
+`unittest` 覆盖状态机、依赖、路径锁、重试上限、head SHA 与 merge SHA、`task add` 多值选项的重复出现与单次多值合并、edition 的权威来源与 fail-closed 行为、计划层拆分（设计目标模板不含任务块、阶段计划模板含任务块、必需文件数与 README 一致），以及发行包清单与漂移诊断（二次构建确定性、篡改 / 缺失核心文件、额外扩展、上游目录内的未知文件、无 manifest 旧项目、JSON 字段与退出码、诊断过程不改动目标树、构建 / 缓存目录被跳过）、三种树下的校验模式（纯净包 / 下游 / 上游的文档集合与清单严格度、下游本地修改不触发哈希失败而 `check_drift` 仍报 `modified`）、shipped 文件不出现已改名路径、契约模板结构（缺章节 / 缺模板文件 / 模板内断链都必须失败，模板不复制任务生命周期）、能力登记与指标模板章节、指标报告本身（金样本数值、空输入 `no data`、缺事件记 `missing`、未采集记 `unknown`、JSON 字段与顺序稳定、不读事件备注），以及合成回归场景运行器（单场景异常不吞掉后续、退出码三态、场景表与注册一致）与最终验收场景集（自我完善 / 安全更新 / 依赖方向 / 指标诚实性真实执行并清理沙箱）；当前 745 个用例。`py_compile` 只做零依赖语法检查，不引入任何第三方工具。
 
 ### 7.1 CI（`github` 底座）
 
@@ -740,6 +740,7 @@ uv run python -m scripts.update_agentorch.entry --project . \
 
 - **冻结不等于永远不可改**。“冻结”只是说下游任务不得自行改写契约；要改就新建一条决策记录，写明受影响任务与理由，再同步更新设计契约。`DESIGN.md` 与决策日志对同一条契约给出不同说法即视为缺陷。
 - **局部验收代替不了阶段审计**。任务级审查按 [templates/review-checklist.md](../templates/review-checklist.md) 逐条判定，只证明该任务自己达标；阶段级是否成立要用 `MILESTONE-AUDIT.md`。审计结论只用四类：`BLOCKING`、`NON_BLOCKING_HARDENING`、`OPTIONAL`、`NEEDS_HUMAN_DECISION`（核实无问题记 `PASS`）。
+- **范围证据可复现**：审查前跑 `uv run python scripts/check_scope.py --task <ID>`（只读本地任务库；缺省取任务 `approved_sha`，再退 `head_sha`，也可显式 `--base <40-hex>`），输出 base SHA 与越界路径，退出码 `0` 范围内 / `2` 越界 / `1` 无法判定。
 - **未验证不算通过**。`NOT_RUN` / `BLOCKED` / 没有证据的项不得计入通过；只要存在 `BLOCKING` 或 `NEEDS_HUMAN_DECISION`，阶段就不得标记完成。
 - **轻量模式**：小项目保留全部标题，不适用项写 `N/A: <理由>`（光写 `N/A` 不算），不强制产出冗长文档；模板也不复制状态机与 G1–G6 定义，需要时引用 [kit/orchestration.md](../kit/orchestration.md)。
 - `validate_kit.py` 会校验这三个模板的必备章节与相对链接；章节被删除会失败，而不是被当成“这项不需要回答”。
