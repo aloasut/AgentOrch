@@ -370,6 +370,40 @@ class PlanLayerSplitTests(unittest.TestCase):
         self.assertEqual(numbers, {str(len(validate.REQUIRED))})
 
 
+class AgentSelectionAssetTests(unittest.TestCase):
+    """Phase D S1 (#120) ships its scope / store modules and their tests.
+
+    Both modules are pure standard library and read no ``docs/`` file, so they
+    can be REQUIRED (and therefore packaged) rather than repository-only.
+    """
+
+    FILES = (
+        'scripts/agent_selection/__init__.py',
+        'scripts/agent_selection/scope.py',
+        'scripts/agent_selection/local_store.py',
+        'tests/agent_selection/__init__.py',
+        'tests/agent_selection/test_scope.py',
+        'tests/agent_selection/test_local_store.py',
+    )
+
+    def test_scope_and_store_are_required_and_present(self):
+        for rel in self.FILES:
+            with self.subTest(rel=rel):
+                self.assertIn(rel, validate.REQUIRED)
+                self.assertTrue((ROOT / rel).is_file(), f'{rel} is missing')
+                self.assertNotIn('docs', Path(rel).parts)
+
+    def test_modules_import_with_only_the_standard_library(self):
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from scripts.agent_selection import local_store, scope
+        self.assertEqual(scope.NAMESPACE_ENV, 'AGENTORCH_SCOPE_ID')
+        self.assertTrue(scope.RUNTIME_SESSION_ENV_VARS)
+        self.assertEqual(len(local_store.DOCUMENTS), 6)
+        for name in local_store.DOCUMENTS:
+            self.assertTrue(name.endswith('.md'), name)
+
+
 class ContractTemplateTests(unittest.TestCase):
     """The reusable contract templates are structure-checked, not trusted.
 
