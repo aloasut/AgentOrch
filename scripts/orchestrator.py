@@ -1341,9 +1341,13 @@ def main():
     cf=sub.add_parser('config',help='inspect runtime configuration'); cs=cf.add_subparsers(dest='configcmd',required=True)
     cs.add_parser('show',help='print effective config values and their source')
     t=sub.add_parser('task',help='task operations'); ts=t.add_subparsers(dest='taskcmd',required=True)
-    a=ts.add_parser('add'); a.add_argument('--id',required=True); a.add_argument('--title',required=True); a.add_argument('--description',default=''); a.add_argument('--paths',nargs='+',required=True); a.add_argument('--depends',nargs='*',default=[]); a.add_argument('--acceptance',nargs='+',required=True)
-    a.add_argument('--resources',nargs='*',default=[],
-                   help='optional declared resource set: <resource_id>:<mode>[:<ttl>], comma-free list; empty means the task takes no resource lock')
+    # Multi-value options are repeatable: `action='extend'` merges every occurrence
+    # instead of letting the last one overwrite the earlier ones (argparse's default
+    # `store`). `--acceptance` keeps the given order; task_add() still sorts and
+    # de-duplicates `--paths` / `--depends`.
+    a=ts.add_parser('add'); a.add_argument('--id',required=True); a.add_argument('--title',required=True); a.add_argument('--description',default=''); a.add_argument('--paths',action='extend',nargs='+',required=True); a.add_argument('--depends',action='extend',nargs='*',default=[]); a.add_argument('--acceptance',action='extend',nargs='+',required=True)
+    a.add_argument('--resources',action='extend',nargs='*',default=[],
+                   help='optional declared resource set: <resource_id>:<mode>[:<ttl>], comma-free list; repeatable; empty means the task takes no resource lock')
     l=ts.add_parser('list'); l.add_argument('--active-only',action='store_true')
     sh=ts.add_parser('show'); sh.add_argument('id')
     rd=ts.add_parser('ready'); rd.add_argument('id')
