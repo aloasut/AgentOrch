@@ -74,6 +74,16 @@
 4. 读取用户当前目标与项目文档，检查配置是否已填完整。对新项目走 `editions/github/master.md`；已有项目走 `editions/github/master.md`。
 5. 先汇报目前状态、假设、阻塞和本轮计划，再开始调度。
 
+### 核验当前实际可用工具（入口规则）
+
+调度前，Master 必须按**当前实际可用的工具**核验并提交标准化事实，而不是按提示词、模型名称或历史记忆推断：
+
+- 至少记录：文本 / 图像输入是否真实可用、文件读写边界、命令执行、网络访问、是否能真实 spawn / wait / collect 子代理，以及每条事实的来源与核验时间。
+- 运行时无法 introspect 宿主工具时，由 Master 自己核验并写进任务载体（`github`：Issue 评论或 PR 评论；`local`：任务记录）。**进程内 CLI 不能替代这一步**：`scripts/agent_selection/` 只读取被显式提供的事实，不能读取宿主 Agent 的工具列表，也不得声称已读取。
+- 无法核验的能力一律记 `UNKNOWN` 并按不可用处理；`UNKNOWN` / `STALE` 不得当作 `PASS`，也不得解锁自动派发（C1–C4 见 `kit/orchestration.md` 第二部分 §5）。
+
+角色匹配（`scripts/agent_selection/` 的 adapter / discovery / roles 模块）只消费这些事实与既有 C1–C8 记录：发现不等于推荐，选择不等于派发。它不创建、不授权 Agent，不扩大任务允许路径；缺少合格 Execution / Reviewer 时按现有契约人工交接或保持未审查，不声称已派发。
+
 ## 任务生命周期
 
 1. 将需求变成单一目标任务：目标、允许 / 禁止路径、依赖、逐条验收、验证命令、风险和回退方式。

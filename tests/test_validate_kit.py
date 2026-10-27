@@ -381,9 +381,16 @@ class AgentSelectionAssetTests(unittest.TestCase):
         'scripts/agent_selection/__init__.py',
         'scripts/agent_selection/scope.py',
         'scripts/agent_selection/local_store.py',
+        'scripts/agent_selection/runtime_adapter.py',
+        'scripts/agent_selection/discovery.py',
+        'scripts/agent_selection/roles.py',
         'tests/agent_selection/__init__.py',
         'tests/agent_selection/test_scope.py',
         'tests/agent_selection/test_local_store.py',
+        'tests/agent_selection/support.py',
+        'tests/agent_selection/test_runtime_adapter.py',
+        'tests/agent_selection/test_discovery.py',
+        'tests/agent_selection/test_roles.py',
     )
 
     def test_scope_and_store_are_required_and_present(self):
@@ -402,6 +409,20 @@ class AgentSelectionAssetTests(unittest.TestCase):
         self.assertEqual(len(local_store.DOCUMENTS), 6)
         for name in local_store.DOCUMENTS:
             self.assertTrue(name.endswith('.md'), name)
+
+    def test_role_matching_modules_stay_offline_and_outside_the_state_machine(self):
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from scripts.agent_selection import discovery, roles, runtime_adapter
+        for module in (runtime_adapter, discovery, roles):
+            source = Path(module.__file__).read_text(encoding='utf-8')
+            for forbidden in ('import urllib', 'import http', 'requests.',
+                              'import socket', 'scripts.orchestrator'):
+                self.assertNotIn(forbidden, source, f'{module.__name__}: '
+                                 f'{forbidden} is outside this task')
+        self.assertEqual(runtime_adapter.GATING_CAPABILITIES,
+                         ('C1', 'C2', 'C3', 'C4'))
+        self.assertEqual(roles.ROLES, ('master', 'execution', 'reviewer'))
 
 
 class ContractTemplateTests(unittest.TestCase):
