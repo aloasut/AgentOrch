@@ -1,5 +1,5 @@
 # Agent-Orchestration Starter Kit
 
 - Editions: local, github
-- Format version: 1.6
-- Release version: 1.6.3 (public release number, kept separate from the Format version; this patch release keeps the Format version at 1.6)
+- Format version: 1.7
+- Release version: 1.7.0 (public release number, a separate sequence from the Format version; this Phase D feature release also raises the Format version from 1.6 to 1.7 so the v1.7.0 tag's major.minor matches MANIFEST.json's format_version)

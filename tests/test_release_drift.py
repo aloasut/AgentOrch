@@ -34,7 +34,7 @@ drift = load('check_drift_under_test', SCRIPT)
 validate = load('validate_kit_under_test', VALIDATOR)
 
 SUITE = 'Agent-Orchestration Starter Kit'
-FORMAT = '1.2'
+FORMAT = '1.7'
 
 TREE_FILES = {
     'kit/orchestration.md': '# core contract\n',
@@ -191,11 +191,20 @@ class ReleaseAssetNamingTests(unittest.TestCase):
         self.assertEqual(stem, 'AgentOrch-1.6')
         self.assertEqual(f'{stem}.zip', 'AgentOrch-1.6.zip')
         self.assertEqual(f'{stem}/{drift.MANIFEST_NAME}', 'AgentOrch-1.6/MANIFEST.json')
+        # The current 1.7.0 feature release keeps asset and top dir in lockstep,
+        # and still rejects a tag-style `v` prefix.
+        current = self.builder.release_asset_stem(None, '1.7.0')
+        self.assertEqual(current, 'AgentOrch-1.7.0')
+        self.assertEqual(f'{current}.zip', 'AgentOrch-1.7.0.zip')
+        self.assertEqual(f'{current}/{drift.MANIFEST_NAME}', 'AgentOrch-1.7.0/MANIFEST.json')
+        with self.assertRaises(SystemExit):
+            self.builder.release_asset_stem(None, 'v1.7.0')
 
     def test_patch_release_version_is_allowed(self):
         self.assertEqual(self.builder.release_asset_stem(None, '1.6.1'), 'AgentOrch-1.6.1')
         self.assertEqual(self.builder.release_asset_stem(None, '1.6.2'), 'AgentOrch-1.6.2')
         self.assertEqual(self.builder.release_asset_stem(None, '1.6.3'), 'AgentOrch-1.6.3')
+        self.assertEqual(self.builder.release_asset_stem(None, '1.7.0'), 'AgentOrch-1.7.0')
 
     def test_default_date_naming_still_works(self):
         self.assertEqual(self.builder.release_asset_stem('20261026'), 'agentorch-20261026')
@@ -241,29 +250,29 @@ class ReleaseAssetNamingTests(unittest.TestCase):
             self.assertEqual(shipped['format_version'], FORMAT)
 
     def test_patch_archive_keeps_the_format_version_and_is_reproducible(self):
-        """1.6.1 is a release number: the top dir follows it, the Format does not."""
+        """1.7.0 is a release number: the top dir follows it, the Format does not."""
         files = {
             'kit/orchestration.md': b'# core\n',
             'editions/local/master.md': b'# edition\n',
         }
         suite, format_version = drift.read_version(ROOT)
-        self.assertEqual(format_version, '1.6')
+        self.assertEqual(format_version, '1.7')
         manifest = drift.build_manifest(files, suite, format_version)
-        self.assertEqual(manifest['format_version'], '1.6')
+        self.assertEqual(manifest['format_version'], '1.7')
         files[drift.MANIFEST_NAME] = drift.dumps_manifest(manifest).encode('utf-8')
         with tempfile.TemporaryDirectory() as tmp:
-            first = Path(tmp) / 'AgentOrch-1.6.1.zip'
+            first = Path(tmp) / 'AgentOrch-1.7.0.zip'
             second = Path(tmp) / 'second.zip'
-            self.builder.write_zip(first, files, 'AgentOrch-1.6.1')
-            self.builder.write_zip(second, files, 'AgentOrch-1.6.1')
+            self.builder.write_zip(first, files, 'AgentOrch-1.7.0')
+            self.builder.write_zip(second, files, 'AgentOrch-1.7.0')
             self.assertEqual(drift.sha256_bytes(first.read_bytes()),
                              drift.sha256_bytes(second.read_bytes()))
             with zipfile.ZipFile(first) as archive:
                 names = sorted(archive.namelist())
-                shipped = json.loads(archive.read(f'AgentOrch-1.6.1/{drift.MANIFEST_NAME}'))
-            self.assertEqual(names, sorted(f'AgentOrch-1.6.1/{rel}' for rel in files))
-            self.assertIn('AgentOrch-1.6.1/MANIFEST.json', names)
-            self.assertEqual(shipped['format_version'], '1.6')
+                shipped = json.loads(archive.read(f'AgentOrch-1.7.0/{drift.MANIFEST_NAME}'))
+            self.assertEqual(names, sorted(f'AgentOrch-1.7.0/{rel}' for rel in files))
+            self.assertIn('AgentOrch-1.7.0/MANIFEST.json', names)
+            self.assertEqual(shipped['format_version'], '1.7')
 
     def test_cli_rejects_a_v_prefixed_version_without_building(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -304,29 +313,39 @@ class VersionConsistencyTests(unittest.TestCase):
         self.assertIsNotNone(match, 'VERSION.md must declare "Release version: <x.y>"')
         return match.group(1)
 
-    def test_version_file_parses_as_suite_and_format_1_6(self):
-        self.assertEqual(drift.read_version(ROOT), (SUITE, '1.6'))
+    def test_version_file_parses_as_suite_and_format_1_7(self):
+        self.assertEqual(drift.read_version(ROOT), (SUITE, '1.7'))
 
     def test_release_tag_matches_the_format_version(self):
         release = self.release_version()
         _, format_version = drift.read_version(ROOT)
-        self.assertEqual(release, '1.6.3')
-        self.assertEqual(format_version, '1.6')
+        self.assertEqual(release, '1.7.0')
+        self.assertEqual(format_version, '1.7')
         self.assertTrue(self.versions.tag_matches_format(f'v{release}', format_version))
         # The rule compares major.minor: a different major.minor (v1.5) must NOT
-        # be accepted, while patch tags that share the Format (v1.6 / v1.6.1 /
-        # v1.6.2 / v1.6.3) all match. A silent mismatch would be a real defect.
-        self.assertTrue(self.versions.tag_matches_format('v1.6', format_version))
-        self.assertTrue(self.versions.tag_matches_format('v1.6.1', format_version))
-        self.assertTrue(self.versions.tag_matches_format('v1.6.2', format_version))
+        # be accepted, while patch tags that share the Format (v1.7 / v1.7.0)
+        # match. A silent mismatch would be a real defect.
+        self.assertTrue(self.versions.tag_matches_format('v1.7', format_version))
+        self.assertTrue(self.versions.tag_matches_format('v1.7.0', format_version))
         self.assertFalse(self.versions.tag_matches_format('v1.5', format_version))
+        # Historical compatibility: the 1.6 patch tags still match Format 1.6,
+        # and they must NOT be accepted by the current Format 1.7.
+        self.assertTrue(self.versions.tag_matches_format('v1.6', '1.6'))
+        self.assertTrue(self.versions.tag_matches_format('v1.6.1', '1.6'))
+        self.assertTrue(self.versions.tag_matches_format('v1.6.2', '1.6'))
+        self.assertTrue(self.versions.tag_matches_format('v1.6.3', '1.6'))
+        self.assertFalse(self.versions.tag_matches_format('v1.6', format_version))
+        self.assertFalse(self.versions.tag_matches_format('v1.6.1', format_version))
+        self.assertFalse(self.versions.tag_matches_format('v1.6.2', format_version))
+        self.assertFalse(self.versions.tag_matches_format('v1.6.3', format_version))
+        self.assertFalse(self.versions.tag_matches_format('v1.5', '1.6'))
 
-    def test_manifest_generated_from_version_file_records_format_1_6(self):
+    def test_manifest_generated_from_version_file_records_format_1_7(self):
         suite, format_version = drift.read_version(ROOT)
         manifest = drift.build_manifest({'AGENTS.md': b'# agents\n'}, suite, format_version)
-        self.assertEqual(manifest['format_version'], '1.6')
+        self.assertEqual(manifest['format_version'], '1.7')
         shipped = json.loads(drift.dumps_manifest(manifest))
-        self.assertEqual(shipped['format_version'], '1.6')
+        self.assertEqual(shipped['format_version'], '1.7')
         self.assertEqual(shipped['suite'], SUITE)
 
 

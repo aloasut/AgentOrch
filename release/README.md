@@ -9,7 +9,7 @@
   - **正式 Release 资产**：`uv run python scripts/build_release.py --release-version 1.6` 产出 `release/AgentOrch-1.6.zip`，zip 顶层目录与资产 stem 一致，即 `AgentOrch-1.6/`。对应 Git tag 为 `v1.6`、资产名为 `AgentOrch-1.6.zip`。参数写 `1.6`，**不要写 `v1.6`**：`v1.6` 是 tag 名而不是资产名，带 `v` 前缀或预发布后缀会被构建直接拒绝。补丁发行把版本号写全：`--release-version 1.6.1` 产出 `AgentOrch-1.6.1.zip` / 顶层目录 `AgentOrch-1.6.1/`，tag 为 `v1.6.1`；补丁号只改变资产名与顶层目录，不改变 Format。
   - **日期构建（默认，保持不变）**：`uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD` 产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`。CI 与 `docs/upgrade.md` 的基线重建继续用这个模式。
   - `--date` 与 `--release-version` **互斥**：同时给出即报错退出（`argparse` 退出码 2），不存在"谁覆盖谁"的隐含优先级；不带任何命名参数时仍按今天日期命名。
-- **发布名只决定资产名与顶层目录**：包内文件集合、`MANIFEST.json` schema 与 `format_version` 在两种模式下完全相同。**Release 版本号不是 Format 版本**：`Release 1.6` 发布时与 `Format version` 1.6 数值相同；当前 Release 1.6.3 与 Format 1.6 已不同。两者仍是两条序列（发行号 vs 格式契约），`MANIFEST.json` 的 `format_version` 由 `VERSION.md` 的 `Format version:` 一行生成；两者的区别与 `Release 1.6` 记录见第 5 节。
+- **发布名只决定资产名与顶层目录**：包内文件集合、`MANIFEST.json` schema 与 `format_version` 在两种模式下完全相同。**Release 版本号不是 Format 版本**：`Release 1.6` 发布时与 `Format version` 1.6 数值相同；当前 `Release 1.7.0` 与 `Format 1.7` 的 major.minor 相同、编号仍各自独立。两者仍是两条序列（发行号 vs 格式契约），`MANIFEST.json` 的 `format_version` 由 `VERSION.md` 的 `Format version:` 一行生成；两者的区别与当前发行记录见第 5 节。
 - 产物不纳入 git：`.gitignore` 忽略 `release/*.zip`；仓库只保留流程文档、构建脚本与本标准；历史版本记录由 GitHub Releases 承担。`release/README.md` 不入忽略范围。**已发布的历史资产（如 `agentorch-20261023.zip`）不删除、不覆盖、不改写**；新 Release 用新的资产名。
 - 产物可随时重建：运行 `uv run python scripts/build_release.py`（默认输出到 `release/`），或按上面的正式 Release 命令指定 `--release-version`。构建是**可复现**的：同一仓库状态下（同一命名模式与同一 top dir），包内文件集合、各文件内容与 zip 的校验和均一致（归档时间戳使用固定值），因此 zip 的校验和可被任何人重建复核。可复现性不依赖检出行尾：构建时文本文件按 LF 归一后打包、二进制文件原样打包（仓库以 `.gitattributes` 统一 LF），故任何检出（含 Windows 上 `core.autocrlf=true`）重建都得到同一校验和。
 
@@ -18,7 +18,7 @@
 - 只含通用可复用产出；不得包含本仓库特有的演进决策、任务记录或个人环境信息。
 - 包内文件集合 == `scripts/validate_kit.py` 中的 `REQUIRED` 列表 **+ 构建时生成的 `MANIFEST.json`**（数量与名称都一致，即 `len(REQUIRED) + 1` 个文件）。`REQUIRED` 是分发内容的唯一来源，构建脚本直接解析它，不再维护第二份清单；`MANIFEST.json` 是唯一不来自 `REQUIRED` 的成员。
 - **`MANIFEST.json`（机器可读清单）**：由 `scripts/check_drift.py` 生成，构建脚本导入该模块而不另写一份规则，因此分类只有一处实现。字段固定为：
-  - 顶层 `schema_version`（清单格式版本）、`suite`（套件名，取自 `VERSION.md`）、`format_version`（套件格式版本，当前 `1.6`）、`files[]`；
+  - 顶层 `schema_version`（清单格式版本）、`suite`（套件名，取自 `VERSION.md`）、`format_version`（套件格式版本，当前 `1.7`）、`files[]`；
   - 条目 `path`、`category`、`sha256`、`size`（`sha256` 与 `size` 按包内实际字节计算，文本已按 LF 归一）；
   - `category` 只允许四种上游分类：`editions/` 前缀 → `edition`，`templates/` 前缀 → `template`，`docs/PROJECT.md` / `PLAN.md`（旧根位置）/ `docs/PLAN.md`（1.4 起）/ `DESIGN.md` → `project-profile`，其余 → `core`；
   - 清单**不列出自身**（无法嵌入自己的哈希）、**不含时间戳**、条目按路径排序，因此同一仓库状态两次构建得到逐字节相同的清单。
@@ -169,16 +169,35 @@
   - 真实 `v1.6.0 → v1.6.1`、`v1.6.1 → v1.6.2` 升级、真实 1.3 / 1.4 资产升级、真实断网 / 限速 / DNS、`HD-11` 与非 GitHub-hosted 平台仍为 `NOT_RUN` / `UNKNOWN`；本次 `1.6.2 → 1.6.3` 的成功不替代它们。
 - 历史 `v1.6.2`、`v1.6.1`、`v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
 
-### 5.1.4 当前开发树（未发布）
+### 5.1.4 发行记录：Release 1.7.0
 
-- 本仓库开发树当前 `REQUIRED` 为 **117 个文件**（发行包 118 = 117 + `MANIFEST.json`），全量测试 **1047 个**，合成回归场景 **71 个**（A–E 组，含正负控制组）。相对 `v1.6.3` 的 92 个 `REQUIRED` 新增 25 个：S1（#120）6 个（`scripts/agent_selection/__init__.py`、`scope.py`、`local_store.py` 与 `tests/agent_selection/__init__.py`、`test_scope.py`、`test_local_store.py`），S2（#121）7 个（`scripts/agent_selection/runtime_adapter.py`、`discovery.py`、`roles.py` 与 `tests/agent_selection/support.py`、`test_runtime_adapter.py`、`test_discovery.py`、`test_roles.py`），S3（#122）9 个（`scripts/agent_selection/model_selection.py`、`model_sources/__init__.py`、`snapshot.py`、`artificial_analysis.py` 与 `tests/agent_selection/test_model_selection.py`、`tests/agent_selection/model_sources/__init__.py`、`fixtures.py`、`test_snapshot.py`、`test_artificial_analysis.py`），S4（#123）2 个（`scripts/agent_selection/feedback.py`、`tests/agent_selection/test_feedback.py`），S5（#124）1 个（`tests/agent_selection/test_e2e.py`；S1–S4 新测试模块同步登记在 `tests/agent_selection/__init__.py` 的 `_TEST_MODULES`，该文件不是新文件、不计入增量）。S5 的端到端场景（E1–E13）使用模拟 Runtime、固定模型快照与临时目录，不访问外部模型服务、不需要 API Key。
-- 以上是**当前开发树事实，尚未发布**；`v1.6.3` 的历史包内文件数（93 个 = 92 `REQUIRED` + `MANIFEST.json`）、675 tests 与资产 SHA256 保持不变（见 5.1.3）。
+- tag：`v1.7.0`；资产：`AgentOrch-1.7.0.zip`（顶层目录 `AgentOrch-1.7.0/`）；`Format version`：`1.7`（包内 `MANIFEST.json` 的 `format_version` 也是 `1.7`）。
+- 这是 **Phase D 的功能发行**（不是 1.6.x 的补丁）：`VERSION.md` 同时把 `Format version` 从 `1.6` 升到 `1.7`、`Release version` 从 `1.6.3` 升到 `1.7.0`。`tag_matches_format('v1.7.0', '1.7')` 为真；若只升 Release 而把 Format 留在 `1.6`，更新引擎的 `VERSION_MATCH` 会把 `v1.7.0` 判为不匹配并拒绝，因此本次必须同时升 Format。
+- 包内文件集合 **118 个（117 `REQUIRED` + `MANIFEST.json`）**：相对 v1.6.3 的 93 个（92 + 1）新增 25 个 `REQUIRED` 文件，全部属于 Phase D 的 `scripts/agent_selection/` 资产族与随包测试。**没有移动、改名或删除任何文件**，`MANIFEST.json` schema 仍为 1；更新引擎按“新增上游文件”处理，不需要手工搬迁。
+- Phase D（S0–S5，Epic #119）带来的能力，均已合并到主分支并有单元测试 / 包内自检 / CI 覆盖：
+  - S0（#117）设计冻结 → S1（#120）：每终端独立 scope 与 Markdown 私有记录基座（`scripts/agent_selection/scope.py`、`local_store.py`）；scope 解析失败或隔离无法证明时停止写持久记录，不回退共享目录。
+  - S2（#121）：Runtime adapter、Agent 发现与角色匹配（`runtime_adapter.py`、`discovery.py`、`roles.py`）；C1–C4 门先于任何排序，显式注册表回退可用，Reviewer 独立性按底层模型 ID 判定，缺角色输出具体原因。
+  - S3（#122）：Artificial Analysis 官方数据源与角色专项动态选型（`model_selection.py`、`model_sources/`）；硬筛选先于解释性排序，外部数据不可用 / 过期时如实降级为 `BLOCKED` / `UNKNOWN` / `STALE`。
+  - S4（#123）：本机项目反馈与可解释校准（`feedback.py`）；只在当前 scope 内读取，样本不足、身份变化或证据过期时不排名、不自动改配置。
+  - S5（#124）：会话入口接线与端到端合成回归（`tests/agent_selection/test_e2e.py`，E1–E13）；合成回归场景从 58 增至 71（A–E 组，13 正向 / 58 负向），使用模拟 Runtime、固定模型快照与临时目录，不访问外部模型服务、不需要 API Key。
+- 可复现性：同一仓库状态下两次独立构建得到同一 SHA256；构建自检 a–l 与 v1.6.3 一致（构建脚本未改动），没有跳过项。日期命名（`--date`）仍可用。
+- **未验证 / 已知限制（不得写成已验证）**：
+  - 真实 `v1.6.3 → 1.7.0` 下载与升级为 `NOT_RUN`：Format 1.6 → 1.7 的旧包升级归发布后验证；本任务只证明构建、包内自检与 1.7.0 包的下游回归。
+  - 真实 GitHub Release 的创建、下载与 SHA256 复核依赖网络与权限，发布前为 `NOT_RUN`，由 Master 在发布后补证。
+  - Phase D 的 E1–E13 是合成证据，不证明真实 Runtime / 模型 API；真实 `1.6.0` / `1.6.1` → `1.6.2` 升级、真实 1.3 / 1.4 资产、真实断网 / 限速 / DNS、`HD-11` 与非 GitHub-hosted 平台仍为 `NOT_RUN` / `UNKNOWN`。
+  - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
+- 历史 `v1.6.3`、`v1.6.2`、`v1.6.1`、`v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
 
 ### 5.2 Format version 变更
 
 - **1.6.1 / 1.6.2 / 1.6.3 是补丁发行，不属于 Format 变更**：Format 仍为 `1.6`，见 5.1.1 / 5.1.2 / 5.1.3；本节只记录真正的格式版本升级。其中 1.6.3 在 Format 1.6 内新增了 `REQUIRED` 文件（见 5.1.3），但包格式、`MANIFEST.json` schema 与 `format_version` 未变，仍不是 Format 变更。
 
-- **1.6（当前）** 相对 1.5：
+- **1.7（当前）** 相对 1.6：
+  - **包内新增 Phase D 角色选择资产族**：`scripts/agent_selection/`（每终端 scope、Markdown 私有记录、runtime adapter、发现与角色匹配、可选模型数据源与快照、本机反馈）及随包测试 `tests/agent_selection/`（含 E1–E13 端到端）进入 `REQUIRED`。包内文件从 v1.6.3 资产的 93 个（92 `REQUIRED` + `MANIFEST.json`）增至 118 个（117 + 1）。
+  - **无文件移动 / 改名 / 删除，无破坏性布局变化**：新增的只是文件与子目录，既有路径、`MANIFEST.json` schema 1 与 `REQUIRED` 中已有条目全部保留；升级按普通“新增上游文件”处理，不需要手工搬迁。
+  - **Format 升到 1.7 的原因**：让 `v1.7.0` release tag 与 `MANIFEST.json` 的 `format_version` 一致，满足更新引擎 `VERSION_MATCH`；`VERSION.md` 的 `Release version` 仍独立记录（本次为 `1.7.0`）。
+  - 迁移：无强制手工步骤。已安装 1.3 及以后、且有 `MANIFEST.json` 的项目可用「更新 AgentOrch」入口准备升级；真实 `1.6.3 → 1.7.0` 升级为 `NOT_RUN`，归发布后验证。
+- **1.6（历史）** 相对 1.5：
   - **包内新增自我完善与安全更新资产**：`scripts/self_improvement/`（来源注册表、采集、Lesson、规划与闭环）、`scripts/update_agentorch/`（安全更新引擎与「更新 AgentOrch」入口）及其随包测试、`templates/self-improvement/` 模板进入 `REQUIRED`。连同 1.5 发布后合入 Format 1.5 的可选架构契约检查器与相关测试，包内文件从 v1.5 资产的 34 个（33 `REQUIRED` + `MANIFEST.json`）增至 91 个（90 + 1）。
   - **无文件移动 / 改名 / 删除，无破坏性布局变化**：新增的只是文件与子目录，既有路径、`MANIFEST.json` schema 1 与 `REQUIRED` 中已有条目全部保留；升级按普通“新增上游文件”处理，不需要手工搬迁。
   - **Format 升到 1.6 的原因**：让 `v1.6` release tag 与 `MANIFEST.json` 的 `format_version` 一致，满足更新引擎 `VERSION_MATCH`；`VERSION.md` 的 `Release version` 仍独立记录（1.6 发布时数值相同，语义仍分开）。
