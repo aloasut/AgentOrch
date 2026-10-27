@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 176" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">AgentOrch</title>
+  <desc id="logo-desc">A geometric A mark with connected orbit nodes, representing governed agent workflows.</desc>
+  <defs>
+    <linearGradient id="mark-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#38BDF8"/>
+      <stop offset="0.52" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#6258E8"/>
+    </linearGradient>
+    <linearGradient id="orbit-gradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="0.55" stop-color="#38BDF8"/>
+      <stop offset="1" stop-color="#6659E8"/>
+    </linearGradient>
+    <linearGradient id="word-gradient" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3478F6"/>
+      <stop offset="1" stop-color="#6558E8"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(14 8)">
+    <ellipse cx="72" cy="78" rx="62" ry="25" transform="rotate(-27 72 78)" fill="none" stroke="url(#orbit-gradient)" stroke-width="7" stroke-linecap="round"/>
+    <path d="M24 142 57 43c3.1-9.2 8.1-14 15.7-14 7.4 0 12.3 4.8 15.7 14l33 99h-25L72.6 70 48.8 142Z" fill="url(#mark-gradient)"/>
+    <path d="M49 99h49l5.6 15.3H43.3Z" fill="#1D4ED8" opacity="0.94"/>
+    <circle cx="18" cy="99" r="8.5" fill="#2DD4BF" stroke="#FFFFFF" stroke-width="3"/>
+    <circle cx="123" cy="52" r="8.5" fill="#6258E8" stroke="#FFFFFF" stroke-width="3"/>
+  </g>
+  <text x="176" y="83" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="61" font-weight="760" letter-spacing="-2.2" fill="#13233F">Agent<tspan fill="url(#word-gradient)">Orch</tspan></text>
+  <text x="181" y="119" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="16" font-weight="600" letter-spacing="1.05" fill="#526680">GOVERNED WORKFLOWS FOR AI AGENTS</text>
+  <path d="M181 138H566" stroke="#DDE6F3" stroke-width="1.5"/>
+  <circle cx="580" cy="138" r="3.2" fill="#2DD4BF"/>
+</svg>
