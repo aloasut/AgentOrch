@@ -8,6 +8,7 @@ import importlib
 
 _TEST_MODULES = ('test_scope', 'test_local_store', 'test_runtime_adapter',
                  'test_discovery', 'test_roles', 'test_model_selection',
+                 'test_feedback',
                  'model_sources.test_snapshot',
                  'model_sources.test_artificial_analysis')
 
