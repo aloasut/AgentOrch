@@ -169,6 +169,11 @@
   - 真实 `v1.6.0 → v1.6.1`、`v1.6.1 → v1.6.2` 升级、真实 1.3 / 1.4 资产升级、真实断网 / 限速 / DNS、`HD-11` 与非 GitHub-hosted 平台仍为 `NOT_RUN` / `UNKNOWN`；本次 `1.6.2 → 1.6.3` 的成功不替代它们。
 - 历史 `v1.6.2`、`v1.6.1`、`v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
 
+### 5.1.4 当前开发树（未发布）
+
+- 本仓库开发树当前 `REQUIRED` 为 **98 个文件**（发行包 99 = 98 + `MANIFEST.json`），全量测试 **810 个**。相对 `v1.6.3` 的 92 个 `REQUIRED` 新增 6 个，全部来自 Phase D S1（#120）：`scripts/agent_selection/__init__.py`、`scope.py`、`local_store.py` 与 `tests/agent_selection/__init__.py`、`test_scope.py`、`test_local_store.py`。
+- 以上是**当前开发树事实，尚未发布**；`v1.6.3` 的历史包内文件数（93 个 = 92 `REQUIRED` + `MANIFEST.json`）、675 tests 与资产 SHA256 保持不变（见 5.1.3）。
+
 ### 5.2 Format version 变更
 
 - **1.6.1 / 1.6.2 / 1.6.3 是补丁发行，不属于 Format 变更**：Format 仍为 `1.6`，见 5.1.1 / 5.1.2 / 5.1.3；本节只记录真正的格式版本升级。其中 1.6.3 在 Format 1.6 内新增了 `REQUIRED` 文件（见 5.1.3），但包格式、`MANIFEST.json` schema 与 `format_version` 未变，仍不是 Format 变更。
