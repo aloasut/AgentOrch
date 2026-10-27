@@ -181,9 +181,10 @@
   - S4（#123）：本机项目反馈与可解释校准（`feedback.py`）；只在当前 scope 内读取，样本不足、身份变化或证据过期时不排名、不自动改配置。
   - S5（#124）：会话入口接线与端到端合成回归（`tests/agent_selection/test_e2e.py`，E1–E13）；合成回归场景从 58 增至 71（A–E 组，13 正向 / 58 负向），使用模拟 Runtime、固定模型快照与临时目录，不访问外部模型服务、不需要 API Key。
 - 可复现性：同一仓库状态下两次独立构建得到同一 SHA256；构建自检 a–l 与 v1.6.3 一致（构建脚本未改动），没有跳过项。日期命名（`--date`）仍可用。
-- **未验证 / 已知限制（不得写成已验证）**：
-  - 真实 `v1.6.3 → 1.7.0` 下载与升级为 `NOT_RUN`：Format 1.6 → 1.7 的旧包升级归发布后验证；本任务只证明构建、包内自检与 1.7.0 包的下游回归。
-  - 真实 GitHub Release 的创建、下载与 SHA256 复核依赖网络与权限，发布前为 `NOT_RUN`，由 Master 在发布后补证。
+- **发布后补证（2026-10-27，#144）**：
+  - 真实 `v1.6.3 → 1.7.0` 下载与隔离升级为 `PASS`：`PLAN` 的 10 项包校验全 `PASS`，`APPLY` 后 Format 1.6 → 1.7、`MANIFEST.json` files 92 → 117、117/117 包内文件与下载的 1.7.0 目标包逐字节一致、项目自有 `docs/PROJECT.md` / `docs/PLAN.md` / `LOCAL-NOTES.md` SHA256 前后不变、备份 `required=true` / `verified=true`、`rollback.result=NOT_NEEDED`、head 前后不变；升级后项目 `validate_kit` 退出码 0（downstream，117 required）、包内 `unittest` 968 tests `OK`（skip 19）。详见仓库文档 `docs/upgrade.md` §14.6。
+  - 真实 GitHub Release 已创建并复核：[Release v1.7.0](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.7.0)，tag `v1.7.0` → `ac3e87f`，资产 `AgentOrch-1.7.0.zip` 602,273 bytes，SHA256 `cbc35fcf…` 与 GitHub API `assets[].digest` 一致；主分支 CI run `40598836550` @ `ac3e87f` 四平台全绿。
+- **仍未验证 / 已知限制（不得写成已验证）**：
   - Phase D 的 E1–E13 是合成证据，不证明真实 Runtime / 模型 API；真实 `1.6.0` / `1.6.1` → `1.6.2` 升级、真实 1.3 / 1.4 资产、真实断网 / 限速 / DNS、`HD-11` 与非 GitHub-hosted 平台仍为 `NOT_RUN` / `UNKNOWN`。
   - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
 - 历史 `v1.6.3`、`v1.6.2`、`v1.6.1`、`v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
@@ -196,7 +197,7 @@
   - **包内新增 Phase D 角色选择资产族**：`scripts/agent_selection/`（每终端 scope、Markdown 私有记录、runtime adapter、发现与角色匹配、可选模型数据源与快照、本机反馈）及随包测试 `tests/agent_selection/`（含 E1–E13 端到端）进入 `REQUIRED`。包内文件从 v1.6.3 资产的 93 个（92 `REQUIRED` + `MANIFEST.json`）增至 118 个（117 + 1）。
   - **无文件移动 / 改名 / 删除，无破坏性布局变化**：新增的只是文件与子目录，既有路径、`MANIFEST.json` schema 1 与 `REQUIRED` 中已有条目全部保留；升级按普通“新增上游文件”处理，不需要手工搬迁。
   - **Format 升到 1.7 的原因**：让 `v1.7.0` release tag 与 `MANIFEST.json` 的 `format_version` 一致，满足更新引擎 `VERSION_MATCH`；`VERSION.md` 的 `Release version` 仍独立记录（本次为 `1.7.0`）。
-  - 迁移：无强制手工步骤。已安装 1.3 及以后、且有 `MANIFEST.json` 的项目可用「更新 AgentOrch」入口准备升级；真实 `1.6.3 → 1.7.0` 升级为 `NOT_RUN`，归发布后验证。
+  - 迁移：无强制手工步骤。已安装 1.3 及以后、且有 `MANIFEST.json` 的项目可用「更新 AgentOrch」入口准备升级；真实 `1.6.3 → 1.7.0` 隔离升级为 `PASS`（2026-10-27，`APPLIED`，Format 1.6 → 1.7、files 92 → 117、117/117 逐字节一致、项目自有文件不变、备份 `verified=true`、head 前后不变；见 `docs/upgrade.md` §14.6），该结果只覆盖这一次升级。
 - **1.6（历史）** 相对 1.5：
   - **包内新增自我完善与安全更新资产**：`scripts/self_improvement/`（来源注册表、采集、Lesson、规划与闭环）、`scripts/update_agentorch/`（安全更新引擎与「更新 AgentOrch」入口）及其随包测试、`templates/self-improvement/` 模板进入 `REQUIRED`。连同 1.5 发布后合入 Format 1.5 的可选架构契约检查器与相关测试，包内文件从 v1.5 资产的 34 个（33 `REQUIRED` + `MANIFEST.json`）增至 91 个（90 + 1）。
   - **无文件移动 / 改名 / 删除，无破坏性布局变化**：新增的只是文件与子目录，既有路径、`MANIFEST.json` schema 1 与 `REQUIRED` 中已有条目全部保留；升级按普通“新增上游文件”处理，不需要手工搬迁。
