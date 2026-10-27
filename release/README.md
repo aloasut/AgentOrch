@@ -161,10 +161,12 @@
   - #102 / #103 / #104：文档口径——会话必读集合与 `kit/orchestration.md` 第三部分按需读（#102）；G6 风险深度（触发项写最坏后果与额外复核）#103；M4 资源冲突来源改为 `resource_lock_events` 的 `LOCK_DENIED_CONFLICT`（#104）。
   本补丁不改变更新引擎的校验 / 分类 / 备份 / 回滚语义，也不改变状态机与锁语义。
 - 可复现性：同一仓库状态下两次独立构建得到同一 SHA256；构建自检 a–l 与 v1.6.2 完全一致，没有跳过项。日期命名（`--date`）仍可用。
-- **未验证 / 已知限制（不得写成已验证）**：
-  - 真实 `v1.6.2 → v1.6.3` 下载与升级为 `NOT_RUN`，归发布后验证；本任务只证明构建、包内自检与 1.6.3 包的下游回归。
-  - 真实 GitHub Release 的创建、下载与 SHA256 复核依赖网络与权限，发布前为 `NOT_RUN`，由 Master 在发布后补证。
+- **发布后补证（2026-10-27，#113）**：
+  - 真实 `v1.6.2 → v1.6.3` 下载与升级为 `APPLIED`：`PLAN` 的 10 项包校验全 `PASS`，`APPLY` 后 Format 1.6 → 1.6、`MANIFEST.json` files 90 → 92、92/92 包内文件与目标包逐字节一致、项目自有 `docs/PROJECT.md` / `docs/PLAN.md` / `LOCAL-NOTES.md` SHA256 不变、备份 `required=true` / `verified=true`、head 前后不变；升级后项目 `validate_kit` 退出码 0（downstream）、包内 675 tests `OK`（skip 19）。详见仓库文档 `docs/upgrade.md` §14.5。
+  - 真实 GitHub Release 已创建并复核：[Release v1.6.3](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.6.3)，tag `v1.6.3` → `2adf431`，资产 `AgentOrch-1.6.3.zip` 461,829 bytes，SHA256 `dcce5b24…` 与 GitHub API `assets[].digest` 一致；主分支 CI run `40471657312` @ `2adf431` 四平台全绿。
+- **仍未验证 / 已知限制（不得写成已验证）**：
   - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
+  - 真实 `v1.6.0 → v1.6.1`、`v1.6.1 → v1.6.2` 升级、真实 1.3 / 1.4 资产升级、真实断网 / 限速 / DNS、`HD-11` 与非 GitHub-hosted 平台仍为 `NOT_RUN` / `UNKNOWN`；本次 `1.6.2 → 1.6.3` 的成功不替代它们。
 - 历史 `v1.6.2`、`v1.6.1`、`v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
 
 ### 5.2 Format version 变更
