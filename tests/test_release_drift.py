@@ -194,6 +194,7 @@ class ReleaseAssetNamingTests(unittest.TestCase):
 
     def test_patch_release_version_is_allowed(self):
         self.assertEqual(self.builder.release_asset_stem(None, '1.6.1'), 'AgentOrch-1.6.1')
+        self.assertEqual(self.builder.release_asset_stem(None, '1.6.2'), 'AgentOrch-1.6.2')
 
     def test_default_date_naming_still_works(self):
         self.assertEqual(self.builder.release_asset_stem('20261026'), 'agentorch-20261026')
@@ -308,13 +309,14 @@ class VersionConsistencyTests(unittest.TestCase):
     def test_release_tag_matches_the_format_version(self):
         release = self.release_version()
         _, format_version = drift.read_version(ROOT)
-        self.assertEqual(release, '1.6.1')
+        self.assertEqual(release, '1.6.2')
         self.assertEqual(format_version, '1.6')
         self.assertTrue(self.versions.tag_matches_format(f'v{release}', format_version))
         # The rule compares major.minor: a different major.minor (v1.5) must NOT
-        # be accepted, while patch tags that share the Format (v1.6 / v1.6.1)
-        # both match. A silent mismatch would be a real defect.
+        # be accepted, while patch tags that share the Format (v1.6 / v1.6.1 /
+        # v1.6.2) all match. A silent mismatch would be a real defect.
         self.assertTrue(self.versions.tag_matches_format('v1.6', format_version))
+        self.assertTrue(self.versions.tag_matches_format('v1.6.1', format_version))
         self.assertFalse(self.versions.tag_matches_format('v1.5', format_version))
 
     def test_manifest_generated_from_version_file_records_format_1_6(self):

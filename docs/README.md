@@ -42,9 +42,9 @@
 - **情况 A · 新建项目**（空目录 / 刚起步的仓库）：套件文件直接装进项目文件夹即可，按下面第 1–4 步走。
 - **情况 B · 旧项目**（已有代码、已有 README / LICENSE / docs / scripts 等的仓库）：**不要把发行包直接解压覆盖进项目根**——那可能盖掉你项目的重要文件。改用下面第 1 步 B 的话术，让 Agent 先读套件方法、盘点冲突、经你确认后引入；完整步骤见第 4 节路径二。
 
-**第 1 步 A · 装进新项目**（先从本仓库 Releases 下载最新的正式发行包解压备好；正式 Release 资产名形如 `AgentOrch-1.6.1.zip`，包内顶层目录同名；日期构建则是 `agentorch-YYYYMMDD.zip`。细节见 3.1）：
+**第 1 步 A · 装进新项目**（先从本仓库 Releases 下载最新的正式发行包解压备好；正式 Release 资产名形如 `AgentOrch-1.6.2.zip`，包内顶层目录同名；日期构建则是 `agentorch-YYYYMMDD.zip`。细节见 3.1）：
 
-> 从 AgentOrch 仓库的 Releases 下载最新的发行包并解压，把包内顶层目录（如 AgentOrch-1.6.1/ 或 agentorch-YYYYMMDD/）的全部内容装进我的项目根（保留 scripts/、editions/、templates/ 的相对路径）。装完列出顶层目录给我确认。
+> 从 AgentOrch 仓库的 Releases 下载最新的发行包并解压，把包内顶层目录（如 AgentOrch-1.6.2/ 或 agentorch-YYYYMMDD/）的全部内容装进我的项目根（保留 scripts/、editions/、templates/ 的相对路径）。装完列出顶层目录给我确认。
 
 **第 1 步 B · 引入旧项目**（旧项目专用，代替第 1 步 A；发行包解压到项目外的临时目录，细节见第 4 节路径二）：
 
@@ -138,10 +138,10 @@
 **直接使用发行版，不要 clone 本仓库。** 本仓库是套件自我开发与完善的现场——阶段计划、任务记录、审计与设计过程材料都在里面，不面向使用者；面向使用者的只有 Releases 里的发行包。发行包只含可复用产出（核心契约、两套底座、模板、脚本与自检），并经隐私自检：无个人路径、无凭据痕迹、无任务记录与过程残留。
 
 ```bash
-# 从 Releases 下载正式发行包（如 AgentOrch-1.6.1.zip；日期构建为 agentorch-YYYYMMDD.zip）后解压，
+# 从 Releases 下载正式发行包（如 AgentOrch-1.6.2.zip；日期构建为 agentorch-YYYYMMDD.zip）后解压，
 # 把包内顶层目录内容复制进你的项目根；zip 名与顶层目录名相同
-unzip /path/to/AgentOrch-1.6.1.zip -d /tmp/agentorch-kit
-cp -r /tmp/agentorch-kit/AgentOrch-1.6.1/. your-project/ && cd your-project
+unzip /path/to/AgentOrch-1.6.2.zip -d /tmp/agentorch-kit
+cp -r /tmp/agentorch-kit/AgentOrch-1.6.2/. your-project/ && cd your-project
 ```
 
 随后编辑 `docs/PROJECT.md`，至少填好 `edition: local`、允许 / 禁改路径和验证命令；发行包里的该文件是带 `FILL_IN` 的待填模板。
@@ -496,8 +496,8 @@ uv run python scripts/run_delivery_scenarios.py --json --output "$TEMP/delivery-
 
 ### 8.1 构建发行包
 
-- **构建（两种命名，互不组合）**：日期构建用 `uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD`，产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`；正式 Release 用 `--release-version 1.6.1`，产出 `release/AgentOrch-1.6.1.zip`，顶层目录 `AgentOrch-1.6.1/`。zip 名与顶层目录名始终相同；两个命名参数同时给出会直接报错。无论用哪种命名，包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`，`MANIFEST.json` 的 `format_version` 只由 `VERSION.md` 的 `Format version:` 行决定（当前 `1.6`）。
-- **Release 版本 ≠ Format 版本**：`AgentOrch-1.6.1.zip` 是**发行号**（tag `v1.6.1`），`Format version` 是格式契约版本；当前 Release 为 `1.6.1`、Format 仍为 `1.6`，两者不再数值相同，正好说明它们是两条序列。`MANIFEST.json` 的 `format_version` 由 `Format version:` 行生成（`1.6`），`Release version` 行只作记录、不参与 `check_drift.py` 的解析。更新引擎的 `VERSION_MATCH` 比较 tag 的 major.minor 与 `format_version`，因此 `v1.6.1` 仍匹配 Format `1.6`。
+- **构建（两种命名，互不组合）**：日期构建用 `uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD`，产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`；正式 Release 用 `--release-version 1.6.2`，产出 `release/AgentOrch-1.6.2.zip`，顶层目录 `AgentOrch-1.6.2/`。zip 名与顶层目录名始终相同；两个命名参数同时给出会直接报错。无论用哪种命名，包内文件集合 == `validate_kit.py` 的 `REQUIRED` 列表 + 构建时生成的 `MANIFEST.json`，`MANIFEST.json` 的 `format_version` 只由 `VERSION.md` 的 `Format version:` 行决定（当前 `1.6`）。
+- **Release 版本 ≠ Format 版本**：`AgentOrch-1.6.2.zip` 是**发行号**（tag `v1.6.2`），`Format version` 是格式契约版本；当前 Release 为 `1.6.2`、Format 仍为 `1.6`，两者不再数值相同，正好说明它们是两条序列。`MANIFEST.json` 的 `format_version` 由 `Format version:` 行生成（`1.6`），`Release version` 行只作记录、不参与 `check_drift.py` 的解析。更新引擎的 `VERSION_MATCH` 比较 tag 的 major.minor 与 `format_version`，因此 `v1.6.2` 仍匹配 Format `1.6`。
 - **机器可读清单**：`MANIFEST.json` 记录 `schema_version`（清单格式版本）、`suite`、`format_version`（套件格式版本）与 `files[]`；每个条目含 `path`、`category`、`sha256`、`size`。清单**不含时间戳**、条目按路径排序，分类规则只有一处实现（`scripts/check_drift.py`，构建脚本导入它），因此同一工作树两次构建得到完全相同的清单与 zip SHA256。
 - **产物不入库、自检强制**：`release/*.zip` 已被忽略；构建后自动执行 a–l 自检，失败会删除未通过自检的产物，没有跳过开关。自检 a 现在校验「包内文件集合 == `REQUIRED` + `MANIFEST.json`」、清单中每条路径可解析、SHA-256 与大小和实际文件一致、分类合法且清单路径与 `REQUIRED` 完全一致。
 - **可复现**：归档时间戳固定、文本文件按 LF 归一后打包，清单哈希同样按归一后的字节计算；同一仓库状态重建应得到同一 SHA256，Windows 上 `core.autocrlf=true` 的检出也不会改变结果。
@@ -537,8 +537,9 @@ uv run python scripts/check_drift.py <项目根> --json   # stdout 只有 JSON�
 
 ## 9. 版本与兼容
 
-- [VERSION.md](../VERSION.md) 记录套件名、支持底座、**Format version**（当前 `1.6`）与**对外 Release 版本**（当前 `1.6.1`，仅作记录）；格式变更时同步更新模板与校验清单。
-- **Format 版本与 Release 版本是两条序列，不要混读**：当前发布是 Release `1.6.1`（tag `v1.6.1`、资产 `AgentOrch-1.6.1.zip`），Format 仍为 `1.6`；`1.6.1` 是 `1.6.0` 的补丁发行，包含 #85 的下游包修复，不改变包格式。上一个正式发布是 Release `1.6`（tag `v1.6`、资产 `AgentOrch-1.6.zip`），它同时把 `Format version` 从 `1.5` 升到 `1.6`（新增自我完善 / 安全更新资产，见 `release/README.md` §5.2）。`MANIFEST.json` 的 `format_version` 只由 `Format version:` 一行生成（`1.6`），`Release version` 行不参与解析；下游判断兼容性看 `format_version`。
+- [VERSION.md](../VERSION.md) 记录套件名、支持底座、**Format version**（当前 `1.6`）与**对外 Release 版本**（当前 `1.6.2`，仅作记录）；格式变更时同步更新模板与校验清单。
+- **Format 版本与 Release 版本是两条序列，不要混读**：当前发布是 Release `1.6.2`（tag `v1.6.2`、资产 `AgentOrch-1.6.2.zip`），Format 仍为 `1.6`；`1.6.2` 是 `1.6.1` 的补丁发行，包含 #93 的重复多值选项修复，不改变包格式。上一个正式发布是 Release `1.6.1`（tag `v1.6.1`、资产 `AgentOrch-1.6.1.zip`），它是 `1.6.0` 的补丁发行（#85 下游包修复）；再往前是 Release `1.6`（tag `v1.6`、资产 `AgentOrch-1.6.zip`），它同时把 `Format version` 从 `1.5` 升到 `1.6`（新增自我完善 / 安全更新资产，见 `release/README.md` §5.2）。`MANIFEST.json` 的 `format_version` 只由 `Format version:` 一行生成（`1.6`），`Release version` 行不参与解析；下游判断兼容性看 `format_version`。
+- **1.6.2 相对 1.6.1 的补丁内容**：修复 `task add` 重复多值选项静默丢值——`--acceptance` / `--paths` / `--depends` / `--resources` 原先用 `nargs='+'` + `store`，重复写同名选项时只有最后一次生效；现在重复出现与单次多值都会合并保留全部取值。包内文件集合（91 个 = 90 `REQUIRED` + `MANIFEST.json`）、`MANIFEST.json` schema 1 与 `format_version` 均不变；真实 `v1.6.1 → v1.6.2` 升级仍为 `NOT_RUN`，发布后验证。
 - **1.6.1 相对 1.6.0 的补丁内容**：修复下游项目已有 `docs/` 时 1.6 包无法通过 `validate_kit` 与包内 `unittest` 的问题（下游模式只要求 `docs/PROJECT.md` 与 `docs/PLAN.md`，不比较清单哈希；同时修正大小写路径残留）。包内文件集合（91 个 = 90 `REQUIRED` + `MANIFEST.json`）、`MANIFEST.json` schema 1 与 `format_version` 均不变；真实 `v1.6.0 → v1.6.1` 升级仍为 `NOT_RUN`，发布后验证。
 - **1.6 相对 1.5 的格式变化**：新增 `scripts/self_improvement/`、`scripts/update_agentorch/`、`templates/self-improvement/` 及随包测试进入 `REQUIRED`（包内 34 → 91 个文件）；无文件移动、改名或删除，`MANIFEST.json` schema 1 不变。已安装 1.3 及以后、有 `MANIFEST.json` 的项目可用「更新 AgentOrch」入口准备升级；真实 v1.5 → 1.6 升级已由 #71 验证（`APPLIED`，`docs/upgrade.md` §14.2）；以 1.6 为安装基线的升级与真实 1.3 / 1.4 仍为 `NOT_RUN`。
 - `1.3` 相对 `1.2` 的变更要点：
@@ -713,7 +714,7 @@ uv run python scripts/check_drift.py .               # 0：已登记基线
 
 ### 10.7 “更新 AgentOrch”安全入口（当前 Format）
 
-已安装 1.3 / 1.4 / 1.5（有 `MANIFEST.json`）的项目可以用一条入口命令准备升级到 1.6，不必手工比对上游文件；已安装 1.6 的项目无需再升级：
+已安装 1.3 / 1.4 / 1.5（有 `MANIFEST.json`）的项目可以用一条入口命令准备升级到当前 1.6.2，不必手工比对上游文件；已安装 1.6.2 的项目无需再升级。已安装 1.6.0 / 1.6.1 的项目也可以用同一条入口准备升级到 1.6.2：入口按 `VERSION_MATCH` 接受 tag `v1.6.2`（major.minor = 1.6），再比较 target release `1.6.2` 与已安装 `format_version`（`1.6` 记作 `1.6.0`）判定可升级。但**真实 `1.6.0` / `1.6.1` → `1.6.2` 升级仍为 `NOT_RUN`**，归发布后验证；“入口可判定”不等于“升级已验证”：
 
 ```bash
 uv run python -m scripts.update_agentorch.entry --project . \
