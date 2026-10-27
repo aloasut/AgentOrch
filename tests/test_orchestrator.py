@@ -657,6 +657,113 @@ class LocalOrchestratorTests(unittest.TestCase):
         self.assertIn('source: docs/PROJECT.md',text)
         self.assertIn('legacy key is ignored',text)
 
+class PathConflictEventTests(unittest.TestCase):
+    """A refused path check leaves an audit event — and still no lock row.
+
+    `task dispatch` records `CONFLICT_RECORDED` (`data.kind=path`) inside the
+    same transaction and commits it before re-raising, which is the event M4
+    reads. `task ready` only preflights, so it records its own
+    `PATH_PREFLIGHT_REFUSED` and must never look like a dispatch conflict in
+    M4. The refusal text, the exit code and the task status stay byte for byte
+    what they were before the events existed.
+    """
+
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory(); self.root=Path(self.tmp.name)
+        (self.root/'docs').mkdir(parents=True)
+        (self.root/'docs/PROJECT.md').write_text(
+            '# Project\n\n## 运行配置\n\n- `edition`：`local`\n',encoding='utf-8')
+        orch.init(self.root)
+
+    def tearDown(self):
+        try: self.tmp.cleanup()
+        except PermissionError:                     # Windows may still hold the WAL file
+            pass
+
+    def add(self,tid,paths):
+        with contextlib.redirect_stdout(io.StringIO()):
+            orch.task_add(self.root,SimpleNamespace(id=tid,title=tid,description='',
+                                                    paths=list(paths),depends=[],acceptance=['works']))
+
+    def ready(self,tid):
+        with contextlib.redirect_stdout(io.StringIO()): orch.task_ready(self.root,tid)
+
+    def dispatch(self,tid):
+        with contextlib.redirect_stdout(io.StringIO()): orch.task_dispatch(self.root,tid)
+
+    def count(self,sql,params=()):
+        con=orch.connect(self.root)
+        try: return con.execute(sql,params).fetchone()[0]
+        finally: con.close()
+
+    def status(self,tid):
+        con=orch.connect(self.root)
+        try: return con.execute('SELECT status FROM tasks WHERE id=?',(tid,)).fetchone()['status']
+        finally: con.close()
+
+    def events(self,tid,action=None):
+        con=orch.connect(self.root)
+        try:
+            rows=[dict(r) for r in con.execute('SELECT * FROM events WHERE task_id=? ORDER BY id',(tid,))]
+        finally: con.close()
+        parsed=[dict(row,data=json.loads(row['data_json'] or '{}')) for row in rows]
+        return [row for row in parsed if action is None or row['action']==action]
+
+    def hold_src(self):
+        """TASK-HOLDER owns `src/`; TASK-SUBJECT declares a child path."""
+        self.add('TASK-HOLDER',['src/']); self.add('TASK-SUBJECT',['src/main.py'])
+        self.ready('TASK-SUBJECT'); self.ready('TASK-HOLDER'); self.dispatch('TASK-HOLDER')
+
+    # --- AC-1: the refused dispatch is auditable and inserted no lock ----------
+    def test_dispatch_conflict_writes_conflict_recorded_and_no_locks(self):
+        self.hold_src()
+        with self.assertRaises(RuntimeError) as cm: self.dispatch('TASK-SUBJECT')
+        self.assertEqual(str(cm.exception),
+                         'dispatch refused; path conflict: src/main.py overlaps src (task TASK-HOLDER)')
+        recorded=self.events('TASK-SUBJECT','CONFLICT_RECORDED')
+        self.assertEqual(len(recorded),1)
+        self.assertEqual(recorded[0]['task_id'],'TASK-SUBJECT')
+        data=recorded[0]['data']
+        self.assertEqual(data['kind'],'path')
+        self.assertEqual(data['phase'],'dispatch')
+        # The payload locates both sides of the conflict, not just its kind.
+        self.assertEqual(data['conflicts'],
+                         [{'path':'src/main.py','held_path':'src','holder_task':'TASK-HOLDER'}])
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks WHERE task_id=?',('TASK-SUBJECT',)),0)
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks'),1)   # only the holder's lock
+        self.assertEqual(self.status('TASK-SUBJECT'),'READY')          # not DISPATCHED
+
+    # --- AC-2: the observable refusal is unchanged; the event is the only delta
+    def test_cli_dispatch_conflict_keeps_exit_code_and_error_text(self):
+        self.hold_src()
+        result=subprocess.run([sys.executable,str(SCRIPT),'--root',str(self.root),
+                               'task','dispatch','TASK-SUBJECT'],
+                              capture_output=True,text=True)
+        self.assertEqual(result.returncode,1)
+        self.assertEqual(result.stderr,
+                         'ERROR: dispatch refused; path conflict: src/main.py overlaps src '
+                         '(task TASK-HOLDER)\n')
+        self.assertEqual(self.status('TASK-SUBJECT'),'READY')
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks WHERE task_id=?',('TASK-SUBJECT',)),0)
+        self.assertEqual(len(self.events('TASK-SUBJECT','CONFLICT_RECORDED')),1)
+
+    # --- AC-3: the ready preflight refusal is auditable under its own name -----
+    def test_ready_preflight_conflict_is_audited_with_its_own_event(self):
+        self.add('TASK-HOLDER',['src/']); self.add('TASK-SUBJECT',['src/main.py'])
+        self.ready('TASK-HOLDER'); self.dispatch('TASK-HOLDER')
+        with self.assertRaises(RuntimeError) as cm: self.ready('TASK-SUBJECT')
+        self.assertEqual(str(cm.exception),
+                         'path conflict: src/main.py overlaps src, held by TASK-HOLDER')
+        refused=self.events('TASK-SUBJECT','PATH_PREFLIGHT_REFUSED')
+        self.assertEqual(len(refused),1)
+        self.assertEqual(refused[0]['data']['kind'],'path')
+        self.assertEqual(refused[0]['data']['conflicts'],
+                         [{'path':'src/main.py','held_path':'src','holder_task':'TASK-HOLDER'}])
+        # It is a preflight record, not a dispatch conflict: M4 must not see it.
+        self.assertEqual(self.events('TASK-SUBJECT','CONFLICT_RECORDED'),[])
+        self.assertEqual(self.count('SELECT COUNT(*) FROM locks WHERE task_id=?',('TASK-SUBJECT',)),0)
+        self.assertEqual(self.status('TASK-SUBJECT'),'PLANNED')        # never became READY
+
 class ProjectEditionTests(unittest.TestCase):
     """The project declaration is the single edition authority and fails closed."""
     def setUp(self):

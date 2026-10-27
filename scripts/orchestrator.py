@@ -224,6 +224,21 @@ def event(con, task_id, action, from_status=None, to_status=None, note='', data=
     con.execute('INSERT INTO events(task_id,at,action,from_status,to_status,note,data_json) VALUES(?,?,?,?,?,?,?)',
         (task_id,now(),action,from_status,to_status,note,json.dumps(data or {},ensure_ascii=False)))
 
+def record_path_conflict(con, task_id, phase, status, conflicts):
+    """Persist a refused path check in the caller's transaction (M4 evidence).
+
+    `phase` is `dispatch` or `ready`. A dispatch refusal is the conflict M4
+    reads (`CONFLICT_RECORDED`, `data.kind=path`); a `ready` preflight is a
+    separate, audit-only event and must never be read as a dispatch conflict.
+    The caller COMMITs before re-raising, so the refusal leaves evidence while
+    still inserting no lock row.
+    """
+    action='CONFLICT_RECORDED' if phase=='dispatch' else 'PATH_PREFLIGHT_REFUSED'
+    detail=[{'path':p,'held_path':held,'holder_task':holder} for p,held,holder in conflicts]
+    event(con,task_id,action,None,None,
+          f'{phase} refused: path conflict; no lock row was inserted',
+          {'kind':'path','phase':phase,'status':status,'conflicts':detail})
+
 def init_plan(root):
     """Seed <root>/docs/PLAN.md from templates/plan.md exactly once.
 
@@ -424,10 +439,18 @@ def task_ready(root, task_id):
         dependency_check(con,r)
         # Current locks must not overlap declared paths. It is OK that lock is not acquired until dispatch; this is a preflight only.
         paths=json.loads(r['paths_json'])
-        for lock in con.execute('SELECT path,task_id FROM locks'):
+        for lock in con.execute('SELECT path,task_id FROM locks').fetchall():
             if lock['task_id']==task_id: continue
             for p in paths:
-                if overlaps(p,lock['path']): raise RuntimeError(f'path conflict: {p} overlaps {lock["path"]}, held by {lock["task_id"]}')
+                if overlaps(p,lock['path']):
+                    # Preflight refusals are auditable but are not dispatch
+                    # conflicts: record the separate event, commit it, and then
+                    # raise the unchanged error (M4 never counts this event).
+                    message=f'path conflict: {p} overlaps {lock["path"]}, held by {lock["task_id"]}'
+                    record_path_conflict(con,task_id,'ready',r['status'],
+                                         [(p,lock['path'],lock['task_id'])])
+                    con.execute('COMMIT')
+                    raise RuntimeError(message)
         old=r['status']; con.execute("UPDATE tasks SET status='READY',updated_at=?,last_note=? WHERE id=?",(now(),'Dependencies and paths checked',task_id))
         event(con,task_id,'STATUS_CHANGED',old,'READY','Dependencies and paths checked')
         con.execute('COMMIT')
@@ -461,6 +484,11 @@ def task_dispatch(root, task_id, options=None):
                 if overlaps(p,lock['path']): conflicts.append((p,lock['path'],lock['task_id']))
         if conflicts:
             detail='; '.join(f'{p} overlaps {held} (task {tid})' for p,held,tid in conflicts)
+            # The refusal is the event M4 counts. Write it in this transaction
+            # and commit it before raising, so the audit trail survives while no
+            # lock row is inserted and the message / exit code stay unchanged.
+            record_path_conflict(con,task_id,'dispatch',r['status'],conflicts)
+            con.execute('COMMIT')
             raise RuntimeError('dispatch refused; path conflict: '+detail)
         # Resource locks are an independent second gate (contract §1.2): the path
         # check above keeps its wording and runs first, then the resource set is
