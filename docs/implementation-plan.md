@@ -4,7 +4,7 @@
 > 设计目标（为什么做、做到什么程度、原则与边界）只在 [PLAN.md](PLAN.md)（1.4 起位于 `docs/`）；字段、状态取值与合并门语义只在 [kit/orchestration.md](../kit/orchestration.md) 4.1 与第 5 节，本文件只引用不重述。
 > 本文件只经任务分支 + PR 修改。与 `PLAN.md` 的设计目标冲突时，以设计目标为准并停下对齐，不得各写一套。
 
-- 版本：v2.9（进度同步：#99–#104 收口；发布决策待定）
+- 版本：v2.9（进度同步：#99–#104 收口；1.6.3 发布决策已定）
 - 日期：2026-10-27
 - 状态：Phase A / B / C 已交付；Epic #46 的 S0–S6 与两项支撑修复均已合并并 `VERIFIED`，Epic 已按阶段审计关闭（[审计评论](https://github.com/ctrlshiftaltdel/AgentOrch/issues/46#issuecomment-6415751115)）；`v1.6.2` 仍是最新发布（[Release v1.6.2](https://github.com/ctrlshiftaltdel/AgentOrch/releases/tag/v1.6.2)，资产 `AgentOrch-1.6.2.zip`，SHA256 `096e1fba…`），发布时为 Format 1.6、715 tests、91 文件包（90 `REQUIRED` + `MANIFEST.json`）、58/58 场景、四平台 CI 通过；#85 下游包修复、#86 发布 1.6.1、#93 重复多值选项修复与 #95 发布 1.6.2 均已 `VERIFIED`；#99–#104 已合并并 `VERIFIED`，当前 `main`（`51e418f`）为 754 tests、92 个 `REQUIRED` 文件（发行包 93 = 92 + `MANIFEST.json`）、58/58 场景、四平台 CI 通过，本批未打 tag / 未建 Release；当前唯一未完成硬化项为 #73（`NON_BLOCKING_HARDENING`），#71、#72 已由后续任务收口并 `VERIFIED`
 - 适用范围：AgentOrch 核心规则、local/github edition、任务模板、验证脚本与发行机制
@@ -235,19 +235,11 @@
 - 每个任务都按现有任务状态、路径锁、证据矩阵、独立审查和当前 head 验证执行。Issue 关闭不等于阶段验证完成。
 - 该能力不能覆盖或弱化现有核心协作契约；涉及权限 / 安全边界、锁与状态机、数据迁移、破坏兼容或不可逆行为时，必须保留人工决策门。
 
-## 12. 发布决策待定（2026-10-27）
+## 12. 发布决策（2026-10-27）：1.6.3 / Format 1.6
 
-当前 `main` 已包含 #99–#104，`REQUIRED` 文件数由 90 增至 92（新增 `scripts/check_scope.py` 与 `tests/test_check_scope.py`），发行包为 92 + `MANIFEST.json` = 93 个文件。`v1.6.2`（发布时 715 tests、91 文件包、Format 1.6）仍是唯一最新发布；**本批未打 tag、未建 Release**，也没有以 1.6.2 之后的 `main` 出过包。
-
-下一次发布前需项目所有者在以下两种形态中选择一种；本文件只登记待决策项，不代为决定、不执行发布：
-
-| 选项 | 含义 | 需要做的事 |
-|---|---|---|
-| 1.6.3（Format 1.6） | 保持 Format 1.6，以新增文件的形式发布补丁版本 | 更新 `VERSION.md` 与发行说明，重新生成 `MANIFEST.json`，用 `scripts/build_release.py` 在选定 head 出包并验证 |
-| Format 升级 | 把新增文件与口径变化作为新 Format 处理 | 先按 `docs/upgrade.md` 写迁移说明与旧格式升级验证，再确定版本号与发行计划 |
-
-在所有者决定之前：
-
-- 不得声称 1.6.3 或任何新包已经发布；
-- 不得把当前 `main` 的 754 tests、92 个 `REQUIRED` 文件（包 93）写成 `v1.6.2` 资产的属性——`v1.6.2` 的发布事实仍只有 715 tests、91 文件包与资产 SHA256 `096e1fba…`；
-- `v1.6.2` 的 Release 链接与资产 SHA256 是发布事实的唯一依据，当前 `main` 的状态只代表计划进展。
+- **决定**：下一次发布 `1.6.3`，Format 保持 `1.6`；资产名 `AgentOrch-1.6.3.zip`，tag `v1.6.3`。`tag_matches_format('v1.6.3', '1.6')` 为真，仍满足更新引擎的 `VERSION_MATCH`（major.minor = 1.6）。
+- **理由**：本批是加法能力（#99 路径冲突事件与 M4 path 采集、#100 `task amend --paths`、#101 新增 2 个 `REQUIRED` 文件、#102–#104 文档口径），没有文件移动 / 改名 / 删除，`MANIFEST.json` schema 仍为 1；按 `release/README` §5「只增加能力、不改包格式时 Format 不变」，只升对外 Release 版本。
+- **未选择 Format 升级**：本批没有新增格式字段、载体契约或布局变化，不需要 Format 升级及其迁移说明。
+- **当前状态**：**尚未发布**。本批未打 tag、未建 Release，也不存在 `1.6.3` 资产；发布准备任务待开。发布前不得声称 1.6.3 已发布或已有资产。
+- **发布后必须补**：构建 / 自检（`scripts/build_release.py` a–l）、从 Release 下载资产并复核 SHA256、真实 `1.6.2 → 1.6.3` 升级验证；这三项在补证之前仍为 `NOT_RUN`。
+- 当前 `main` 的 754 tests、92 个 `REQUIRED` 文件（发行包 93 = 92 + `MANIFEST.json`）与 58/58 场景是发布候选状态，不是已发布资产的属性；`v1.6.2` 的 715 tests、91 文件包与资产 SHA256 `096e1fba…` 保持为历史发布事实。
