@@ -9,7 +9,7 @@
   - **正式 Release 资产**：`uv run python scripts/build_release.py --release-version 1.6` 产出 `release/AgentOrch-1.6.zip`，zip 顶层目录与资产 stem 一致，即 `AgentOrch-1.6/`。对应 Git tag 为 `v1.6`、资产名为 `AgentOrch-1.6.zip`。参数写 `1.6`，**不要写 `v1.6`**：`v1.6` 是 tag 名而不是资产名，带 `v` 前缀或预发布后缀会被构建直接拒绝。补丁发行把版本号写全：`--release-version 1.6.1` 产出 `AgentOrch-1.6.1.zip` / 顶层目录 `AgentOrch-1.6.1/`，tag 为 `v1.6.1`；补丁号只改变资产名与顶层目录，不改变 Format。
   - **日期构建（默认，保持不变）**：`uv run python scripts/build_release.py`（今天）或 `--date YYYYMMDD` 产出 `release/agentorch-{YYYYMMDD}.zip`，顶层目录 `agentorch-{YYYYMMDD}/`。CI 与 `docs/upgrade.md` 的基线重建继续用这个模式。
   - `--date` 与 `--release-version` **互斥**：同时给出即报错退出（`argparse` 退出码 2），不存在"谁覆盖谁"的隐含优先级；不带任何命名参数时仍按今天日期命名。
-- **发布名只决定资产名与顶层目录**：包内文件集合、`MANIFEST.json` schema 与 `format_version` 在两种模式下完全相同。**Release 版本号不是 Format 版本**：`Release 1.6` 发布时与 `Format version` 1.6 数值相同；当前 Release 1.6.1 与 Format 1.6 已不同。两者仍是两条序列（发行号 vs 格式契约），`MANIFEST.json` 的 `format_version` 由 `VERSION.md` 的 `Format version:` 一行生成；两者的区别与 `Release 1.6` 记录见第 5 节。
+- **发布名只决定资产名与顶层目录**：包内文件集合、`MANIFEST.json` schema 与 `format_version` 在两种模式下完全相同。**Release 版本号不是 Format 版本**：`Release 1.6` 发布时与 `Format version` 1.6 数值相同；当前 Release 1.6.2 与 Format 1.6 已不同。两者仍是两条序列（发行号 vs 格式契约），`MANIFEST.json` 的 `format_version` 由 `VERSION.md` 的 `Format version:` 一行生成；两者的区别与 `Release 1.6` 记录见第 5 节。
 - 产物不纳入 git：`.gitignore` 忽略 `release/*.zip`；仓库只保留流程文档、构建脚本与本标准；历史版本记录由 GitHub Releases 承担。`release/README.md` 不入忽略范围。**已发布的历史资产（如 `agentorch-20261023.zip`）不删除、不覆盖、不改写**；新 Release 用新的资产名。
 - 产物可随时重建：运行 `uv run python scripts/build_release.py`（默认输出到 `release/`），或按上面的正式 Release 命令指定 `--release-version`。构建是**可复现**的：同一仓库状态下（同一命名模式与同一 top dir），包内文件集合、各文件内容与 zip 的校验和均一致（归档时间戳使用固定值），因此 zip 的校验和可被任何人重建复核。可复现性不依赖检出行尾：构建时文本文件按 LF 归一后打包、二进制文件原样打包（仓库以 `.gitattributes` 统一 LF），故任何检出（含 Windows 上 `core.autocrlf=true`）重建都得到同一校验和。
 
@@ -137,9 +137,21 @@
   - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
 - 历史 `v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
 
+### 5.1.2 发行记录：Release 1.6.2（补丁）
+
+- tag：`v1.6.2`；资产：`AgentOrch-1.6.2.zip`（顶层目录 `AgentOrch-1.6.2/`）；`Format version`：`1.6`（包内 `MANIFEST.json` 的 `format_version` 也是 `1.6`）。
+- 这是 **1.6.1 的补丁发行**，不是 Format 变更：包内文件集合（91 个 = 90 `REQUIRED` + `MANIFEST.json`）、`MANIFEST.json` schema 1 与 `format_version` 均与 v1.6.1 / v1.6 相同；`VERSION.md` 只改 `Release version`，`Format version` 保持 `1.6`。`tag_matches_format('v1.6.2', '1.6')` 为真，`v1.6.2` 仍满足更新引擎的 `VERSION_MATCH`（major.minor = 1.6）。
+- 补丁内容（#93）：修复 `task add` 重复多值选项静默丢值——`--acceptance` / `--paths` / `--depends` / `--resources` 原先用 `nargs='+'` + `store`，重复写同名选项时只有最后一次生效；现在重复出现与单次多值（`--acceptance "AC-1" --acceptance "AC-2"` 与 `--acceptance "AC-1" "AC-2"`）都会合并保留全部取值。本补丁不改变更新引擎的校验 / 分类 / 备份 / 回滚语义，也不改变 `MANIFEST.json` schema 或包文件集合。
+- 可复现性：同一仓库状态下两次独立构建得到同一 SHA256；构建自检 a–l 与 v1.6.1 完全一致，没有跳过项。日期命名（`--date`）仍可用。
+- **未验证 / 已知限制（不得写成已验证）**：
+  - 真实 `v1.6.1 → v1.6.2` 下载与升级为 `NOT_RUN`，归发布后验证；本任务只证明构建、包内自检与 1.6.2 包的下游回归。
+  - 真实 GitHub Release 的创建、下载与 SHA256 复核依赖网络与权限，发布前为 `NOT_RUN`，由 Master 在发布后补证。
+  - macOS / Windows 之外的操作系统与用户桌面环境为 `UNKNOWN`；CI 只覆盖 GitHub-hosted 的三个 runner。
+- 历史 `v1.6.1`、`v1.6` 与 `v1.5` Release 及其资产保留原样，不删除、不覆盖、不改写。
+
 ### 5.2 Format version 变更
 
-- **1.6.1 是补丁发行，不属于 Format 变更**：Format 仍为 `1.6`，见 5.1.1；本节只记录真正的格式版本升级。
+- **1.6.1 / 1.6.2 是补丁发行，不属于 Format 变更**：Format 仍为 `1.6`，见 5.1.1 / 5.1.2；本节只记录真正的格式版本升级。
 
 - **1.6（当前）** 相对 1.5：
   - **包内新增自我完善与安全更新资产**：`scripts/self_improvement/`（来源注册表、采集、Lesson、规划与闭环）、`scripts/update_agentorch/`（安全更新引擎与「更新 AgentOrch」入口）及其随包测试、`templates/self-improvement/` 模板进入 `REQUIRED`。连同 1.5 发布后合入 Format 1.5 的可选架构契约检查器与相关测试，包内文件从 v1.5 资产的 34 个（33 `REQUIRED` + `MANIFEST.json`）增至 91 个（90 + 1）。
