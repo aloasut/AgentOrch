@@ -714,7 +714,7 @@ uv run python scripts/check_drift.py .               # 0：已登记基线
 
 ### 10.7 “更新 AgentOrch”安全入口（当前 Format）
 
-已安装 1.3 / 1.4 / 1.5（有 `MANIFEST.json`）的项目可以用一条入口命令准备升级到 1.6，不必手工比对上游文件；已安装 1.6 的项目无需再升级：
+已安装 1.3 / 1.4 / 1.5（有 `MANIFEST.json`）的项目可以用一条入口命令准备升级到当前 1.6.2，不必手工比对上游文件；已安装 1.6.2 的项目无需再升级。已安装 1.6.0 / 1.6.1 的项目也可以用同一条入口准备升级到 1.6.2：入口按 `VERSION_MATCH` 接受 tag `v1.6.2`（major.minor = 1.6），再比较 target release `1.6.2` 与已安装 `format_version`（`1.6` 记作 `1.6.0`）判定可升级。但**真实 `1.6.0` / `1.6.1` → `1.6.2` 升级仍为 `NOT_RUN`**，归发布后验证；“入口可判定”不等于“升级已验证”：
 
 ```bash
 uv run python -m scripts.update_agentorch.entry --project . \

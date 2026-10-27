@@ -581,7 +581,7 @@ python3 -m scripts.update_agentorch.entry --project . \
 
 | 已安装 Format | 自动更新是否可判定 | 本任务实测 | 真实已发布包 | 说明 |
 | --- | --- | --- | --- | --- |
-| `1.6`（当前） | 是 | 合成 / 单元：`tag_matches_format('v1.6','1.6')` 为真，v1.6 目标包通过 `VERSION_MATCH` 与包校验 | `NOT_RUN` | 当前 Format；真实 v1.6 包已下载并作为 v1.5 → 1.6 的目标包校验通过。未实测“以 1.6 为已安装基线”的升级：`/releases/latest` 在 #71 时点即 v1.6，目标不高于已安装版本，按设计 `BLOCKED` / `HD-16`，因此保持 `NOT_RUN` |
+| `1.6`（当前） | 是 | 合成 / 单元：`tag_matches_format('v1.6.2','1.6')` 为真（`v1.6` / `v1.6.1` 同），v1.6 目标包通过 `VERSION_MATCH` 与包校验 | `NOT_RUN` | 当前 Format；真实 v1.6 包已下载并作为 v1.5 → 1.6 的目标包校验通过。入口按 `VERSION_MATCH` 接受 tag `v1.6.2`（major.minor = 1.6），再按单调性比较 **target release `1.6.2`** 与已安装 `format_version`（`1.6` 记作 `1.6.0`）：`1.6.2 > 1.6.0`，因此可判定升级。但真实 `1.6.0` / `1.6.1` → `1.6.2` 升级未实测，保持 `NOT_RUN`，归发布后验证；本节不声称 1.6.2 已被真实升级验证 |
 | `1.5` | 是 | 合成项目：`APPLIED`，项目自有文件逐字节不变 | `PASS`（2026-10-26，#71） | 真实 v1.5 Release 包（`agentorch-20261023.zip`）→ 真实 v1.6（`AgentOrch-1.6.zip`）：`APPLIED`，Format 1.5 → 1.6，项目自有文件逐字节不变；见 §14.2 |
 | `1.4` | 是 | 合成项目：`APPLIED`，根 `PLAN.md` 保持原样 | `NOT_RUN` | 未获取到真实已发布 1.4 资产（本仓库 Release 只有 v1.5 / v1.6，另有 v1.1 tag 但无 Release 资产）；合成目标为 v1.6，根计划按项目自有路径处理 |
 | `1.3` | 是（清单存在时） | 合成项目：根 `README.md` 被识别为 `UPSTREAM_REMOVAL`，`STOPPED_CONFLICT` + `HD-09`，文件未删除 | `NOT_RUN` | 未获取到真实已发布 1.3 资产；1.3 根文件在 1.5 布局中改名 / 迁移，入口不自动删除，需人工决策 |
