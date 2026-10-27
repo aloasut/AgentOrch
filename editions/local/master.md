@@ -15,6 +15,8 @@
 - 项目规模较小、任务数量有限，人工清理分支和 Worktree 可接受。
 - 只需要本地 Git 与 Worktree，不需要公开可核验的协作记录。
 
+**成本口径**：本工具不采集 token 与耗时；M1–M7 的定义与缺失处理只在随包的 [templates/metrics.md](../../templates/metrics.md) 定义（仓库检出中的 `docs/metrics.md` 是落地说明，不随发行包）。`local` 上路径冲突与资源冲突可采集（`task dispatch` 拒绝时写入 `CONFLICT_RECORDED`），检查 / 验收 / 回归仍未采集；旧任务库没有 path 事件时，该部分按未采集（`unknown` / `partial`）处理，不补 `0`。
+
 ## 任务载体
 
 - `.orchestration/state.sqlite3` 是唯一任务状态源，由 `scripts/orchestrator.py` 读写。

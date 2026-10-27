@@ -67,7 +67,7 @@ python scripts/report_metrics.py .orchestration/state.sqlite3 --json
 | M1 READY→VERIFIED | 可算（状态事件） | 可算（Issue / PR 状态与评论按同一事件名登记后） |
 | M2 首次检查通过率 | **未采集**：任务库不记检查结果 | 需先把 CI 结论登记为 `CHECK_RECORDED` |
 | M3 审查修复轮数 | 可算（`MASTER_REVIEW` 退回 + `APPROVAL_INVALIDATED`） | 可算（PR 审查轮次登记后） |
-| M4 路径 / 资源冲突 | 资源冲突可算；**路径冲突未采集**（派发失败直接回滚，不留事件） | 需登记被拒绝的派发 |
+| M4 路径 / 资源冲突 | 可算：`task dispatch` 拒绝路径锁时写入 `CONFLICT_RECORDED`（`data.kind=path`），资源冲突同表登记；`task ready` 预检拒绝另记 `PATH_PREFLIGHT_REFUSED` 供审计，不计入 M4。旧任务库没有 path 事件时该部分仍为 `unknown` | 需登记被拒绝的派发 |
 | M5 阻塞时长 | 可算（`BLOCKED` 区间） | 可算 |
 | M6 合并后回归缺陷 | **未采集**（没有回归事件） | 需把回归单登记为 `REGRESSION_REPORTED` |
 | M7 端到端验收通过率 | **未采集**（证据矩阵不在任务库里） | 需把验收行登记为 `ACCEPTANCE_RECORDED` |
@@ -96,4 +96,4 @@ python scripts/report_metrics.py .orchestration/state.sqlite3 --json
 - 墙钟时长：等待跨夜与等待审查都算小时，不能换算成“工作量”。
 - 观察窗：合并后 14 天内没有回归报告才算“干净”；刚合并的任务记为 `missing`，不记为“无回归”。
 - 事件口径依赖载体：`local` 与 `github` 必须以同一组事件名登记，否则两份报告不可比。
-- 未采集项：M2 / M4（路径）/ M6 / M7 在 `local` 上仍是 `unknown`，需要先补齐事件写入。
+- 未采集项：M2 / M6 / M7 在 `local` 上仍是 `unknown`，需要先补齐事件写入；M4 的路径冲突与资源冲突自路径 / 资源事件落地起可采集，但旧任务库没有 path 事件时该部分仍是 `unknown`，不补 `0`。
