@@ -1103,6 +1103,24 @@ class VendoredTreeScanTests(unittest.TestCase):
 
             self.assertFalse(any('node_modules' in error for error in errors), errors)
 
+    def test_project_documents_under_scripts_are_still_link_checked(self):
+        # The vendored-tree exclusion must not widen into the directories the
+        # link scan already covered: a downstream project may keep its own
+        # Markdown under scripts/, and broken links there stay errors.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'AGENTS.md').write_text(f'# A\n\n{self.CONCEPTS}\n', encoding='utf-8')
+            scripts = root / 'scripts'
+            scripts.mkdir()
+            (scripts / 'README.md').write_text('[坏链](missing.md)\n', encoding='utf-8')
+
+            errors, _ = validate.validate_kit(root)
+
+            self.assertTrue(
+                any('scripts/README.md: broken relative link: missing.md' in error for error in errors),
+                errors,
+            )
+
     def test_node_modules_markdown_cannot_supply_governance_concepts(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
